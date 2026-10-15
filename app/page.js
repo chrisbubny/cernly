@@ -984,7 +984,7 @@ export default function Home() {
               <a className="btn btn-gradient" href="#hero-form" onClick={e => { e.preventDefault(); document.getElementById('hero-form')?.querySelector('input')?.focus(); document.getElementById('hero-form')?.scrollIntoView({behavior:'smooth',block:'center'}); }}>Analyze a URL <svg className="icon sm"><use href="#i-arrow"/></svg></a>
             </div>
             <div className="path-card">
-              <div className="icon-tile wp"><svg className="icon lg"><use href="#i-wordpress"/></svg></div>
+              <div className="icon-tile wp"><img src="/wordpress-logo.png" alt="WordPress" style={{width:'48px',height:'48px',objectFit:'contain'}}/></div>
               <h3>Connect your WordPress site</h3>
               <p>Bring website insights closer to where you manage your content, with the Cernly WordPress integration.</p>
               <ul className="ticks">
