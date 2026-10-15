@@ -7,6 +7,10 @@ const manrope = Manrope({ subsets: ['latin'], variable: '--font-manrope' });
 
 export const metadata = {
   title: 'Cernly — Know your website. Improve what matters.',
+  icons: {
+    icon: '/favicon.svg',
+    shortcut: '/favicon.svg',
+  },
   description: 'AI-powered website intelligence that finds issues, explains what matters, and shows you how to improve.',
   metadataBase: new URL('https://cernly.ai'),
   openGraph: {

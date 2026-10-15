@@ -150,7 +150,7 @@ p { line-height: 1.7 }
 .hero {
   position: relative;
   overflow: hidden;
-  padding: 105px 0
+  padding: 70px 0
 }
 .hero:before {
   content: '';
@@ -464,6 +464,7 @@ p { line-height: 1.7 }
   align-items: stretch
 }
 .pathway-intro { padding-right: 30px }
+.pathway-intro h2 { font-size: clamp(36px, 4vw, 50px) }
 .pathway-intro p { color: var(--muted); font-size: 15px }
 .path-card {
   background: #fff;
