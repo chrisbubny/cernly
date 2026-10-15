@@ -61,10 +61,16 @@ export default async function DashboardPage() {
   const { userId } = await auth();
   if (!userId) redirect('/sign-in');
 
-  const [reports, subscription] = await Promise.all([
+  // Guard against DB tables not yet initialized
+  const [reportsResult, subscriptionResult] = await Promise.allSettled([
     getUserReports(userId),
     getUserSubscription(userId),
   ]);
+  const reports = reportsResult.status === 'fulfilled' ? reportsResult.value : [];
+  const subscription = subscriptionResult.status === 'fulfilled' ? subscriptionResult.value : null;
+  if (reportsResult.status === 'rejected') {
+    console.error('[Dashboard] DB error (reports):', reportsResult.reason?.message);
+  }
 
   const isPro = !!subscription;
 

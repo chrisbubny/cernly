@@ -13,7 +13,10 @@ export async function POST(request) {
   const { reportId } = body;
   if (!reportId) return NextResponse.json({ error: 'reportId required' }, { status: 400 });
 
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://cernly.ai';
+  // Derive base URL from the incoming request so redirects work on any host
+  const host = request.headers.get('host') || '';
+  const proto = host.startsWith('localhost') ? 'http' : 'https';
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL || (host ? `${proto}://${host}` : 'https://cernly.ai');
 
   const session = await stripe.checkout.sessions.create({
     payment_method_types: ['card'],
