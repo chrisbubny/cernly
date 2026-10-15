@@ -1,61 +1,324 @@
 'use client';
 import { useEffect, useState, Suspense } from 'react';
-import { useSearchParams, useRouter } from 'next/navigation';
-import Link from 'next/link';
-import {
-  Eye, ArrowLeft, Zap, Search, Shield, AlertCircle,
-  CheckCircle2, XCircle, Sparkles, ExternalLink, Lock, ArrowRight
-} from 'lucide-react';
+import { useSearchParams } from 'next/navigation';
 
-function ScoreRing({ score, size = 80 }) {
-  const r = (size - 8) / 2;
-  const circ = 2 * Math.PI * r;
-  const filled = (score / 100) * circ;
-  const color = score >= 80 ? '#00D4AA' : score >= 60 ? '#F5A623' : '#FF5D5D';
+/* ── CSS matching home page design system ─────────────────────────────── */
+const CSS = `
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700&family=Manrope:wght@600;800&display=swap');
+:root {
+  --ink: #11131d;
+  --muted: #6f7280;
+  --line: #e9eaf0;
+  --violet: #7548f8;
+  --blue: #3389ff;
+  --green: #1cb985;
+  --red: #e94545;
+  --amber: #f5a623;
+  --paper: #fff;
+  --soft: #f7f8fc;
+  --radius: 22px
+}
+* { box-sizing: border-box }
+html { scroll-behavior: smooth }
+body {
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: 'DM Sans', sans-serif;
+  -webkit-font-smoothing: antialiased
+}
+a { text-decoration: none; color: inherit }
+button { cursor: pointer; font: inherit }
+h1,h2,h3 { font-family: Manrope, sans-serif; letter-spacing: -.025em; margin-top: 0 }
+p { margin-top: 0; line-height: 1.7 }
 
+/* topbar */
+.topbar {
+  position: sticky; top: 0; z-index: 50;
+  background: #ffffffed; backdrop-filter: blur(18px);
+  border-bottom: 1px solid #f0f0f4
+}
+.nav {
+  width: min(1180px, calc(100% - 64px));
+  margin: auto;
+  height: 68px;
+  display: flex; align-items: center; gap: 16px
+}
+.brand {
+  display: inline-flex; align-items: center; gap: 10px;
+  font: 800 20px Manrope, sans-serif; letter-spacing: -.07em
+}
+.brand svg { width: 22px; height: 22px }
+.brand span { font-weight: 600 }
+.domain-pill {
+  display: inline-flex; align-items: center; gap: 7px;
+  background: var(--soft); border: 1px solid var(--line);
+  border-radius: 8px; padding: 6px 12px;
+  font-size: 13px; color: var(--muted); font-weight: 600
+}
+.domain-pill svg { width:14px;height:14px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round }
+.back-btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 13px; font-weight: 700; color: var(--muted);
+  background: none; border: none; padding: 0;
+}
+.back-btn:hover { color: var(--ink) }
+.back-btn svg { width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round }
+.navright { margin-left: auto; display:flex; align-items:center; gap:16px }
+
+/* page body */
+.page { width: min(900px, calc(100% - 48px)); margin: 0 auto; padding: 48px 0 80px }
+
+/* loading */
+.loading-wrap {
+  min-height: 70vh; display: flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: 0; text-align: center
+}
+.loading-mark {
+  width: 64px; height: 64px; border-radius: 20px;
+  display: grid; place-items: center; margin-bottom: 28px;
+  background: linear-gradient(135deg, #8a46f8, #3389ff)
+}
+.loading-mark svg { width: 30px; height: 30px }
+.loading-wrap h2 { font-size: 22px; margin-bottom: 8px }
+.loading-wrap p { color: var(--muted); font-size: 14px; margin-bottom: 32px; min-height: 20px }
+.steps-bar { display: flex; gap: 6px }
+.step-dot {
+  height: 5px; border-radius: 4px;
+  transition: width .5s, background .5s
+}
+
+/* score grid */
+.score-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 12px; margin-bottom: 28px
+}
+@media (max-width: 700px) { .score-grid { grid-template-columns: repeat(3, 1fr) } }
+@media (max-width: 440px) { .score-grid { grid-template-columns: repeat(2, 1fr) } }
+.score-card {
+  padding: 22px 12px 18px; text-align: center;
+  background: var(--soft); border: 1px solid var(--line);
+  border-radius: 18px
+}
+.score-card.null-score { opacity: .5 }
+.ring {
+  width: 68px; height: 68px; border-radius: 50%;
+  display: grid; place-items: center; margin: 0 auto 12px;
+  background: conic-gradient(var(--c) calc(var(--n)*1%), #e9eaf0 0)
+}
+.ring:before {
+  content:''; grid-area:1/1; width:54px; height:54px;
+  background: var(--soft); border-radius: 50%
+}
+.ring b { grid-area:1/1; z-index:1; font: 800 17px Manrope; color: var(--c) }
+.score-label { font-size: 11px; color: var(--muted); font-weight: 700; text-transform: uppercase; letter-spacing: .08em }
+
+/* AI summary */
+.ai-box {
+  background: linear-gradient(110deg, #f7f3ff, #f0f7ff);
+  border: 1px solid #e2daff; border-radius: 18px;
+  padding: 24px 28px; margin-bottom: 28px
+}
+.ai-box-head {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 13px; font-weight: 800; color: var(--violet);
+  margin-bottom: 10px
+}
+.ai-box-head svg { width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round }
+.ai-box p { font-size: 14px; color: #4a4e60; margin: 0; line-height: 1.7 }
+
+/* site type badge */
+.site-type-row { display:flex; align-items:center; gap:10px; margin-bottom:28px; flex-wrap:wrap }
+.site-type-badge {
+  display:inline-flex; align-items:center; gap:7px;
+  background: #f1edff; color: #6033dd;
+  border-radius: 8px; padding: 7px 14px;
+  font-size: 12px; font-weight: 800; text-transform:uppercase; letter-spacing:.06em
+}
+.site-type-badge svg { width:13px;height:13px;fill:none;stroke:currentColor;stroke-width:2 }
+
+/* issues */
+.section-head {
+  display: flex; justify-content: space-between; align-items: baseline;
+  margin-bottom: 16px
+}
+.section-head h3 { font-size: 17px; margin: 0 }
+.section-head span { font-size: 12px; color: var(--muted) }
+.issue-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 28px }
+.issue-row {
+  display: flex; align-items: flex-start; gap: 12px;
+  padding: 14px 16px; border-radius: 14px;
+  border: 1px solid var(--line); background: #fff
+}
+.issue-icon { width: 18px; height: 18px; flex: none; margin-top: 1px }
+.issue-icon svg { width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round }
+.issue-body strong { font-size: 14px; display: block; margin-bottom: 2px }
+.issue-body span { font-size: 12px; color: var(--muted) }
+.area-tag {
+  display:inline-block; font-size:10px; font-weight:800; letter-spacing:.07em;
+  text-transform:uppercase; padding: 3px 8px; border-radius:5px;
+  margin-left: 8px; vertical-align: middle
+}
+
+/* paywall */
+.paywall-wrap { position: relative; margin-bottom: 28px }
+.paywall-blur { filter: blur(4px); pointer-events: none; user-select: none; opacity: .45 }
+.paywall-overlay {
+  position: absolute; inset: 0;
+  display: flex; align-items: center; justify-content: center
+}
+.paywall-card {
+  background: #fff; border: 1px solid #ded6ff;
+  box-shadow: 0 20px 50px #6b50d920; border-radius: 20px;
+  padding: 32px 36px; text-align: center; max-width: 360px
+}
+.lock-icon {
+  width: 48px; height: 48px; border-radius: 14px;
+  background: linear-gradient(135deg, #8a46f8, #3389ff);
+  display: grid; place-items: center; margin: 0 auto 16px
+}
+.lock-icon svg { width:22px;height:22px;fill:none;stroke:#fff;stroke-width:2.5;stroke-linecap:round;stroke-linejoin:round }
+.paywall-card h3 { font-size: 18px; margin-bottom: 8px }
+.paywall-card p { font-size: 13px; color: var(--muted); margin-bottom: 24px }
+.btn-gradient {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 14px 24px; border-radius: 12px; border: 0;
+  font-size: 14px; font-weight: 800; color: white;
+  background: linear-gradient(110deg, #8a46f8, #446af6 60%, #258de9);
+  box-shadow: 0 8px 22px #6a58ec36; text-decoration: none;
+  transition: transform .2s; cursor: pointer
+}
+.btn-gradient:hover { transform: translateY(-2px) }
+
+/* upgrade CTA */
+.upgrade-cta {
+  background: linear-gradient(110deg, #f7f3ff, #f0f7ff);
+  border: 1px solid #e2daff; border-radius: 20px;
+  padding: 40px; text-align: center
+}
+.upgrade-cta h3 { font-size: 22px; margin-bottom: 10px }
+.upgrade-cta p { color: var(--muted); font-size: 14px; margin-bottom: 28px }
+
+/* error */
+.error-wrap {
+  min-height: 60vh; display: flex; flex-direction: column;
+  align-items: center; justify-content: center; text-align: center; gap: 0
+}
+.error-wrap svg { margin-bottom: 20px }
+.error-wrap h2 { font-size: 22px; margin-bottom: 8px }
+.error-wrap p { color: var(--muted); font-size: 14px; margin-bottom: 28px }
+.btn-outline {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 12px 22px; border-radius: 11px;
+  font-size: 14px; font-weight: 800; color: var(--ink);
+  background: #fff; border: 1.5px solid var(--line);
+  text-decoration: none; transition: transform .2s
+}
+.btn-outline:hover { transform: translateY(-2px) }
+`;
+
+/* ── Cernly logo mark ──────────────────────────────────────────────────── */
+function CernlyMark() {
   return (
-    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
-      <circle cx={size/2} cy={size/2} r={r} fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth={6} />
-      <circle cx={size/2} cy={size/2} r={r} fill="none" stroke={color} strokeWidth={6}
-        strokeDasharray={`${filled} ${circ - filled}`}
-        strokeLinecap="round"
-        style={{ transform: 'rotate(-90deg)', transformOrigin: 'center' }} />
-      <text x="50%" y="50%" textAnchor="middle" dominantBaseline="central"
-        fill={color} fontSize={size * 0.22} fontWeight="800" fontFamily="Inter, sans-serif">
-        {score}
-      </text>
+    <svg aria-hidden="true" viewBox="195 175 895 875" xmlns="http://www.w3.org/2000/svg" style={{width:'100%',height:'100%'}}>
+      <path d="M642.5,175c0,0-22.4,200.3-187.1,296.8c-164.7,96.5-280.4,22.1-280.4,22.1s22.4-200.3,187.1-296.8 C526.8,100.6,642.5,175,642.5,175z" fill="#fff" opacity=".95"/>
+      <path d="M642.5,175c0,0,22.4,200.3,187.1,296.8c164.7,96.5,280.4,22.1,280.4,22.1S1087.6,293.6,922.9,197.1 C758.2,100.6,642.5,175,642.5,175z" fill="#fff" opacity=".8"/>
+      <path d="M642.5,1049.6c0,0-22.4-200.3-187.1-296.8C290.7,656.3,175,730.7,175,730.7s22.4,200.3,187.1,296.8 C526.8,1124,642.5,1049.6,642.5,1049.6z" fill="#fff" opacity=".8"/>
+      <path d="M642.5,1049.6c0,0,22.4-200.3,187.1-296.8c164.7-96.5,280.4,22.1,280.4,22.1s-22.4,200.3-187.1,296.8 C758.2,1124,642.5,1049.6,642.5,1049.6z" fill="#fff" opacity=".95"/>
     </svg>
   );
 }
 
+/* ── Score ring ────────────────────────────────────────────────────────── */
+function ScoreRing({ score, label }) {
+  const isNull = score === null || score === undefined;
+  const n = isNull ? 0 : score;
+  const c = n >= 80 ? '#1cb985' : n >= 60 ? '#f5a623' : n >= 1 ? '#e94545' : '#c8cad6';
+  return (
+    <div className={`score-card${isNull ? ' null-score' : ''}`}>
+      <div className="ring" style={{'--n': n, '--c': c}}>
+        <b>{isNull ? '—' : n}</b>
+      </div>
+      <div className="score-label">{label}</div>
+    </div>
+  );
+}
+
+/* ── Issue row ─────────────────────────────────────────────────────────── */
+const SEV_COLORS = { critical: '#e94545', warning: '#f5a623', info: '#8899b5', good: '#1cb985' };
+const AREA_COLORS = {
+  Performance: { bg: '#fff3f3', fg: '#c93b3b' },
+  SEO:         { bg: '#fffbf0', fg: '#9a6200' },
+  Security:    { bg: '#f0fff8', fg: '#147a57' },
+  Accessibility:{ bg: '#f0f3ff', fg: '#3653c4' },
+  UX:          { bg: '#f7f0ff', fg: '#6a28cc' },
+};
+
+function IssueRow({ issue }) {
+  const sev = issue.severity || 'info';
+  const color = SEV_COLORS[sev] || SEV_COLORS.info;
+  const areaStyle = AREA_COLORS[issue.area] || { bg: '#f4f5f8', fg: '#6f7280' };
+
+  const SevIcon = () => {
+    if (sev === 'critical') return (
+      <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v6m0 4h.01"/></svg>
+    );
+    if (sev === 'good') return (
+      <svg viewBox="0 0 24 24"><path d="m5 12 4.5 4.5L19 7"/></svg>
+    );
+    return <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 8v5m0 3h.01"/></svg>;
+  };
+
+  return (
+    <div className="issue-row">
+      <div className="issue-icon" style={{ color }}>
+        <SevIcon />
+      </div>
+      <div className="issue-body">
+        <strong>
+          {issue.message}
+          {issue.area && (
+            <span className="area-tag" style={{ background: areaStyle.bg, color: areaStyle.fg }}>
+              {issue.area}
+            </span>
+          )}
+        </strong>
+        {issue.description && <span>{issue.description}</span>}
+      </div>
+    </div>
+  );
+}
+
+/* ── Main content ──────────────────────────────────────────────────────── */
 function AnalyzeContent() {
   const searchParams = useSearchParams();
-  const router = useRouter();
-  const url = searchParams.get('url') || '';
-  const [data, setData] = useState(null);
-  const [error, setError] = useState('');
-  const [phase, setPhase] = useState('loading'); // loading | results | error
+  const rawUrl = searchParams.get('url') || '';
+  const url = rawUrl && !/^https?:\/\//i.test(rawUrl) ? 'https://' + rawUrl : rawUrl;
+
+  const [data, setData]       = useState(null);
+  const [error, setError]     = useState('');
+  const [phase, setPhase]     = useState('loading');
   const [loadingStep, setLoadingStep] = useState(0);
 
   const steps = [
     'Fetching page…',
-    'Running PageSpeed analysis…',
+    'Running performance analysis…',
     'Auditing SEO signals…',
     'Checking security headers…',
     'Scanning accessibility…',
-    'Generating AI insights…',
+    'Identifying site type & UX…',
+    'Writing AI insights…',
   ];
 
   useEffect(() => {
-    if (!url) { router.push('/'); return; }
+    if (!url) { window.location.href = '/'; return; }
 
-    let stepTimer;
     let step = 0;
-    setLoadingStep(0);
-    stepTimer = setInterval(() => {
+    const timer = setInterval(() => {
       step++;
       if (step < steps.length) setLoadingStep(step);
-    }, 2200);
+    }, 2000);
 
     fetch('/api/analyze', {
       method: 'POST',
@@ -64,187 +327,215 @@ function AnalyzeContent() {
     })
       .then(r => r.json())
       .then(d => {
-        clearInterval(stepTimer);
+        clearInterval(timer);
         if (d.error) { setError(d.error); setPhase('error'); }
         else { setData(d); setPhase('results'); }
       })
-      .catch(e => {
-        clearInterval(stepTimer);
+      .catch(() => {
+        clearInterval(timer);
         setError('Something went wrong. Please try again.');
         setPhase('error');
       });
 
-    return () => clearInterval(stepTimer);
+    return () => clearInterval(timer);
   }, [url]);
 
   const domain = (() => { try { return new URL(url).hostname; } catch { return url; } })();
 
-  // ── Loading ──────────────────────────────────────────────────────────────
-  if (phase === 'loading') {
-    return (
-      <div className="min-h-screen flex flex-col items-center justify-center px-6" style={{ background: '#050B14' }}>
-        <div className="w-16 h-16 rounded-2xl flex items-center justify-center mb-8"
-          style={{ background: 'linear-gradient(135deg,#00D4AA,#A78BFA)' }}>
-          <Eye size={28} color="#0a1020" />
+  /* ── Loading ── */
+  if (phase === 'loading') return (
+    <>
+      <style>{CSS}</style>
+      <header className="topbar">
+        <div className="nav">
+          <a className="brand" href="/">
+            <div style={{width:22,height:22,borderRadius:7,background:'linear-gradient(135deg,#8a46f8,#3389ff)',display:'grid',placeItems:'center',overflow:'hidden',padding:3}}>
+              <CernlyMark />
+            </div>
+            cernly<span>.ai</span>
+          </a>
         </div>
-        <h2 className="text-xl font-semibold mb-2" style={{ color: '#E8EFF7' }}>Analyzing {domain}</h2>
-        <p className="text-sm mb-10 h-5 transition-all" style={{ color: '#8899B5' }}>{steps[loadingStep]}</p>
-
-        {/* Progress dots */}
-        <div className="flex gap-2">
-          {steps.map((_, i) => (
-            <div key={i} className="h-1.5 rounded-full transition-all duration-500"
-              style={{
+      </header>
+      <div className="page">
+        <div className="loading-wrap">
+          <div className="loading-mark">
+            <svg viewBox="195 175 895 875" xmlns="http://www.w3.org/2000/svg">
+              <path d="M642.5,175c0,0-22.4,200.3-187.1,296.8c-164.7,96.5-280.4,22.1-280.4,22.1s22.4-200.3,187.1-296.8 C526.8,100.6,642.5,175,642.5,175z" fill="#fff" opacity=".95"/>
+              <path d="M642.5,175c0,0,22.4,200.3,187.1,296.8c164.7,96.5,280.4,22.1,280.4,22.1S1087.6,293.6,922.9,197.1 C758.2,100.6,642.5,175,642.5,175z" fill="#fff" opacity=".8"/>
+              <path d="M642.5,1049.6c0,0-22.4-200.3-187.1-296.8C290.7,656.3,175,730.7,175,730.7s22.4,200.3,187.1,296.8 C526.8,1124,642.5,1049.6,642.5,1049.6z" fill="#fff" opacity=".8"/>
+              <path d="M642.5,1049.6c0,0,22.4-200.3,187.1-296.8c164.7-96.5,280.4,22.1,280.4,22.1s-22.4,200.3-187.1,296.8 C758.2,1124,642.5,1049.6,642.5,1049.6z" fill="#fff" opacity=".95"/>
+            </svg>
+          </div>
+          <h2>Analyzing {domain}</h2>
+          <p>{steps[loadingStep]}</p>
+          <div className="steps-bar">
+            {steps.map((_, i) => (
+              <div key={i} className="step-dot" style={{
                 width: i <= loadingStep ? 24 : 8,
-                background: i <= loadingStep ? 'linear-gradient(90deg,#00D4AA,#A78BFA)' : 'rgba(255,255,255,0.1)',
-              }} />
-          ))}
+                background: i <= loadingStep
+                  ? 'linear-gradient(90deg,#8a46f8,#3389ff)'
+                  : '#e5e6ed',
+              }}/>
+            ))}
+          </div>
         </div>
       </div>
-    );
-  }
+    </>
+  );
 
-  // ── Error ────────────────────────────────────────────────────────────────
-  if (phase === 'error') {
-    return (
-      <div className="min-h-screen flex flex-col items-center justify-center px-6 text-center" style={{ background: '#050B14' }}>
-        <AlertCircle size={48} style={{ color: '#FF5D5D' }} className="mb-4" />
-        <h2 className="text-xl font-semibold mb-2" style={{ color: '#E8EFF7' }}>Analysis failed</h2>
-        <p className="text-sm mb-8" style={{ color: '#8899B5' }}>{error}</p>
-        <Link href="/" className="btn-brand px-6 py-3 rounded-xl font-semibold text-sm flex items-center gap-2">
-          <ArrowLeft size={14} /> Try another URL
-        </Link>
+  /* ── Error ── */
+  if (phase === 'error') return (
+    <>
+      <style>{CSS}</style>
+      <header className="topbar">
+        <div className="nav">
+          <a className="brand" href="/">
+            <div style={{width:22,height:22,borderRadius:7,background:'linear-gradient(135deg,#8a46f8,#3389ff)',display:'grid',placeItems:'center',overflow:'hidden',padding:3}}>
+              <CernlyMark />
+            </div>
+            cernly<span>.ai</span>
+          </a>
+        </div>
+      </header>
+      <div className="page">
+        <div className="error-wrap">
+          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#e94545" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="12" cy="12" r="9"/><path d="M12 7v6m0 4h.01"/>
+          </svg>
+          <h2>Analysis failed</h2>
+          <p>{error}</p>
+          <a href="/" className="btn-outline">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M19 12H5m7-7-7 7 7 7"/>
+            </svg>
+            Try another URL
+          </a>
+        </div>
       </div>
-    );
-  }
+    </>
+  );
 
-  // ── Results ──────────────────────────────────────────────────────────────
-  const { scores, aiSummary, issues, reportId } = data;
+  /* ── Results ── */
+  const { scores, aiSummary, issues, reportId, siteType, uxInsights } = data;
+
   const categories = [
-    { key: 'performance', label: 'Performance', icon: Zap },
-    { key: 'seo', label: 'SEO', icon: Search },
-    { key: 'security', label: 'Security', icon: Shield },
-    { key: 'accessibility', label: 'Accessibility', icon: Eye },
+    { key: 'performance',   label: 'Performance' },
+    { key: 'seo',           label: 'SEO' },
+    { key: 'ux',            label: 'UX' },
+    { key: 'security',      label: 'Security' },
+    { key: 'accessibility', label: 'Accessibility' },
   ];
 
+  const visibleIssues  = issues.slice(0, 3);
+  const lockedIssues   = issues.slice(3, 8);
+  const hasLocked      = issues.length > 3;
+
   return (
-    <div className="min-h-screen" style={{ background: '#050B14' }}>
-      {/* Nav */}
-      <nav className="sticky top-0 z-40 border-b" style={{ borderColor: 'rgba(255,255,255,0.06)', background: 'rgba(5,11,20,0.9)', backdropFilter: 'blur(12px)' }}>
-        <div className="max-w-4xl mx-auto px-6 h-14 flex items-center justify-between">
-          <Link href="/" className="flex items-center gap-2">
-            <div className="w-6 h-6 rounded-md flex items-center justify-center" style={{ background: 'linear-gradient(135deg,#00D4AA,#A78BFA)' }}>
-              <Eye size={12} color="#0a1020" strokeWidth={2.5} />
+    <>
+      <style>{CSS}</style>
+      <header className="topbar">
+        <div className="nav">
+          <a className="brand" href="/">
+            <div style={{width:22,height:22,borderRadius:7,background:'linear-gradient(135deg,#8a46f8,#3389ff)',display:'grid',placeItems:'center',overflow:'hidden',padding:3}}>
+              <CernlyMark />
             </div>
-            <span className="font-bold" style={{ color: '#E8EFF7' }}>cernly</span>
-          </Link>
-          <div className="flex items-center gap-2 text-sm" style={{ color: '#8899B5' }}>
-            <Globe2 size={13} />
-            <span className="font-mono">{domain}</span>
-            <a href={url} target="_blank" rel="noopener noreferrer">
-              <ExternalLink size={12} />
+            cernly<span>.ai</span>
+          </a>
+          <div className="domain-pill">
+            <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+            {domain}
+          </div>
+          <div className="navright">
+            <a href={url} target="_blank" rel="noopener noreferrer" style={{fontSize:12,color:'var(--muted)',fontWeight:700,display:'flex',alignItems:'center',gap:5}}>
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6M15 3h6v6M10 14 21 3"/></svg>
+              Visit site
+            </a>
+            <a href="/" className="btn-outline" style={{padding:'8px 16px',fontSize:12}}>
+              ← New analysis
             </a>
           </div>
         </div>
-      </nav>
+      </header>
 
-      <div className="max-w-4xl mx-auto px-6 py-10">
-        {/* Score grid */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-          {categories.map(({ key, label, icon: Icon }) => (
-            <div key={key} className="rounded-2xl p-5 text-center border card-hover" style={{ background: '#0D1526', borderColor: '#1A2740' }}>
-              <div className="flex justify-center mb-3">
-                <ScoreRing score={scores[key] ?? 0} size={72} />
-              </div>
-              <div className="flex items-center justify-center gap-1.5 text-sm" style={{ color: '#A8B8CE' }}>
-                <Icon size={12} />
-                {label}
-              </div>
+      <div className="page">
+        {/* Site type badge */}
+        {siteType && (
+          <div className="site-type-row">
+            <div className="site-type-badge">
+              <svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="3"/><path d="M3 9h18M9 21V9"/></svg>
+              {siteType}
             </div>
+            {uxInsights?.conversion_focus && (
+              <span style={{fontSize:13,color:'var(--muted)'}}>Optimized for: <strong style={{color:'var(--ink)'}}>{uxInsights.conversion_focus}</strong></span>
+            )}
+          </div>
+        )}
+
+        {/* Score grid */}
+        <div className="score-grid">
+          {categories.map(({ key, label }) => (
+            <ScoreRing key={key} score={scores[key] ?? null} label={label} />
           ))}
         </div>
 
-        {/* AI Summary */}
-        <div className="rounded-2xl p-6 mb-8 border" style={{ background: 'rgba(0,212,170,0.05)', borderColor: 'rgba(0,212,170,0.2)' }}>
-          <div className="flex items-center gap-2 mb-3">
-            <Sparkles size={15} style={{ color: '#00D4AA' }} />
-            <span className="text-sm font-semibold" style={{ color: '#00D4AA' }}>AI Analysis</span>
+        {/* AI summary */}
+        {aiSummary && (
+          <div className="ai-box">
+            <div className="ai-box-head">
+              <svg viewBox="0 0 24 24"><path d="M12 2.5c1.4 5.1 4.4 8.1 9.5 9.5-5.1 1.4-8.1 4.4-9.5 9.5-1.4-5.1-4.4-8.1-9.5-9.5 5.1-1.4 8.1-4.4 9.5-9.5Z"/></svg>
+              AI Analysis
+            </div>
+            <p>{aiSummary}</p>
           </div>
-          <p className="text-sm leading-relaxed" style={{ color: '#C8D5E6' }}>{aiSummary}</p>
-        </div>
+        )}
 
-        {/* Free issues preview (blurred after 3) */}
-        <div className="mb-8">
-          <h3 className="font-semibold mb-4" style={{ color: '#E8EFF7' }}>Issues found</h3>
-          <div className="space-y-3">
-            {issues.slice(0, 3).map((issue, i) => (
-              <IssueRow key={i} issue={issue} />
-            ))}
-          </div>
+        {/* Visible issues */}
+        {visibleIssues.length > 0 && (
+          <>
+            <div className="section-head">
+              <h3>Issues found</h3>
+              <span>{issues.length} total</span>
+            </div>
+            <div className="issue-list">
+              {visibleIssues.map((issue, i) => <IssueRow key={i} issue={issue} />)}
+            </div>
+          </>
+        )}
 
-          {/* Locked issues */}
-          {issues.length > 3 && (
-            <div className="relative mt-3">
-              <div className="space-y-3 opacity-30 pointer-events-none select-none" style={{ filter: 'blur(3px)' }}>
-                {issues.slice(3, 7).map((issue, i) => (
-                  <IssueRow key={i} issue={issue} />
-                ))}
-              </div>
-              <div className="absolute inset-0 flex flex-col items-center justify-center">
-                <div className="rounded-2xl p-6 text-center border" style={{ background: '#0D1526', borderColor: 'rgba(0,212,170,0.3)', maxWidth: 360 }}>
-                  <Lock size={20} style={{ color: '#00D4AA', margin: '0 auto 12px' }} />
-                  <div className="font-semibold mb-1" style={{ color: '#E8EFF7' }}>
-                    {issues.length - 3} more issues found
-                  </div>
-                  <div className="text-sm mb-5" style={{ color: '#8899B5' }}>
-                    Get the full breakdown with fixes, priorities, and an AI action plan.
-                  </div>
-                  <Link href={`/checkout?reportId=${reportId}`} className="btn-brand px-5 py-2.5 rounded-xl text-sm font-semibold flex items-center justify-center gap-2">
-                    Unlock full report — $4.99 <ArrowRight size={13} />
-                  </Link>
+        {/* Locked issues + paywall */}
+        {hasLocked && (
+          <div className="paywall-wrap">
+            <div className="issue-list paywall-blur">
+              {lockedIssues.map((issue, i) => <IssueRow key={i} issue={issue} />)}
+            </div>
+            <div className="paywall-overlay">
+              <div className="paywall-card">
+                <div className="lock-icon">
+                  <svg viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>
                 </div>
+                <h3>{issues.length - 3} more issues found</h3>
+                <p>Get the full breakdown with fixes, priorities, UX recommendations, and an AI action plan — all in one shareable report.</p>
+                <a href={`/checkout?reportId=${reportId}`} className="btn-gradient">
+                  Unlock full report — $4.99
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M4 12h16m-7-7 7 7-7 7"/></svg>
+                </a>
               </div>
             </div>
-          )}
-        </div>
+          </div>
+        )}
 
         {/* Upgrade CTA */}
-        <div className="rounded-2xl p-8 text-center border" style={{ background: '#0D1526', borderColor: 'rgba(0,212,170,0.2)' }}>
-          <h3 className="text-xl font-bold mb-2" style={{ color: '#E8EFF7' }}>Ready to fix what's holding your site back?</h3>
-          <p className="text-sm mb-6" style={{ color: '#8899B5' }}>Get the full report with prioritized fixes, detailed AI recommendations, and a shareable PDF.</p>
-          <Link href={`/checkout?reportId=${reportId}`} className="btn-brand inline-flex items-center gap-2 px-7 py-3.5 rounded-xl font-semibold">
-            Get full report — $4.99 <ArrowRight size={15} />
-          </Link>
+        <div className="upgrade-cta">
+          <h3>Ready to fix what's holding your site back?</h3>
+          <p>The full report covers up to 50 pages — with UX &amp; conversion analysis, prioritized fixes, detailed AI recommendations, and a shareable PDF.</p>
+          <a href={`/checkout?reportId=${reportId}`} className="btn-gradient">
+            Get full report — $4.99
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M4 12h16m-7-7 7 7-7 7"/></svg>
+          </a>
         </div>
       </div>
-    </div>
+    </>
   );
-}
-
-function IssueRow({ issue }) {
-  const sev = issue.severity || 'warning';
-  const colors = { critical: '#FF5D5D', warning: '#F5A623', info: '#8899B5', good: '#00D4AA' };
-  const icons = {
-    critical: <XCircle size={14} style={{ color: colors.critical }} />,
-    warning: <AlertCircle size={14} style={{ color: colors.warning }} />,
-    info: <AlertCircle size={14} style={{ color: colors.info }} />,
-    good: <CheckCircle2 size={14} style={{ color: colors.good }} />,
-  };
-
-  return (
-    <div className="flex items-start gap-3 p-4 rounded-xl border" style={{ background: '#0D1526', borderColor: '#1A2740' }}>
-      <div className="mt-0.5">{icons[sev]}</div>
-      <div>
-        <div className="text-sm font-medium mb-0.5" style={{ color: '#C8D5E6' }}>{issue.message}</div>
-        {issue.area && <div className="text-xs" style={{ color: '#8899B5' }}>{issue.area}</div>}
-      </div>
-    </div>
-  );
-}
-
-// Workaround for Globe2 not in older lucide
-function Globe2({ size }) {
-  return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>;
 }
 
 export default function AnalyzePage() {

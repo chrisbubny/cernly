@@ -37,7 +37,8 @@ button { cursor: pointer }
   font-weight: 800;
   font-size: 11px;
   letter-spacing: .16em;
-  text-transform: uppercase
+  text-transform: uppercase;
+  margin-bottom: 20px
 }
 .eyebrow:before {
   content: '';
@@ -49,7 +50,7 @@ button { cursor: pointer }
 h1, h2, h3, p { margin-top: 0 }
 h1, h2, h3 {
   font-family: Manrope, sans-serif;
-  letter-spacing: -.055em
+  letter-spacing: -.025em
 }
 h1 {
   font-size: clamp(48px, 5.5vw, 78px);
@@ -458,7 +459,7 @@ p { line-height: 1.7 }
 .pathways { background: #f8f9fc }
 .pathway-grid {
   display: grid;
-  grid-template-columns: .9fr 1fr 1fr;
+  grid-template-columns: 1fr 1fr 1fr;
   gap: 20px;
   align-items: stretch
 }
@@ -776,7 +777,7 @@ export default function Home() {
           </nav>
           <div className="navright">
             <a href="/sign-in">Sign In</a>
-            <a className="btn btn-dark" href="#start">Try it free <svg className="icon sm"><use href="#i-arrow"/></svg></a>
+            <a className="btn btn-dark" href="#hero-form" onClick={e => { e.preventDefault(); document.getElementById('hero-form')?.querySelector('input')?.focus(); document.getElementById('hero-form')?.scrollIntoView({behavior:'smooth',block:'center'}); }}>Try it free <svg className="icon sm"><use href="#i-arrow"/></svg></a>
           </div>
         </div>
       </header>
@@ -787,14 +788,14 @@ export default function Home() {
             <div className="hero-copy">
               <span className="eyebrow">Your website, explained</span>
               <h1>See what&apos;s holding your website <span className="gradient-text">back.</span></h1>
-              <p>One scan. Clear answers. Smarter fixes. Find performance, SEO, security, and accessibility issues—and know what to do next.</p>
+              <p>Enter a URL. Get a clear score on performance, SEO, security, and accessibility—free, no account needed. Unlock a full audit for up to 50 pages with AI-written fixes.</p>
               <form className="urlform" id="hero-form" onSubmit={handleFormSubmit}>
                 <svg className="icon"><use href="#i-link"/></svg>
                 <input
                   aria-label="Website URL"
-                  placeholder="https://yourwebsite.com"
+                  placeholder="yourwebsite.com"
                   required
-                  type="url"
+                  type="text"
                   value={urlInput}
                   onChange={e => setUrlInput(e.target.value)}
                 />
@@ -972,14 +973,14 @@ export default function Home() {
             </div>
             <div className="path-card">
               <div className="icon-tile"><svg className="icon lg"><use href="#i-search"/></svg></div>
-              <h3>Scan any website</h3>
-              <p>Enter a public URL and see what your site is doing well—and where it could improve.</p>
+              <h3>Analyze any URL</h3>
+              <p>Paste any public URL and get a free snapshot—scores and top findings, no account needed. Upgrade for a full deep audit.</p>
               <ul className="ticks">
-                <li><svg className="icon"><use href="#i-check"/></svg>No installation needed</li>
-                <li><svg className="icon"><use href="#i-check"/></svg>Clear scores and findings</li>
-                <li><svg className="icon"><use href="#i-check"/></svg>Practical recommendations</li>
+                <li><svg className="icon"><use href="#i-check"/></svg>Free single-URL check</li>
+                <li><svg className="icon"><use href="#i-check"/></svg>Performance, SEO, Security &amp; Accessibility</li>
+                <li><svg className="icon"><use href="#i-check"/></svg>Full audit up to 50 pages — $4.99</li>
               </ul>
-              <a className="btn btn-gradient" href="#top">Scan a website <svg className="icon sm"><use href="#i-arrow"/></svg></a>
+              <a className="btn btn-gradient" href="#hero-form" onClick={e => { e.preventDefault(); document.getElementById('hero-form')?.querySelector('input')?.focus(); document.getElementById('hero-form')?.scrollIntoView({behavior:'smooth',block:'center'}); }}>Analyze a URL <svg className="icon sm"><use href="#i-arrow"/></svg></a>
             </div>
             <div className="path-card">
               <div className="icon-tile wp"><svg className="icon lg"><use href="#i-wordpress"/></svg></div>
@@ -1036,8 +1037,9 @@ export default function Home() {
                 <div className="price">$4.99</div>
                 <p>One-time report · No subscription</p>
                 <ul>
-                  <li><svg className="icon"><use href="#i-check"/></svg>Detailed audit findings</li>
-                  <li><svg className="icon"><use href="#i-check"/></svg>Prioritized AI action plan</li>
+                  <li><svg className="icon"><use href="#i-check"/></svg>Deep audit up to 50 pages</li>
+                  <li><svg className="icon"><use href="#i-check"/></svg>UX &amp; conversion analysis</li>
+                  <li><svg className="icon"><use href="#i-check"/></svg>AI-prioritized fix plan</li>
                   <li><svg className="icon"><use href="#i-check"/></svg>Shareable report</li>
                 </ul>
                 <a className="btn btn-gradient" href="#top">Unlock full report <svg className="icon sm"><use href="#i-arrow"/></svg></a>
