@@ -24,8 +24,23 @@ export async function GET(request) {
     ssl: { rejectUnauthorized: false },
   });
 
+  const client = await pool.connect();
   try {
-    await pool.query(`
+    // Diagnose current user and schema ownership
+    const whoami = await client.query(`SELECT current_user, current_database(), version()`);
+    const schemaInfo = await client.query(
+      `SELECT schema_owner FROM information_schema.schemata WHERE schema_name = 'public'`
+    );
+    const currentUser = whoami.rows[0].current_user;
+    const schemaOwner = schemaInfo.rows[0]?.schema_owner;
+
+    // Try to grant ourselves schema access (may fail if not owner — that's ok)
+    try {
+      await client.query(`GRANT ALL ON SCHEMA public TO "${currentUser}"`);
+    } catch (e) { /* ignore */ }
+
+    // Create tables
+    await client.query(`
       CREATE TABLE IF NOT EXISTS reports (
         id           SERIAL PRIMARY KEY,
         url          TEXT NOT NULL,
@@ -40,11 +55,11 @@ export async function GET(request) {
         user_id      TEXT,
         created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
         expires_at   TIMESTAMPTZ
-      );
-
-      CREATE INDEX IF NOT EXISTS idx_reports_user    ON reports(user_id) WHERE user_id IS NOT NULL;
-      CREATE INDEX IF NOT EXISTS idx_reports_created ON reports(created_at);
-
+      )
+    `);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_reports_user    ON reports(user_id) WHERE user_id IS NOT NULL`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_reports_created ON reports(created_at)`);
+    await client.query(`
       CREATE TABLE IF NOT EXISTS subscriptions (
         id                   SERIAL PRIMARY KEY,
         user_id              TEXT NOT NULL,
@@ -56,17 +71,18 @@ export async function GET(request) {
         cancel_at_period_end BOOLEAN NOT NULL DEFAULT false,
         created_at           TIMESTAMPTZ NOT NULL DEFAULT NOW(),
         updated_at           TIMESTAMPTZ NOT NULL DEFAULT NOW()
-      );
-
-      CREATE INDEX IF NOT EXISTS idx_subs_user   ON subscriptions(user_id);
-      CREATE INDEX IF NOT EXISTS idx_subs_stripe ON subscriptions(stripe_sub_id) WHERE stripe_sub_id IS NOT NULL;
+      )
     `);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_subs_user   ON subscriptions(user_id)`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_subs_stripe ON subscriptions(stripe_sub_id) WHERE stripe_sub_id IS NOT NULL`);
 
+    client.release();
     await pool.end();
-    return NextResponse.json({ ok: true, message: 'Schema initialized successfully' });
+    return NextResponse.json({ ok: true, message: 'Schema initialized successfully', currentUser, schemaOwner });
   } catch (err) {
+    client.release();
     await pool.end().catch(() => {});
     console.error('[init-db]', err);
-    return NextResponse.json({ error: err.message }, { status: 500 });
+    return NextResponse.json({ error: err.message, code: err.code }, { status: 500 });
   }
 }
