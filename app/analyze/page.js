@@ -75,11 +75,10 @@ p { margin-top: 0; line-height: 1.7 }
   align-items: center; justify-content: center; gap: 0; text-align: center
 }
 .loading-mark {
-  width: 64px; height: 64px; border-radius: 20px;
-  display: grid; place-items: center; margin-bottom: 28px;
-  background: linear-gradient(135deg, #8a46f8, #3389ff)
+  width: 72px; height: 72px; border-radius: 22px;
+  overflow: hidden; margin-bottom: 28px; flex: none
 }
-.loading-mark svg { width: 30px; height: 30px }
+.loading-mark svg { width: 72px; height: 72px; display: block }
 .loading-wrap h2 { font-size: 22px; margin-bottom: 8px }
 .loading-wrap p { color: var(--muted); font-size: 14px; margin-bottom: 32px; min-height: 20px }
 .steps-bar { display: flex; gap: 6px }
@@ -166,7 +165,8 @@ p { margin-top: 0; line-height: 1.7 }
 .paywall-blur { filter: blur(4px); pointer-events: none; user-select: none; opacity: .45 }
 .paywall-overlay {
   position: absolute; inset: 0;
-  display: flex; align-items: center; justify-content: center
+  display: flex; align-items: flex-start; justify-content: center;
+  padding-top: 28px
 }
 .paywall-card {
   background: #fff; border: 1px solid #ded6ff;
@@ -183,7 +183,7 @@ p { margin-top: 0; line-height: 1.7 }
 .paywall-card p { font-size: 13px; color: var(--muted); margin-bottom: 24px }
 .btn-gradient {
   display: inline-flex; align-items: center; gap: 8px;
-  padding: 14px 24px; border-radius: 12px; border: 0;
+  padding: 14px 24px; border-radius: 6px; border: 0;
   font-size: 14px; font-weight: 800; color: white;
   background: linear-gradient(110deg, #8a46f8, #446af6 60%, #258de9);
   box-shadow: 0 8px 22px #6a58ec36; text-decoration: none;
@@ -210,7 +210,7 @@ p { margin-top: 0; line-height: 1.7 }
 .error-wrap p { color: var(--muted); font-size: 14px; margin-bottom: 28px }
 .btn-outline {
   display: inline-flex; align-items: center; gap: 8px;
-  padding: 12px 22px; border-radius: 11px;
+  padding: 12px 22px; border-radius: 6px;
   font-size: 14px; font-weight: 800; color: var(--ink);
   background: #fff; border: 1.5px solid var(--line);
   text-decoration: none; transition: transform .2s
@@ -219,13 +219,20 @@ p { margin-top: 0; line-height: 1.7 }
 `;
 
 /* ── Cernly logo mark ──────────────────────────────────────────────────── */
-function CernlyMark() {
+function CernlyMark({ style = {} }) {
   return (
-    <svg aria-hidden="true" viewBox="195 175 895 875" xmlns="http://www.w3.org/2000/svg" style={{width:'100%',height:'100%'}}>
-      <path d="M642.5,175c0,0-22.4,200.3-187.1,296.8c-164.7,96.5-280.4,22.1-280.4,22.1s22.4-200.3,187.1-296.8 C526.8,100.6,642.5,175,642.5,175z" fill="#fff" opacity=".95"/>
-      <path d="M642.5,175c0,0,22.4,200.3,187.1,296.8c164.7,96.5,280.4,22.1,280.4,22.1S1087.6,293.6,922.9,197.1 C758.2,100.6,642.5,175,642.5,175z" fill="#fff" opacity=".8"/>
-      <path d="M642.5,1049.6c0,0-22.4-200.3-187.1-296.8C290.7,656.3,175,730.7,175,730.7s22.4,200.3,187.1,296.8 C526.8,1124,642.5,1049.6,642.5,1049.6z" fill="#fff" opacity=".8"/>
-      <path d="M642.5,1049.6c0,0,22.4-200.3,187.1-296.8c164.7-96.5,280.4,22.1,280.4,22.1s-22.4,200.3-187.1,296.8 C758.2,1124,642.5,1049.6,642.5,1049.6z" fill="#fff" opacity=".95"/>
+    <svg aria-hidden="true" viewBox="195 175 895 875" xmlns="http://www.w3.org/2000/svg" style={{display:'block',...style}}>
+      <defs>
+        <linearGradient id="cmark-g" x1="1090" y1="1050" x2="195" y2="175" gradientUnits="userSpaceOnUse">
+          <stop offset="0" stopColor="#3389ff"/>
+          <stop offset="1" stopColor="#8a46f8"/>
+        </linearGradient>
+      </defs>
+      <rect x="195" y="175" width="895" height="875" rx="150" ry="150" fill="url(#cmark-g)"/>
+      <path d="M642.5,175c0,0-22.4,200.3-187.1,296.8c-164.7,96.5-280.4,22.1-280.4,22.1s22.4-200.3,187.1-296.8C526.8,100.6,642.5,175,642.5,175z" fill="#fff" opacity=".95"/>
+      <path d="M642.5,175c0,0,22.4,200.3,187.1,296.8c164.7,96.5,280.4,22.1,280.4,22.1S1087.6,293.6,922.9,197.1C758.2,100.6,642.5,175,642.5,175z" fill="#fff" opacity=".8"/>
+      <path d="M642.5,1049.6c0,0-22.4-200.3-187.1-296.8C290.7,656.3,175,730.7,175,730.7s22.4,200.3,187.1,296.8C526.8,1124,642.5,1049.6,642.5,1049.6z" fill="#fff" opacity=".8"/>
+      <path d="M642.5,1049.6c0,0,22.4-200.3,187.1-296.8c164.7-96.5,280.4,22.1,280.4,22.1s-22.4,200.3-187.1,296.8C758.2,1124,642.5,1049.6,642.5,1049.6z" fill="#fff" opacity=".95"/>
     </svg>
   );
 }
@@ -349,9 +356,7 @@ function AnalyzeContent() {
       <header className="topbar">
         <div className="nav">
           <a className="brand" href="/">
-            <div style={{width:22,height:22,borderRadius:7,background:'linear-gradient(135deg,#8a46f8,#3389ff)',display:'grid',placeItems:'center',overflow:'hidden',padding:3}}>
-              <CernlyMark />
-            </div>
+            <CernlyMark style={{width:24,height:24,borderRadius:7,overflow:'hidden'}}/>
             cernly<span>.ai</span>
           </a>
         </div>
@@ -359,12 +364,7 @@ function AnalyzeContent() {
       <div className="page">
         <div className="loading-wrap">
           <div className="loading-mark">
-            <svg viewBox="195 175 895 875" xmlns="http://www.w3.org/2000/svg">
-              <path d="M642.5,175c0,0-22.4,200.3-187.1,296.8c-164.7,96.5-280.4,22.1-280.4,22.1s22.4-200.3,187.1-296.8 C526.8,100.6,642.5,175,642.5,175z" fill="#fff" opacity=".95"/>
-              <path d="M642.5,175c0,0,22.4,200.3,187.1,296.8c164.7,96.5,280.4,22.1,280.4,22.1S1087.6,293.6,922.9,197.1 C758.2,100.6,642.5,175,642.5,175z" fill="#fff" opacity=".8"/>
-              <path d="M642.5,1049.6c0,0-22.4-200.3-187.1-296.8C290.7,656.3,175,730.7,175,730.7s22.4,200.3,187.1,296.8 C526.8,1124,642.5,1049.6,642.5,1049.6z" fill="#fff" opacity=".8"/>
-              <path d="M642.5,1049.6c0,0,22.4-200.3,187.1-296.8c164.7-96.5,280.4,22.1,280.4,22.1s-22.4,200.3-187.1,296.8 C758.2,1124,642.5,1049.6,642.5,1049.6z" fill="#fff" opacity=".95"/>
-            </svg>
+            <CernlyMark style={{width:72,height:72}}/>
           </div>
           <h2>Analyzing {domain}</h2>
           <p>{steps[loadingStep]}</p>
@@ -390,9 +390,7 @@ function AnalyzeContent() {
       <header className="topbar">
         <div className="nav">
           <a className="brand" href="/">
-            <div style={{width:22,height:22,borderRadius:7,background:'linear-gradient(135deg,#8a46f8,#3389ff)',display:'grid',placeItems:'center',overflow:'hidden',padding:3}}>
-              <CernlyMark />
-            </div>
+            <CernlyMark style={{width:24,height:24,borderRadius:7,overflow:'hidden'}}/>
             cernly<span>.ai</span>
           </a>
         </div>
@@ -436,9 +434,7 @@ function AnalyzeContent() {
       <header className="topbar">
         <div className="nav">
           <a className="brand" href="/">
-            <div style={{width:22,height:22,borderRadius:7,background:'linear-gradient(135deg,#8a46f8,#3389ff)',display:'grid',placeItems:'center',overflow:'hidden',padding:3}}>
-              <CernlyMark />
-            </div>
+            <CernlyMark style={{width:24,height:24,borderRadius:7,overflow:'hidden'}}/>
             cernly<span>.ai</span>
           </a>
           <div className="domain-pill">
