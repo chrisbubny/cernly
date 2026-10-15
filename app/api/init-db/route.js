@@ -17,8 +17,10 @@ export async function GET(request) {
     return NextResponse.json({ error: 'DATABASE_URL not set' }, { status: 500 });
   }
 
+  // Strip sslmode from URL so the pg driver doesn't override our ssl config
+  const dbUrl = process.env.DATABASE_URL.replace(/[?&]sslmode=[^&]*/g, '').replace(/\?$/, '');
   const pool = new Pool({
-    connectionString: process.env.DATABASE_URL,
+    connectionString: dbUrl,
     ssl: { rejectUnauthorized: false },
   });
 
