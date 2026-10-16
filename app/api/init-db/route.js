@@ -28,18 +28,12 @@ export async function GET(request) {
 
   const client = await pool.connect();
   try {
-    // Diagnose current user and schema ownership
-    const whoami = await client.query(`SELECT current_user, current_database(), version()`);
-    const schemaInfo = await client.query(
-      `SELECT schema_owner FROM information_schema.schemata WHERE schema_name = 'public'`
-    );
+    const whoami = await client.query(`SELECT current_user, current_database()`);
     const currentUser = whoami.rows[0].current_user;
-    const schemaOwner = schemaInfo.rows[0]?.schema_owner;
 
-    // Try to grant ourselves schema access (may fail if not owner — that's ok)
-    try {
-      await client.query(`GRANT ALL ON SCHEMA public TO "${currentUser}"`);
-    } catch (e) { /* ignore */ }
+    // Create app schema owned by current user — avoids PostgreSQL 17 public schema restrictions
+    await client.query(`CREATE SCHEMA IF NOT EXISTS app`);
+    await client.query(`SET search_path TO app`);
 
     // Create tables
     await client.query(`
@@ -80,7 +74,7 @@ export async function GET(request) {
 
     client.release();
     await pool.end();
-    return NextResponse.json({ ok: true, message: 'Schema initialized successfully', currentUser, schemaOwner });
+    return NextResponse.json({ ok: true, message: 'Schema initialized successfully', currentUser });
   } catch (err) {
     client.release();
     await pool.end().catch(() => {});

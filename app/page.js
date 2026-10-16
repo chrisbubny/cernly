@@ -150,7 +150,7 @@ p { line-height: 1.7 }
 .hero {
   position: relative;
   overflow: hidden;
-  padding: 70px 0
+  padding: 70px 0 105px
 }
 .hero:before {
   content: '';
