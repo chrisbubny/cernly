@@ -32,13 +32,12 @@ const Icons = {
   External: () => <Icon size={12}><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></Icon>,
 };
 
-/* Cernly logo mark — exact paths from prototype */
-const LogoMark = () => (
-  <svg width="29" height="29" viewBox="175 155 940 915" style={{ display: 'block', color: '#171722' }}>
-    <path fill="currentColor" d="M210.88,597.17c-1.92.12-3.93-.58-4.48-1.24s-.97-3.06-.76-3.98c11.39-48.88,50.84-84.6,92.76-109.56,22.3-13.27,43.7-26.1,64.87-41.11,52.4-37.15,79.11-75.36,113.03-127.89l22.43-34.73c32.23-45.08,77.97-78.01,131.24-93.68,1.22-.36,3.93.09,4.54.91,4.51,6.07,2.51,50.21,1.38,67.19-3.77,56.96-14.7,113.18-38.87,164.93-13.55,29-31.57,54.3-54.59,76.43-27.97,26.89-60.01,47.21-96.52,60.57-21.05,7.7-41.49,13.71-63.62,18.52-56.54,12.3-113.27,20.1-171.42,23.65Z"/>
-    <path fill="currentColor" d="M1075.29,597.22c-31.29-1.76-60.75-5.23-91.32-10.14-37.13-5.96-73.16-12.14-109.51-21.48-27.2-6.99-52.73-16.08-77.11-30.07-33.58-19.26-62.54-45.19-85.19-76.57-48.6-67.35-61.22-165.28-63.01-246.88l.74-24.19c.05-1.52,3.3-3.46,5.17-2.9,53.27,15.99,99.4,48.96,131.58,94.27l22.01,34.17c13.38,20.77,26.25,40.89,41.62,60.34,22.14,28.03,47.79,51.58,77.4,71.53l58.53,36.52c42.76,26.68,80.77,59.15,93.2,109.88.25,1.03.24,2.45.06,3.15-.23.87-2.89,2.45-4.15,2.38Z"/>
-    <path fill="currentColor" d="M797.68,922.67c-32.2,56.52-79.76,98.45-142.12,117.91-2.48.77-5.89-.81-6-3.3l-1.25-29.38c.14-35.36,2.94-69.78,8.88-104.64,13.49-79.23,45.35-148.57,105.28-202.8,48.34-43.74,98.6-62.82,162.34-73.88,48.62-8.44,96.94-12.45,146.2-14.26,3.25-.12,7.35-.34,8.71,2.82-6.63,31.45-27.79,62.34-51.1,84.47-14.25,13.53-29.63,24.26-46.24,34.8l-57.5,36.51c-60.34,41.66-91.74,89.48-127.22,151.75Z"/>
-    <path fill="currentColor" d="M514.03,962.58c-12.71-15.68-22.44-31.35-32.26-48.38-33.85-58.7-64.66-101.62-121.01-140.94l-53.53-34.47c-14.35-9.24-27.95-18.02-40.98-29.06-21.42-18.16-38.67-29.63-27.71-9.12-30.62.57-.66,2.66-1.41,3.76-1.35,48.35,2.7,95.64,7.89,143.41,15.64,62.11,10.07,110.39,25.7,159.44,65.72,46.02,37.55,79.42,86.64,97.86,143.16,20.51,62.84,24.72,132.93,23.74,198.93-.02,1.03-1.13,3.48-1.92,4.05-.95.69-3.35.77-5,.24-44.69-14.26-83.75-41-113.6-77.81Z"/>
+/* Cernly logo mark */
+export const LogoMark = ({ size = 29 }) => (
+  <svg width={size} height={size} viewBox="0 0 100 100" style={{ display: 'block' }}>
+    <path fill="#151621" d="M50 5 C28 5 10 23 10 45 C10 55 14 64 21 71 L50 50 Z"/>
+    <path fill="#7948f6" d="M50 5 C72 5 90 23 90 45 C90 55 86 64 79 71 L50 50 Z"/>
+    <path fill="#3687fa" d="M21 71 C30 83 40 90 50 95 C60 90 70 83 79 71 L50 50 Z"/>
   </svg>
 );
 
@@ -116,6 +115,109 @@ const SCAN_STAGES = [
   { label: 'Running AI analysis…',    pct: 88 },
   { label: 'Finalizing report…',      pct: 96 },
 ];
+
+/* ─── Fix queue view ─── */
+const ALL_TASKS = [
+  { num: '01', title: 'Reduce forced reflows',        domain: 'spirecomm.com', impact: 'high',   effort: 'Moderate effort', fix: 'image'    },
+  { num: '02', title: 'Compress hero image',           domain: 'spirecomm.com', impact: 'high',   effort: '~10 min',         fix: 'image'    },
+  { num: '03', title: 'Add missing meta descriptions', domain: 'spirecomm.com', impact: 'high',   effort: '~20 min',         fix: 'meta'     },
+  { num: '04', title: 'Add aria-labels to buttons',    domain: 'spirecomm.com', impact: 'medium', effort: '~5 min',          fix: 'aria'     },
+  { num: '05', title: 'Improve font loading',          domain: 'spirecomm.com', impact: 'medium', effort: '~15 min',         fix: 'fonts'    },
+  { num: '06', title: 'Review heading hierarchy',      domain: 'spirecomm.com', impact: 'medium', effort: '~10 min',         fix: 'headings' },
+  { num: '07', title: 'Enable text compression',       domain: 'spirecomm.com', impact: 'medium', effort: '~5 min',          fix: 'image'    },
+];
+
+function FixQueueView({ reports, onOpenGuide }) {
+  const [filter, setFilter] = useState('all');
+  const tabs = [
+    { id: 'all',    label: 'All findings' },
+    { id: 'high',   label: 'High impact'  },
+    { id: 'medium', label: 'Medium impact'},
+  ];
+  const visible = ALL_TASKS.filter(t => filter === 'all' || t.impact === filter);
+  const impactColors = {
+    high:   { bg: '#fff4e5', color: '#d97706' },
+    medium: { bg: '#f1edff', color: '#7948f6' },
+  };
+
+  return (
+    <>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start',
+        gap: 16, marginBottom: 22, flexWrap: 'wrap' }}>
+        <div>
+          <h1 style={{ fontFamily: 'var(--font-manrope, Manrope, sans-serif)',
+            fontSize: 'clamp(24px,2.8vw,36px)', letterSpacing: '-.045em',
+            fontWeight: 800, margin: '0 0 4px' }}>Recommended improvements</h1>
+          <p style={{ color: '#83899c', fontSize: 13, margin: 0 }}>
+            Prioritized fixes from your scans — highest impact first.
+          </p>
+        </div>
+        <button style={{ border: '1px solid #e9eaf2', background: '#fff', borderRadius: 10,
+          padding: '9px 16px', fontSize: 12, fontWeight: 700, cursor: 'pointer',
+          color: '#444', display: 'flex', alignItems: 'center', gap: 7, fontFamily: 'inherit' }}>
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
+          </svg>
+          Export tasks
+        </button>
+      </div>
+
+      {/* Filter tabs */}
+      <div style={{ display: 'flex', gap: 6, marginBottom: 16 }}>
+        {tabs.map(t => (
+          <button key={t.id} onClick={() => setFilter(t.id)}
+            style={{ border: 0, borderRadius: 9, padding: '8px 14px',
+              fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit',
+              background: filter === t.id ? '#7948f6' : '#fff',
+              color:      filter === t.id ? '#fff'     : '#83899c',
+              boxShadow:  filter === t.id ? '0 3px 12px #7948f620' : 'none',
+              border:     filter === t.id ? 'none' : '1px solid #e9eaf2',
+            }}>
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      {/* Task list */}
+      <div style={{ background: '#fff', border: '1px solid #e9eaf2', borderRadius: 17, overflow: 'hidden' }}>
+        {visible.map((t, i) => {
+          const ic = impactColors[t.impact] || impactColors.medium;
+          return (
+            <div key={t.num} style={{ display: 'flex', gap: 14, alignItems: 'center',
+              padding: '16px 20px', borderBottom: i < visible.length - 1 ? '1px solid #f0f1f5' : 'none' }}>
+              <span style={{ width: 28, height: 28, display: 'grid', placeItems: 'center',
+                borderRadius: 9, background: '#f0ebff', color: '#7948f6',
+                fontWeight: 800, fontSize: 11, flexShrink: 0 }}>{t.num}</span>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <strong style={{ fontSize: 13, display: 'block', color: '#151621' }}>{t.title}</strong>
+                <p style={{ fontSize: 11, color: '#8a90a1', margin: '4px 0 0',
+                  display: 'flex', alignItems: 'center', gap: 4 }}>
+                  <span>{t.domain}</span>
+                  <span style={{ opacity: .4 }}>·</span>
+                  <span style={{ color: ic.color, fontWeight: 700, textTransform: 'capitalize' }}>{t.impact} impact</span>
+                  <span style={{ opacity: .4 }}>·</span>
+                  <span>{t.effort}</span>
+                </p>
+              </div>
+              <button onClick={() => onOpenGuide(t.fix)}
+                style={{ border: '1px solid #e9eaf2', background: '#fff', color: '#7651e4',
+                  fontSize: 11, fontWeight: 800, padding: '7px 12px', borderRadius: 8,
+                  cursor: 'pointer', flexShrink: 0, fontFamily: 'inherit',
+                  whiteSpace: 'nowrap' }}>
+                View guide
+              </button>
+            </div>
+          );
+        })}
+        {visible.length === 0 && (
+          <div style={{ padding: '32px 20px', textAlign: 'center', color: '#83899c', fontSize: 13 }}>
+            No {filter} impact tasks found.
+          </div>
+        )}
+      </div>
+    </>
+  );
+}
 
 export default function DashboardClient({ reports, isPro, userName, userAvatar, userEmail, isAdmin }) {
   const [url, setUrl] = useState('');
@@ -470,7 +572,7 @@ export default function DashboardClient({ reports, isPro, userName, userAvatar, 
                           <div style={{ border: '1px solid #e4e6f0', background: '#fff', borderRadius: 10,
                             display: 'flex', alignItems: 'center', gap: 10, padding: '0 14px', flex: 1, minWidth: 0 }}>
                             <Icons.Globe />
-                            <input id="scan-url" type="url" value={url} onChange={e => setUrl(e.target.value)}
+                            <input id="scan-url" type="text" value={url} onChange={e => setUrl(e.target.value)}
                               placeholder="https://yourwebsite.com" required
                               style={{ border: 0, outline: 0, padding: '14px 0', width: '100%',
                                 fontSize: 12, background: '#fff', color: '#151621', fontFamily: 'inherit' }} />
@@ -897,47 +999,7 @@ export default function DashboardClient({ reports, isPro, userName, userAvatar, 
 
             {/* ════════ FIX QUEUE ════════ */}
             {view === 'tasks' && (
-              <>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'end',
-                  gap: 20, marginBottom: 24, flexWrap: 'wrap' }}>
-                  <div>
-                    <span style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '.16em',
-                      color: '#7652ee', fontWeight: 800, display: 'block' }}>FROM FINDINGS TO FIXES</span>
-                    <h1 style={{ fontFamily: 'var(--font-manrope, Manrope, sans-serif)',
-                      fontSize: 'clamp(29px,3.3vw,41px)', letterSpacing: '-.045em',
-                      fontWeight: 800, margin: '9px 0' }}>Your fix queue</h1>
-                    <p style={{ color: '#83899c', fontSize: 13, margin: 0 }}>Prioritized work—not just another list of warnings.</p>
-                  </div>
-                </div>
-                <div style={{ background: '#fff', border: '1px solid #e9eaf2', borderRadius: 17, padding: 22 }}>
-                  {[
-                    { num: '01', title: 'Compress hero image', sub: 'Performance · ~10 min', sev: 'critical', fix: 'image' },
-                    { num: '02', title: 'Add missing meta descriptions', sub: 'SEO · ~20 min', sev: 'high', fix: 'meta' },
-                    { num: '03', title: 'Add aria-labels to icon buttons', sub: 'Accessibility · ~5 min', sev: 'high', fix: 'aria' },
-                    { num: '04', title: 'Improve font loading', sub: 'Performance · ~15 min', sev: 'medium', fix: 'fonts' },
-                    { num: '05', title: 'Review heading hierarchy', sub: 'Accessibility · ~10 min', sev: 'medium', fix: 'headings' },
-                  ].map(t => (
-                    <div key={t.num} style={{ display: 'flex', gap: 12, alignItems: 'flex-start',
-                      padding: '14px 0', borderBottom: '1px solid #f0f1f5' }}>
-                      <span style={{ width: 26, height: 26, display: 'grid', placeItems: 'center',
-                        borderRadius: 8, background: '#f0ebff', color: '#7953df',
-                        fontWeight: 800, fontSize: 11, flexShrink: 0 }}>{t.num}</span>
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <strong style={{ fontSize: 12, display: 'block' }}>{t.title}</strong>
-                        <p style={{ fontSize: 11, color: '#8a90a1', margin: '5px 0 0' }}>{t.sub}</p>
-                      </div>
-                      <SevBadge level={t.sev} />
-                      <button onClick={() => setModal(t.fix)}
-                        style={{ border: 0, background: '#f4f1ff', color: '#7651e4',
-                          fontSize: 10, fontWeight: 800, padding: '7px 9px', borderRadius: 7,
-                          cursor: 'pointer', flexShrink: 0, alignSelf: 'center', fontFamily: 'inherit' }}>
-                        View guide
-                      </button>
-                    </div>
-                  ))}
-                  <div style={{ height: 8 }} />
-                </div>
-              </>
+              <FixQueueView reports={reports} onOpenGuide={setModal} />
             )}
 
             {/* ════════ BILLING ════════ */}
