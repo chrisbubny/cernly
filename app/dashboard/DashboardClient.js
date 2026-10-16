@@ -221,7 +221,7 @@ function FixQueueView({ reports, onOpenGuide }) {
   );
 }
 
-export default function DashboardClient({ reports: initialReports, isPro, userName, userAvatar, userEmail, isAdmin }) {
+export default function DashboardClient({ reports: initialReports = [], isPro, userName, userAvatar, userEmail, isAdmin }) {
   const searchParams = useSearchParams();
   const [url, setUrl] = useState('');
   const [scanning, setScanning] = useState(false);
@@ -416,7 +416,7 @@ export default function DashboardClient({ reports: initialReports, isPro, userNa
               { id: 'overview',  label: 'Overview',    icon: <Icons.Grid />  },
               { id: 'websites',  label: 'My websites', icon: <Icons.Globe />, count: siteList.length > 0 ? siteList.length : null },
               { id: 'history',   label: 'Scan history',icon: <Icons.Clock /> },
-              { id: 'tasks',     label: 'Fix queue',   icon: <Icons.Check />, count: reports.length > 0 ? 7 : null },
+              { id: 'tasks',     label: 'Fix queue',   icon: <Icons.Check />, count: localReports.length > 0 ? 7 : null },
             ].map(({ id, label, icon, count }) => (
               <button key={id} onClick={() => { setView(id); setSidebarOpen(false); }}
                 style={{
@@ -1063,7 +1063,7 @@ export default function DashboardClient({ reports: initialReports, isPro, userNa
 
             {/* ════════ FIX QUEUE ════════ */}
             {view === 'tasks' && (
-              <FixQueueView reports={reports} onOpenGuide={setModal} />
+              <FixQueueView reports={localReports} onOpenGuide={setModal} />
             )}
 
             {/* ════════ BILLING ════════ */}
