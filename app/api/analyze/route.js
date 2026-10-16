@@ -69,6 +69,7 @@ export async function POST(request) {
     issues,
     aiSummary,
     siteType,
+    uxScore,
     uxInsights,
     lhData,
     seoData,
