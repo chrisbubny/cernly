@@ -293,27 +293,32 @@ function UxCard({ uxScore, uxInsights, siteType, url, issues }) {
   const score = uxScore ?? null;
   const color = score == null ? '#83899c' : score >= 80 ? '#19b987' : score >= 60 ? '#efa642' : '#ef6473';
 
-  // UX-relevant issues from accessibility + performance when no AI insights
+  const verdictColor = v => v === 'good' ? '#19b987' : v === 'warning' ? '#efa642' : '#ef6473';
+  const verdictBg    = v => v === 'good' ? '#f0fdf8' : v === 'warning' ? '#fffbf0' : '#fff5f6';
+  const verdictLabel = v => v === 'good' ? 'GOOD' : v === 'warning' ? 'NEEDS WORK' : 'CRITICAL';
+
+  // Fallback UX issues from accessibility/performance data when AI hasn't run
   const uxIssues = !uxInsights && Array.isArray(issues)
     ? issues.filter(i =>
         (i.severity === 'critical' || i.severity === 'warning') &&
-        (i.area?.toLowerCase().includes('access') ||
-         i.area?.toLowerCase().includes('mobile') ||
-         i.area?.toLowerCase().includes('cls') ||
-         i.area?.toLowerCase().includes('lcp') ||
-         i.area?.toLowerCase().includes('layout') ||
-         i.message?.toLowerCase().includes('tap') ||
-         i.message?.toLowerCase().includes('touch') ||
+        (i.source === 'a11y' ||
+         i.area?.toLowerCase().includes('access') ||
          i.message?.toLowerCase().includes('contrast') ||
          i.message?.toLowerCase().includes('label') ||
-         i.message?.toLowerCase().includes('button'))
-      ).slice(0, 4)
+         i.message?.toLowerCase().includes('button') ||
+         i.message?.toLowerCase().includes('tap') ||
+         i.message?.toLowerCase().includes('touch'))
+      ).slice(0, 5)
     : [];
+
+  const observations = uxInsights?.observations || [];
 
   return (
     <div style={{ background: '#fff', border: '1px solid #e9eaf2', borderRadius: 17,
       padding: '20px 22px', marginBottom: 20 }}>
-      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 16, marginBottom: 16 }}>
+
+      {/* Header */}
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 16, marginBottom: 18 }}>
         <div style={{ flex: 1 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 3 }}>
             <div style={{ width: 28, height: 28, borderRadius: 8, background: '#f1edff',
@@ -329,6 +334,10 @@ function UxCard({ uxScore, uxInsights, siteType, url, issues }) {
               <span style={{ fontSize: 10, fontWeight: 800, padding: '3px 8px', borderRadius: 6,
                 background: '#f4f5fb', color: '#83899c', letterSpacing: '.05em' }}>{siteType.toUpperCase()}</span>
             )}
+            {uxInsights && (
+              <span style={{ fontSize: 9, fontWeight: 800, padding: '3px 7px', borderRadius: 5,
+                background: '#f1edff', color: '#7948f6', letterSpacing: '.06em' }}>AI ANALYSIS</span>
+            )}
           </div>
           <p style={{ fontSize: 12, color: '#83899c', margin: 0 }}>
             Design, usability, and conversion experience
@@ -343,24 +352,65 @@ function UxCard({ uxScore, uxInsights, siteType, url, issues }) {
         )}
       </div>
 
-      {uxInsights ? (
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 16 }}>
-          <div style={{ background: '#f7f8fc', borderRadius: 12, padding: '14px 16px' }}>
-            <div style={{ fontSize: 10, fontWeight: 800, color: '#83899c',
-              textTransform: 'uppercase', letterSpacing: '.09em', marginBottom: 6 }}>Conversion focus</div>
-            <div style={{ fontSize: 13, fontWeight: 700, color: '#151621', lineHeight: 1.4 }}>
-              {uxInsights.conversion_focus || 'User engagement'}
+      {/* AI: conversion focus + top recommendation */}
+      {uxInsights && (uxInsights.conversion_focus || uxInsights.top_recommendation) && (
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 16 }}>
+          {uxInsights.conversion_focus && (
+            <div style={{ background: '#f7f8fc', borderRadius: 12, padding: '13px 15px' }}>
+              <div style={{ fontSize: 10, fontWeight: 800, color: '#83899c',
+                textTransform: 'uppercase', letterSpacing: '.09em', marginBottom: 5 }}>Goal of this site</div>
+              <div style={{ fontSize: 13, fontWeight: 700, color: '#151621', lineHeight: 1.4 }}>
+                {uxInsights.conversion_focus}
+              </div>
             </div>
-          </div>
-          <div style={{ background: '#f7f4ff', borderRadius: 12, padding: '14px 16px' }}>
-            <div style={{ fontSize: 10, fontWeight: 800, color: '#7948f6',
-              textTransform: 'uppercase', letterSpacing: '.09em', marginBottom: 6 }}>Top UX recommendation</div>
-            <div style={{ fontSize: 12, color: '#4b5168', lineHeight: 1.6 }}>
-              {uxInsights.top_recommendation || 'Review page layout and call-to-action clarity.'}
+          )}
+          {uxInsights.top_recommendation && (
+            <div style={{ background: '#f7f4ff', borderRadius: 12, padding: '13px 15px' }}>
+              <div style={{ fontSize: 10, fontWeight: 800, color: '#7948f6',
+                textTransform: 'uppercase', letterSpacing: '.09em', marginBottom: 5 }}>Top recommendation</div>
+              <div style={{ fontSize: 12, color: '#4b5168', lineHeight: 1.6 }}>
+                {uxInsights.top_recommendation}
+              </div>
             </div>
+          )}
+        </div>
+      )}
+
+      {/* AI: per-area observations */}
+      {observations.length > 0 && (
+        <div style={{ marginBottom: 16 }}>
+          <div style={{ fontSize: 11, fontWeight: 800, color: '#83899c',
+            letterSpacing: '.07em', marginBottom: 10 }}>UX BREAKDOWN</div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {observations.map((obs, i) => (
+              <div key={i} style={{ borderRadius: 11, padding: '12px 15px',
+                background: verdictBg(obs.verdict),
+                border: `1px solid ${verdictColor(obs.verdict)}22` }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: obs.fix ? 6 : 0 }}>
+                  <div style={{ width: 6, height: 6, borderRadius: '50%', flexShrink: 0,
+                    background: verdictColor(obs.verdict) }} />
+                  <div style={{ fontSize: 10, fontWeight: 800, color: verdictColor(obs.verdict),
+                    letterSpacing: '.07em' }}>{obs.area?.toUpperCase()}</div>
+                  <div style={{ marginLeft: 'auto', fontSize: 9, fontWeight: 800,
+                    color: verdictColor(obs.verdict), opacity: .7, letterSpacing: '.06em' }}>
+                    {verdictLabel(obs.verdict)}
+                  </div>
+                </div>
+                <div style={{ fontSize: 12, fontWeight: 600, color: '#151621', marginBottom: obs.fix ? 4 : 0,
+                  paddingLeft: 14 }}>{obs.finding}</div>
+                {obs.fix && (
+                  <div style={{ fontSize: 12, color: '#4b5168', lineHeight: 1.55, paddingLeft: 14 }}>
+                    → {obs.fix}
+                  </div>
+                )}
+              </div>
+            ))}
           </div>
         </div>
-      ) : uxIssues.length > 0 ? (
+      )}
+
+      {/* Fallback: issue-based UX list (no AI insights yet) */}
+      {!uxInsights && uxIssues.length > 0 && (
         <div style={{ marginBottom: 16 }}>
           <div style={{ fontSize: 11, fontWeight: 800, color: '#83899c',
             letterSpacing: '.07em', marginBottom: 10 }}>UX-RELATED ISSUES</div>
@@ -371,39 +421,43 @@ function UxCard({ uxScore, uxInsights, siteType, url, issues }) {
                 <div style={{ fontSize: 13, fontWeight: 600, color: '#151621', marginBottom: 3 }}>{issue.message}</div>
                 {(issue.description || issue.fix) && (
                   <div style={{ fontSize: 12, color: '#4b5168', lineHeight: 1.6 }}>
-                    {(issue.description || issue.fix || '').replace(/\[([^\]]+)\]\([^)]+\)/g, '$1').slice(0, 140)}
+                    {(issue.description || issue.fix || '').replace(/\[([^\]]+)\]\([^)]+\)/g, '$1').slice(0, 160)}
                   </div>
                 )}
               </div>
             ))}
           </div>
         </div>
-      ) : score != null ? (
+      )}
+
+      {/* Fallback: score-based summary when no data at all */}
+      {!uxInsights && uxIssues.length === 0 && score != null && (
         <div style={{ background: '#f7f4ff', borderRadius: 12, padding: '14px 16px', marginBottom: 16 }}>
           <div style={{ fontSize: 12, color: '#4b5168', lineHeight: 1.6 }}>
             {score >= 80
-              ? 'UX looks solid based on accessibility and performance scores. Keep an eye on load times and touch target sizes as you ship new content.'
+              ? 'UX looks solid. Keep an eye on load times and touch target sizes as you ship new content.'
               : score >= 60
-              ? 'There are UX wins available here. Improving page load speed and ensuring all interactive elements are keyboard-accessible will have the biggest impact on how users experience this site.'
-              : 'A UX score this low typically signals friction users run into — slow load times, missing labels on form fields, or elements that are hard to tap on mobile. Prioritize performance and accessibility fixes first.'}
+              ? 'There are UX wins available. Improving load speed and ensuring all interactive elements are keyboard-accessible will have the biggest impact.'
+              : 'A UX score this low typically signals friction — slow loads, missing form labels, or hard-to-tap elements on mobile. Prioritize performance and accessibility fixes first.'}
           </div>
         </div>
-      ) : null}
+      )}
 
-      {/* Screenshot preview */}
-      <div style={{ borderRadius: 12, overflow: 'hidden', border: '1px solid #e9eaf2', position: 'relative', background: '#f4f5fb' }}>
+      {/* Site preview */}
+      <div style={{ borderRadius: 12, overflow: 'hidden', border: '1px solid #e9eaf2',
+        position: 'relative', background: '#f4f5fb' }}>
         <div style={{ position: 'absolute', top: 10, left: 12, zIndex: 2,
           background: '#fff', borderRadius: 8, padding: '4px 10px', fontSize: 10,
-          fontWeight: 800, color: '#7948f6', boxShadow: '0 2px 8px #0002' }}>LIVE PREVIEW</div>
+          fontWeight: 800, color: '#7948f6', boxShadow: '0 2px 8px #0002' }}>SITE PREVIEW</div>
         <img
           src={`https://api.microlink.io/?url=${encodeURIComponent(url)}&screenshot=true&embed=screenshot.url`}
-          alt={`Screenshot of ${url}`}
-          style={{ width: '100%', height: 200, objectFit: 'cover', objectPosition: 'top', display: 'block' }}
+          alt={`Preview of ${url}`}
+          style={{ width: '100%', height: 340, objectFit: 'cover', objectPosition: 'top', display: 'block' }}
           onError={e => { e.target.style.display = 'none'; e.target.nextSibling.style.display = 'flex'; }}
         />
-        <div style={{ display: 'none', height: 200, alignItems: 'center', justifyContent: 'center',
+        <div style={{ display: 'none', height: 160, alignItems: 'center', justifyContent: 'center',
           flexDirection: 'column', gap: 8, color: '#83899c' }}>
-          <svg width={32} height={32} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round">
+          <svg width={28} height={28} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round">
             <rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/>
           </svg>
           <span style={{ fontSize: 12 }}>Preview unavailable</span>
