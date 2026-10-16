@@ -73,7 +73,7 @@ function FindingRow({ issue }) {
   return (
     <div style={{ borderBottom: '1px solid #f0f1f8' }}>
       <button onClick={() => hasDetail && setOpen(o => !o)}
-        style={{ width: '100%', background: 'none', border: 0, textAlign: 'left',
+        style={{ width: '100%', background: '#fff', border: 0, textAlign: 'left',
           padding: '13px 18px', display: 'flex', alignItems: 'flex-start', gap: 11,
           cursor: hasDetail ? 'pointer' : 'default', fontFamily: 'inherit' }}>
         <SevDot sev={sev} />
@@ -199,7 +199,13 @@ function UxCard({ uxScore, uxInsights, siteType, url }) {
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 16, marginBottom: 16 }}>
         <div style={{ flex: 1 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 3 }}>
-            <span style={{ fontSize: 16 }}>👁</span>
+            <div style={{ width: 28, height: 28, borderRadius: 8, background: '#f1edff',
+              display: 'grid', placeItems: 'center', flexShrink: 0 }}>
+              <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="#7948f6" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7z"/>
+                <circle cx="12" cy="12" r="3"/>
+              </svg>
+            </div>
             <h2 style={{ fontFamily: 'var(--font-manrope, Manrope, sans-serif)', fontWeight: 800,
               fontSize: 15, color: '#151621', margin: 0, letterSpacing: '-.02em' }}>UX analysis</h2>
             {siteType && (
@@ -694,12 +700,13 @@ export default function ReportClient({ isPro, userName, userAvatar }) {
                   {/* ── Left: all content ── */}
                   <div>
                     {/* Score tiles */}
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 10, marginBottom: 20 }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: `repeat(${report.uxScore != null ? 5 : 4},1fr)`, gap: 10, marginBottom: 20 }}>
                       {[
                         { label: 'Performance',   score: report.scores?.performance },
                         { label: 'SEO',           score: report.scores?.seo },
                         { label: 'Security',      score: report.scores?.security },
                         { label: 'Accessibility', score: report.scores?.accessibility },
+                        ...(report.uxScore != null ? [{ label: 'UX', score: report.uxScore }] : []),
                       ].map(c => <ScoreTile key={c.label} score={c.score} label={c.label} />)}
                     </div>
 
@@ -719,9 +726,9 @@ export default function ReportClient({ isPro, userName, userAvatar }) {
                     )}
 
                     {/* UX Analysis */}
-                    {(report.scores?.ux != null || report.uxInsights) && (
+                    {(report.uxScore != null || report.uxInsights) && (
                       <UxCard
-                        uxScore={report.scores?.ux}
+                        uxScore={report.uxScore}
                         uxInsights={report.uxInsights}
                         siteType={report.siteType}
                         url={report.url}
