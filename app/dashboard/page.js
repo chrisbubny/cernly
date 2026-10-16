@@ -24,7 +24,7 @@ async function DashboardData() {
 
   return (
     <DashboardClient
-      reports={reports}
+      initialReports={reports}
       isPro={!!subscription}
       userName={clerkUser?.firstName || clerkUser?.emailAddresses?.[0]?.emailAddress?.split('@')[0] || 'there'}
       userAvatar={clerkUser?.imageUrl || null}
