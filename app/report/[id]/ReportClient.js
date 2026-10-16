@@ -331,7 +331,7 @@ function AskCernlyPanel({ reportId, domain }) {
   return (
     <div style={{ background: '#fff', border: '1px solid #e9eaf2', borderRadius: 17,
       display: 'flex', flexDirection: 'column', height: PANEL_HEIGHT,
-      maxHeight: 780, minHeight: 440, overflow: 'hidden' }}>
+      maxHeight: 570, minHeight: 440, overflow: 'hidden' }}>
 
       {/* Header */}
       <div style={{ padding: '15px 16px 13px', borderBottom: '1px solid #f0f1f8',
@@ -576,7 +576,7 @@ export default function ReportClient({ isPro, userName, userAvatar }) {
       .rep-cols { grid-template-columns: 1fr !important }
     }
     @media (max-width: 1100px) {
-      .rep-cols { grid-template-columns: minmax(0,1fr) 290px !important }
+      .rep-cols { grid-template-columns: minmax(0,1fr) 320px !important }
     }
   `;
 
@@ -694,19 +694,19 @@ export default function ReportClient({ isPro, userName, userAvatar }) {
                   color: '#151621', margin: '0 0 22px' }}>{domain}</h1>
 
                 {/* Two-column layout */}
-                <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) 310px',
+                <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) 360px',
                   gap: 20, alignItems: 'start' }} className="rep-cols">
 
                   {/* ── Left: all content ── */}
                   <div>
                     {/* Score tiles */}
-                    <div style={{ display: 'grid', gridTemplateColumns: `repeat(${report.uxScore != null ? 5 : 4},1fr)`, gap: 10, marginBottom: 20 }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5,1fr)', gap: 10, marginBottom: 20 }}>
                       {[
                         { label: 'Performance',   score: report.scores?.performance },
                         { label: 'SEO',           score: report.scores?.seo },
                         { label: 'Security',      score: report.scores?.security },
                         { label: 'Accessibility', score: report.scores?.accessibility },
-                        ...(report.uxScore != null ? [{ label: 'UX', score: report.uxScore }] : []),
+                        { label: 'UX',            score: report.uxScore ?? null },
                       ].map(c => <ScoreTile key={c.label} score={c.score} label={c.label} />)}
                     </div>
 
@@ -725,15 +725,13 @@ export default function ReportClient({ isPro, userName, userAvatar }) {
                       </div>
                     )}
 
-                    {/* UX Analysis */}
-                    {(report.uxScore != null || report.uxInsights) && (
-                      <UxCard
-                        uxScore={report.uxScore}
-                        uxInsights={report.uxInsights}
-                        siteType={report.siteType}
-                        url={report.url}
-                      />
-                    )}
+                    {/* UX Analysis — always show (screenshot at minimum) */}
+                    <UxCard
+                      uxScore={report.uxScore}
+                      uxInsights={report.uxInsights}
+                      siteType={report.siteType}
+                      url={report.url}
+                    />
 
                     {/* Recommended fixes */}
                     {priorities.length > 0 && (
