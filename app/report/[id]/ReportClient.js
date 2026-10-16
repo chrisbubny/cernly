@@ -188,6 +188,100 @@ function FixItem({ n, title, detail, impact, defaultOpen }) {
   );
 }
 
+/* ─── Discoveries section ─── */
+const CATEGORY_ACCENT = {
+  Performance: '#7948f6', SEO: '#3687fa', Security: '#19b987',
+  Accessibility: '#efa642', UX: '#ef6473',
+};
+
+function DiscoveryCard({ d, index }) {
+  const [open, setOpen] = useState(false);
+  const accent = CATEGORY_ACCENT[d.category] || '#7948f6';
+  const confBg = { high: '#edf9f4', medium: '#f1edff', low: '#f4f5fb' }[d.confidence] || '#f4f5fb';
+  const confColor = { high: '#16a34a', medium: '#7948f6', low: '#83899c' }[d.confidence] || '#83899c';
+
+  return (
+    <div style={{ background: '#fff', border: '1px solid #e9eaf2', borderRadius: 14,
+      overflow: 'hidden', boxShadow: '0 2px 8px #1b1d3205' }}>
+      <button onClick={() => setOpen(o => !o)}
+        style={{ width: '100%', background: 'none', border: 0, textAlign: 'left',
+          padding: '16px 18px', cursor: 'pointer', fontFamily: 'inherit',
+          display: 'flex', alignItems: 'flex-start', gap: 13 }}>
+        <div style={{ width: 32, height: 32, borderRadius: 10, background: accent + '18',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginTop: 1 }}>
+          <span style={{ fontFamily: 'var(--font-manrope, Manrope, sans-serif)',
+            fontWeight: 800, fontSize: 13, color: accent }}>
+            {String(index + 1).padStart(2, '0')}
+          </span>
+        </div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 7, flexWrap: 'wrap', marginBottom: 4 }}>
+            <span style={{ fontSize: 10, fontWeight: 800, color: accent, letterSpacing: '.06em' }}>
+              {d.category?.toUpperCase()}
+            </span>
+            <span style={{ fontSize: 10, fontWeight: 700, color: confColor,
+              background: confBg, padding: '2px 7px', borderRadius: 5 }}>
+              {d.confidence?.toUpperCase()} CONFIDENCE
+            </span>
+          </div>
+          <div style={{ fontSize: 14, fontWeight: 700, color: '#151621', lineHeight: 1.4 }}>{d.title}</div>
+          <p style={{ fontSize: 13, color: '#4b5168', lineHeight: 1.7, margin: '5px 0 0' }}>{d.explanation}</p>
+        </div>
+        <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="#b0b4c8"
+          strokeWidth={2.5} strokeLinecap="round" style={{ flexShrink: 0, marginTop: 8 }}>
+          <path d={open ? 'm18 15-6-6-6 6' : 'm6 9 6 6 6-6'}/>
+        </svg>
+      </button>
+
+      {open && Array.isArray(d.actions) && d.actions.length > 0 && (
+        <div style={{ borderTop: '1px solid #f0f1f8', padding: '4px 18px 16px 18px' }}>
+          <div style={{ fontSize: 11, fontWeight: 800, color: '#83899c',
+            letterSpacing: '.07em', margin: '12px 0 10px' }}>RECOMMENDED ACTIONS</div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {d.actions.map((a, ai) => {
+              const impactColor = { high: '#ef6473', medium: '#efa642', low: '#83899c' }[a.impact] || '#83899c';
+              const effortBg   = { low: '#edf9f4', medium: '#fff8ed', high: '#fff0f2' }[a.effort] || '#f4f5fb';
+              const effortColor= { low: '#16a34a', medium: '#d97706', high: '#ef6473' }[a.effort] || '#83899c';
+              return (
+                <div key={ai} style={{ background: '#f8f9fd', borderRadius: 10, padding: '11px 14px',
+                  borderLeft: `3px solid ${impactColor}` }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 5 }}>
+                    <span style={{ fontSize: 13, fontWeight: 700, color: '#151621', flex: 1 }}>{a.title}</span>
+                    <span style={{ fontSize: 9, fontWeight: 800, letterSpacing: '.06em',
+                      padding: '2px 7px', borderRadius: 5, background: effortBg, color: effortColor, whiteSpace: 'nowrap' }}>
+                      {a.effort?.toUpperCase()} EFFORT
+                    </span>
+                  </div>
+                  <p style={{ fontSize: 12, color: '#4b5168', lineHeight: 1.65, margin: 0 }}>{a.detail}</p>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function DiscoveriesSection({ discoveries }) {
+  if (!Array.isArray(discoveries) || discoveries.length === 0) return null;
+  return (
+    <div style={{ marginBottom: 20 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+        <span style={{ fontSize: 14 }}>✦</span>
+        <span style={{ fontFamily: 'var(--font-manrope, Manrope, sans-serif)',
+          fontWeight: 800, fontSize: 13, color: '#151621' }}>Cernly Discoveries</span>
+        <span style={{ fontSize: 11, color: '#83899c', marginLeft: 'auto' }}>
+          {discoveries.length} finding{discoveries.length !== 1 ? 's' : ''}
+        </span>
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        {discoveries.map((d, i) => <DiscoveryCard key={i} d={d} index={i} />)}
+      </div>
+    </div>
+  );
+}
+
 /* ─── UX Analysis card ─── */
 function UxCard({ uxScore, uxInsights, siteType, url }) {
   const score = uxScore ?? null;
@@ -724,6 +818,9 @@ export default function ReportClient({ isPro, userName, userAvatar }) {
                         </p>
                       </div>
                     )}
+
+                    {/* Cernly Discoveries — AI-grouped insights with ranked actions */}
+                    <DiscoveriesSection discoveries={report.aiInsights} />
 
                     {/* UX Analysis — always show (screenshot at minimum) */}
                     <UxCard

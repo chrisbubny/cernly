@@ -56,8 +56,8 @@ export async function POST(request) {
   });
 
   // AI summary, site type, UX score (uses scores + top issues)
-  const aiResult = await runAiSummary({ url, scores, issues: issues.slice(0, 10) });
-  const { aiSummary, siteType, uxScore, uxInsights } = aiResult;
+  const aiResult = await runAiSummary({ url, scores, issues });
+  const { aiSummary, siteType, uxScore, uxInsights, aiInsights } = aiResult;
 
   // Merge UX score into scores
   if (uxScore !== null && uxScore !== undefined) scores.ux = uxScore;
@@ -71,6 +71,7 @@ export async function POST(request) {
     siteType,
     uxScore,
     uxInsights,
+    aiInsights,
     lhData,
     seoData,
     sslData,
@@ -84,6 +85,7 @@ export async function POST(request) {
     aiSummary,
     siteType:   siteType || null,
     uxInsights: uxInsights || null,
+    aiInsights: aiInsights || null,
     issues,          // free tier gets all issues (locked in UI)
     reportId,
     analyzedAt: new Date().toISOString(),
