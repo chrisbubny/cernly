@@ -20,7 +20,7 @@ export async function GET(request) {
   // Strip sslmode from URL so the pg driver doesn't override our ssl config
   const dbUrl = process.env.DATABASE_URL
     .replace(/[?&]sslmode=[^&]*/g, '').replace(/\?$/, '')
-    .replace(/\/defaultdb(\b|$)/, '/cernly');
+    .replace(/\/[^/?]+$/, '/defaultdb');
   const pool = new Pool({
     connectionString: dbUrl,
     ssl: { rejectUnauthorized: false },
