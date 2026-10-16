@@ -5,6 +5,7 @@ import { runSeoAudit } from '@/lib/analyzers/seo';
 import { runSslCheck } from '@/lib/analyzers/ssl';
 import { runA11yCheck } from '@/lib/analyzers/a11y';
 import { runAiSummary } from '@/lib/analyzers/ai';
+import { runVisionAnalysis } from '@/lib/analyzers/vision';
 import { saveReport } from '@/lib/store';
 
 // POST /api/analyze
@@ -55,9 +56,16 @@ export async function POST(request) {
     return (order[a.severity] ?? 2) - (order[b.severity] ?? 2);
   });
 
-  // AI summary, site type, UX score (uses scores + top issues)
-  const aiResult = await runAiSummary({ url, scores, issues });
-  const { aiSummary, siteType, uxScore, uxInsights, aiInsights } = aiResult;
+  // AI summary + vision analysis run in parallel (vision needs screenshot fetch + Claude vision)
+  const [aiResult, visionResult] = await Promise.allSettled([
+    runAiSummary({ url, scores, issues }),
+    runVisionAnalysis({ url }),
+  ]);
+
+  const { aiSummary, siteType, uxScore, uxInsights, aiInsights } =
+    aiResult.status === 'fulfilled' ? aiResult.value : { aiSummary: null, siteType: null, uxScore: null, uxInsights: null, aiInsights: null };
+
+  const uxAnnotations = visionResult.status === 'fulfilled' ? visionResult.value : null;
 
   // Merge UX score into scores
   if (uxScore !== null && uxScore !== undefined) scores.ux = uxScore;
@@ -71,6 +79,7 @@ export async function POST(request) {
     siteType,
     uxScore,
     uxInsights,
+    uxAnnotations,
     aiInsights,
     lhData,
     seoData,
@@ -83,10 +92,11 @@ export async function POST(request) {
     url,
     scores,
     aiSummary,
-    siteType:   siteType || null,
-    uxInsights: uxInsights || null,
-    aiInsights: aiInsights || null,
-    issues,          // free tier gets all issues (locked in UI)
+    siteType:      siteType      || null,
+    uxInsights:    uxInsights    || null,
+    uxAnnotations: uxAnnotations || null,
+    aiInsights:    aiInsights    || null,
+    issues,
     reportId,
     analyzedAt: new Date().toISOString(),
   });

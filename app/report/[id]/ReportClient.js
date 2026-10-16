@@ -289,29 +289,30 @@ function DiscoveriesSection({ discoveries, isAi }) {
 }
 
 /* ─── UX Analysis card ─── */
-function UxCard({ uxScore, uxInsights, siteType, url, issues }) {
+function UxCard({ uxScore, uxInsights, uxAnnotations, siteType, url, issues }) {
+  const [activePin, setActivePin] = useState(null);
   const score = uxScore ?? null;
   const color = score == null ? '#83899c' : score >= 80 ? '#19b987' : score >= 60 ? '#efa642' : '#ef6473';
 
-  const verdictColor = v => v === 'good' ? '#19b987' : v === 'warning' ? '#efa642' : '#ef6473';
-  const verdictBg    = v => v === 'good' ? '#f0fdf8' : v === 'warning' ? '#fffbf0' : '#fff5f6';
-  const verdictLabel = v => v === 'good' ? 'GOOD' : v === 'warning' ? 'NEEDS WORK' : 'CRITICAL';
+  const sevColor = s => s === 'good' ? '#19b987' : s === 'warning' ? '#efa642' : '#ef6473';
+  const sevBg    = s => s === 'good' ? '#f0fdf8' : s === 'warning' ? '#fffbf0' : '#fff5f6';
+  const sevLabel = s => s === 'good' ? 'GOOD' : s === 'warning' ? 'NEEDS WORK' : 'CRITICAL';
 
-  // Fallback UX issues from accessibility/performance data when AI hasn't run
-  const uxIssues = !uxInsights && Array.isArray(issues)
+  const annotations    = uxAnnotations?.annotations || [];
+  const screenshotUrl  = uxAnnotations?.screenshotUrl || null;
+  const observations   = uxInsights?.observations || [];
+
+  // Fallback UX issues when no AI data
+  const uxIssues = !uxInsights && !annotations.length && Array.isArray(issues)
     ? issues.filter(i =>
         (i.severity === 'critical' || i.severity === 'warning') &&
         (i.source === 'a11y' ||
-         i.area?.toLowerCase().includes('access') ||
          i.message?.toLowerCase().includes('contrast') ||
          i.message?.toLowerCase().includes('label') ||
          i.message?.toLowerCase().includes('button') ||
-         i.message?.toLowerCase().includes('tap') ||
-         i.message?.toLowerCase().includes('touch'))
+         i.message?.toLowerCase().includes('tap'))
       ).slice(0, 5)
     : [];
-
-  const observations = uxInsights?.observations || [];
 
   return (
     <div style={{ background: '#fff', border: '1px solid #e9eaf2', borderRadius: 17,
@@ -320,7 +321,7 @@ function UxCard({ uxScore, uxInsights, siteType, url, issues }) {
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 16, marginBottom: 18 }}>
         <div style={{ flex: 1 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 3 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 3, flexWrap: 'wrap' }}>
             <div style={{ width: 28, height: 28, borderRadius: 8, background: '#f1edff',
               display: 'grid', placeItems: 'center', flexShrink: 0 }}>
               <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="#7948f6" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
@@ -329,14 +330,14 @@ function UxCard({ uxScore, uxInsights, siteType, url, issues }) {
               </svg>
             </div>
             <h2 style={{ fontFamily: 'var(--font-manrope, Manrope, sans-serif)', fontWeight: 800,
-              fontSize: 15, color: '#151621', margin: 0, letterSpacing: '-.02em' }}>UX analysis</h2>
+              fontSize: 15, color: '#151621', margin: 0, letterSpacing: '-.02em' }}>Visual Experience Review</h2>
             {siteType && (
               <span style={{ fontSize: 10, fontWeight: 800, padding: '3px 8px', borderRadius: 6,
                 background: '#f4f5fb', color: '#83899c', letterSpacing: '.05em' }}>{siteType.toUpperCase()}</span>
             )}
-            {uxInsights && (
+            {annotations.length > 0 && (
               <span style={{ fontSize: 9, fontWeight: 800, padding: '3px 7px', borderRadius: 5,
-                background: '#f1edff', color: '#7948f6', letterSpacing: '.06em' }}>AI ANALYSIS</span>
+                background: '#f1edff', color: '#7948f6', letterSpacing: '.06em' }}>AI VISION</span>
             )}
           </div>
           <p style={{ fontSize: 12, color: '#83899c', margin: 0 }}>
@@ -352,7 +353,140 @@ function UxCard({ uxScore, uxInsights, siteType, url, issues }) {
         )}
       </div>
 
-      {/* AI: conversion focus + top recommendation */}
+      {/* ── Annotated screenshot ── */}
+      {(screenshotUrl || url) && (
+        <div style={{ marginBottom: annotations.length ? 0 : 16 }}>
+          {annotations.length > 0 && (
+            <div style={{ fontSize: 11, fontWeight: 800, color: '#83899c',
+              letterSpacing: '.07em', marginBottom: 10 }}>VISUAL ANALYSIS — click a pin to see the finding</div>
+          )}
+          <div style={{ position: 'relative', borderRadius: 13, overflow: 'hidden',
+            border: '1px solid #e9eaf2', background: '#f4f5fb',
+            /* 16:10 viewport aspect ratio */
+            aspectRatio: '16 / 10' }}>
+
+            {/* Screenshot image */}
+            <img
+              src={screenshotUrl || `https://api.microlink.io/?url=${encodeURIComponent(url)}&screenshot=true&embed=screenshot.url`}
+              alt={`Screenshot of ${url}`}
+              style={{ width: '100%', height: '100%', objectFit: 'cover', objectPosition: 'top', display: 'block' }}
+              onError={e => { e.target.style.display = 'none'; }}
+            />
+
+            {/* Annotation pins */}
+            {annotations.map((ann, i) => {
+              const c = sevColor(ann.severity);
+              const isActive = activePin === i;
+              return (
+                <button
+                  key={i}
+                  onClick={() => setActivePin(isActive ? null : i)}
+                  style={{
+                    position: 'absolute',
+                    left:   `${ann.x * 100}%`,
+                    top:    `${ann.y * 100}%`,
+                    transform: 'translate(-50%, -50%)',
+                    width: 26, height: 26,
+                    borderRadius: '50%',
+                    background: isActive ? c : '#fff',
+                    border: `2.5px solid ${c}`,
+                    color: isActive ? '#fff' : c,
+                    fontSize: 11, fontWeight: 800,
+                    display: 'grid', placeItems: 'center',
+                    cursor: 'pointer',
+                    boxShadow: `0 2px 10px ${c}55`,
+                    zIndex: isActive ? 10 : 5,
+                    transition: 'all .15s ease',
+                    padding: 0,
+                    lineHeight: 1,
+                  }}
+                  title={ann.label}
+                >
+                  {i + 1}
+                </button>
+              );
+            })}
+
+            {/* Active annotation tooltip */}
+            {activePin !== null && annotations[activePin] && (() => {
+              const ann = annotations[activePin];
+              const c   = sevColor(ann.severity);
+              // Position tooltip: if pin is in right half, show to the left; else to the right
+              const fromLeft = ann.x > 0.55;
+              return (
+                <div style={{
+                  position: 'absolute',
+                  left:  fromLeft ? 'auto' : `calc(${ann.x * 100}% + 16px)`,
+                  right: fromLeft ? `calc(${(1 - ann.x) * 100}% + 16px)` : 'auto',
+                  top:   `${Math.min(ann.y * 100, 70)}%`,
+                  width: 220,
+                  background: '#fff',
+                  borderRadius: 11,
+                  padding: '12px 14px',
+                  boxShadow: '0 4px 24px #0003',
+                  border: `1.5px solid ${c}33`,
+                  zIndex: 20,
+                  pointerEvents: 'none',
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
+                    <div style={{ width: 7, height: 7, borderRadius: '50%', background: c, flexShrink: 0 }} />
+                    <div style={{ fontSize: 10, fontWeight: 800, color: c, letterSpacing: '.06em' }}>
+                      {sevLabel(ann.severity)}
+                    </div>
+                    <div style={{ fontSize: 9, color: '#83899c', marginLeft: 'auto' }}>{ann.area}</div>
+                  </div>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: '#151621', marginBottom: 5, lineHeight: 1.4 }}>
+                    {ann.label}
+                  </div>
+                  <div style={{ fontSize: 11, color: '#4b5168', lineHeight: 1.6 }}>{ann.detail}</div>
+                </div>
+              );
+            })()}
+          </div>
+        </div>
+      )}
+
+      {/* ── Annotation legend ── */}
+      {annotations.length > 0 && (
+        <div style={{ marginTop: 12, marginBottom: 16 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
+            {annotations.map((ann, i) => {
+              const c = sevColor(ann.severity);
+              const isActive = activePin === i;
+              return (
+                <button
+                  key={i}
+                  onClick={() => setActivePin(isActive ? null : i)}
+                  style={{
+                    display: 'flex', alignItems: 'flex-start', gap: 10,
+                    background: isActive ? sevBg(ann.severity) : '#f8f9fd',
+                    border: `1px solid ${isActive ? c + '44' : '#e9eaf2'}`,
+                    borderRadius: 10, padding: '10px 13px',
+                    cursor: 'pointer', textAlign: 'left', width: '100%',
+                    transition: 'all .12s ease',
+                  }}
+                >
+                  <div style={{ width: 22, height: 22, borderRadius: '50%', background: c,
+                    color: '#fff', fontSize: 10, fontWeight: 800, flexShrink: 0,
+                    display: 'grid', placeItems: 'center', marginTop: 1 }}>
+                    {i + 1}
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 }}>
+                      <div style={{ fontSize: 12, fontWeight: 700, color: '#151621' }}>{ann.label}</div>
+                      <div style={{ fontSize: 9, fontWeight: 800, color: c, letterSpacing: '.06em',
+                        marginLeft: 'auto', flexShrink: 0 }}>{sevLabel(ann.severity)}</div>
+                    </div>
+                    <div style={{ fontSize: 11, color: '#4b5168', lineHeight: 1.55 }}>{ann.detail}</div>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* ── AI: conversion focus + top recommendation ── */}
       {uxInsights && (uxInsights.conversion_focus || uxInsights.top_recommendation) && (
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 16 }}>
           {uxInsights.conversion_focus && (
@@ -376,28 +510,28 @@ function UxCard({ uxScore, uxInsights, siteType, url, issues }) {
         </div>
       )}
 
-      {/* AI: per-area observations */}
-      {observations.length > 0 && (
+      {/* ── Per-area observations (from uxInsights, not annotations) ── */}
+      {observations.length > 0 && !annotations.length && (
         <div style={{ marginBottom: 16 }}>
           <div style={{ fontSize: 11, fontWeight: 800, color: '#83899c',
             letterSpacing: '.07em', marginBottom: 10 }}>UX BREAKDOWN</div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {observations.map((obs, i) => (
               <div key={i} style={{ borderRadius: 11, padding: '12px 15px',
-                background: verdictBg(obs.verdict),
-                border: `1px solid ${verdictColor(obs.verdict)}22` }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: obs.fix ? 6 : 0 }}>
+                background: sevBg(obs.verdict),
+                border: `1px solid ${sevColor(obs.verdict)}22` }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
                   <div style={{ width: 6, height: 6, borderRadius: '50%', flexShrink: 0,
-                    background: verdictColor(obs.verdict) }} />
-                  <div style={{ fontSize: 10, fontWeight: 800, color: verdictColor(obs.verdict),
+                    background: sevColor(obs.verdict) }} />
+                  <div style={{ fontSize: 10, fontWeight: 800, color: sevColor(obs.verdict),
                     letterSpacing: '.07em' }}>{obs.area?.toUpperCase()}</div>
                   <div style={{ marginLeft: 'auto', fontSize: 9, fontWeight: 800,
-                    color: verdictColor(obs.verdict), opacity: .7, letterSpacing: '.06em' }}>
-                    {verdictLabel(obs.verdict)}
+                    color: sevColor(obs.verdict), opacity: .7, letterSpacing: '.06em' }}>
+                    {sevLabel(obs.verdict)}
                   </div>
                 </div>
-                <div style={{ fontSize: 12, fontWeight: 600, color: '#151621', marginBottom: obs.fix ? 4 : 0,
-                  paddingLeft: 14 }}>{obs.finding}</div>
+                <div style={{ fontSize: 12, fontWeight: 600, color: '#151621',
+                  marginBottom: obs.fix ? 4 : 0, paddingLeft: 14 }}>{obs.finding}</div>
                 {obs.fix && (
                   <div style={{ fontSize: 12, color: '#4b5168', lineHeight: 1.55, paddingLeft: 14 }}>
                     → {obs.fix}
@@ -409,8 +543,8 @@ function UxCard({ uxScore, uxInsights, siteType, url, issues }) {
         </div>
       )}
 
-      {/* Fallback: issue-based UX list (no AI insights yet) */}
-      {!uxInsights && uxIssues.length > 0 && (
+      {/* ── Fallback: issue-based list ── */}
+      {!uxInsights && !annotations.length && uxIssues.length > 0 && (
         <div style={{ marginBottom: 16 }}>
           <div style={{ fontSize: 11, fontWeight: 800, color: '#83899c',
             letterSpacing: '.07em', marginBottom: 10 }}>UX-RELATED ISSUES</div>
@@ -430,8 +564,8 @@ function UxCard({ uxScore, uxInsights, siteType, url, issues }) {
         </div>
       )}
 
-      {/* Fallback: score-based summary when no data at all */}
-      {!uxInsights && uxIssues.length === 0 && score != null && (
+      {/* ── Fallback: score text ── */}
+      {!uxInsights && !annotations.length && uxIssues.length === 0 && score != null && (
         <div style={{ background: '#f7f4ff', borderRadius: 12, padding: '14px 16px', marginBottom: 16 }}>
           <div style={{ fontSize: 12, color: '#4b5168', lineHeight: 1.6 }}>
             {score >= 80
@@ -442,27 +576,6 @@ function UxCard({ uxScore, uxInsights, siteType, url, issues }) {
           </div>
         </div>
       )}
-
-      {/* Site preview */}
-      <div style={{ borderRadius: 12, overflow: 'hidden', border: '1px solid #e9eaf2',
-        position: 'relative', background: '#f4f5fb' }}>
-        <div style={{ position: 'absolute', top: 10, left: 12, zIndex: 2,
-          background: '#fff', borderRadius: 8, padding: '4px 10px', fontSize: 10,
-          fontWeight: 800, color: '#7948f6', boxShadow: '0 2px 8px #0002' }}>SITE PREVIEW</div>
-        <img
-          src={`https://api.microlink.io/?url=${encodeURIComponent(url)}&screenshot=true&embed=screenshot.url`}
-          alt={`Preview of ${url}`}
-          style={{ width: '100%', height: 340, objectFit: 'cover', objectPosition: 'top', display: 'block' }}
-          onError={e => { e.target.style.display = 'none'; e.target.nextSibling.style.display = 'flex'; }}
-        />
-        <div style={{ display: 'none', height: 160, alignItems: 'center', justifyContent: 'center',
-          flexDirection: 'column', gap: 8, color: '#83899c' }}>
-          <svg width={28} height={28} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round">
-            <rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/>
-          </svg>
-          <span style={{ fontSize: 12 }}>Preview unavailable</span>
-        </div>
-      </div>
     </div>
   );
 }
@@ -982,6 +1095,7 @@ export default function ReportClient({ isPro, userName, userAvatar }) {
                     <UxCard
                       uxScore={report.uxScore ?? (report.scores?.performance != null && report.scores?.accessibility != null ? Math.round((report.scores.performance + report.scores.accessibility) / 2) : null)}
                       uxInsights={report.uxInsights}
+                      uxAnnotations={report.uxAnnotations}
                       siteType={report.siteType}
                       url={report.url}
                       issues={allIssues}
