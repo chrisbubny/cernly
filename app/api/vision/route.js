@@ -2,6 +2,9 @@ import { NextResponse } from 'next/server';
 import { runVisionAnalysis } from '@/lib/analyzers/vision';
 import { getReport, updateReportAnnotations } from '@/lib/store';
 
+// Allow up to 60 s — vision takes Microlink (~5s) + image download (~3s) + Claude vision (~30s)
+export const maxDuration = 60;
+
 // POST /api/vision
 // Body: { reportId }
 // Runs screenshot → Claude vision pipeline and patches the report row.

@@ -358,15 +358,25 @@ function UxCard({ uxScore, uxInsights, uxAnnotations, visionStatus, siteType, ur
       {(screenshotUrl || url) && (
         <div style={{ marginBottom: annotations.length ? 0 : 16 }}>
           {visionLoading && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
-              <div style={{ width: 14, height: 14, border: '2px solid #e9eaf2', borderTopColor: '#7948f6',
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10,
+              background: '#f4f0ff', borderRadius: 9, padding: '9px 13px' }}>
+              <div style={{ width: 14, height: 14, border: '2px solid #d8ccff', borderTopColor: '#7948f6',
                 borderRadius: '50%', animation: 'spin .7s linear infinite', flexShrink: 0 }} />
-              <span style={{ fontSize: 11, fontWeight: 700, color: '#7948f6' }}>
-                AI vision analysis running — annotations will appear in ~20s…
+              <span style={{ fontSize: 12, fontWeight: 700, color: '#7948f6' }}>
+                AI vision analysis in progress — annotated pins will appear shortly…
               </span>
             </div>
           )}
-          {!visionLoading && annotations.length > 0 && (
+          {visionStatus === 'error' && !annotations.length && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10,
+              background: '#fff5f6', borderRadius: 9, padding: '9px 13px' }}>
+              <span style={{ fontSize: 18, lineHeight: 1, flexShrink: 0 }}>⚠️</span>
+              <span style={{ fontSize: 12, color: '#ef6473' }}>
+                AI vision analysis couldn&apos;t complete for this site. Screenshot is shown below.
+              </span>
+            </div>
+          )}
+          {!visionLoading && visionStatus !== 'error' && annotations.length > 0 && (
             <div style={{ fontSize: 11, fontWeight: 800, color: '#83899c',
               letterSpacing: '.07em', marginBottom: 10 }}>VISUAL ANALYSIS — click a pin to see the finding</div>
           )}
@@ -881,8 +891,13 @@ export default function ReportClient({ isPro, userName, userAvatar }) {
         if (d.error) { setStatus('error'); return; }
         setReport(d);
         setStatus('ok');
-        // If the report has no vision annotations yet, kick off the async vision analysis
-        if (!d.uxAnnotations) {
+        // If annotations already exist (re-loaded report), mark done immediately
+        if (d.uxAnnotations) {
+          setVisionStatus('done');
+          return;
+        }
+        // Otherwise kick off the async vision analysis
+        {
           setVisionStatus('loading');
           fetch('/api/vision', {
             method: 'POST',
@@ -900,7 +915,8 @@ export default function ReportClient({ isPro, userName, userAvatar }) {
             })
             .catch(() => setVisionStatus('error'));
         }
-      })
+      }
+      )
       .catch(() => setStatus('error'));
   }, [id, sessionId]);
 
