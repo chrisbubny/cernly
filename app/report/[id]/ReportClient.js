@@ -836,6 +836,51 @@ export default function ReportClient({ isPro, userName, userAvatar }) {
       { category: 'Security',    match: i => i.area?.toLowerCase().includes('sec')  || i.source === 'ssl',   score: scores.security },
       { category: 'Accessibility', match: i => i.area?.toLowerCase().includes('access') || i.source === 'a11y', score: scores.accessibility },
     ];
+    // Evidence-based discovery titles — connect what was found to potential user impact
+    const discoveryTitle = (cat, issues, score) => {
+      const top = issues[0];
+      if (cat === 'Performance') {
+        if (issues.some(i => /render.block|network.dep|critical.request/i.test(i.message || '')))
+          return 'Critical resources are delaying your page\'s initial render';
+        if (issues.some(i => /lcp|largest.content/i.test(i.message || '')))
+          return 'Your largest content element is loading too slowly';
+        return `${issues.length} performance issue${issues.length > 1 ? 's' : ''} may be slowing page load`;
+      }
+      if (cat === 'SEO') {
+        if (issues.some(i => /meta|description|title/i.test(i.message || '')))
+          return 'Missing or weak metadata may limit how search engines present this site';
+        if (issues.some(i => /crawl|index|canonical/i.test(i.message || '')))
+          return 'Crawlability issues could prevent some pages from being indexed';
+        return `${issues.length} SEO issue${issues.length > 1 ? 's' : ''} may be limiting organic visibility`;
+      }
+      if (cat === 'Security') {
+        if (issues.some(i => /header|csp|hsts/i.test(i.message || '')))
+          return 'Missing security headers leave this site exposed to common attacks';
+        return `Security configuration gaps could put visitors at risk`;
+      }
+      if (cat === 'Accessibility') {
+        if (issues.some(i => /contrast|color/i.test(i.message || '')))
+          return 'Low contrast text may be unreadable for visitors with visual impairments';
+        if (issues.some(i => /label|aria|alt/i.test(i.message || '')))
+          return 'Missing labels prevent screen readers from describing interactive elements';
+        return `${issues.length} accessibility issue${issues.length > 1 ? 's' : ''} may exclude some visitors`;
+      }
+      return top?.message || `${cat} issues detected`;
+    };
+
+    const discoveryExplanation = (cat, issues, score) => {
+      const critCount = issues.filter(i => i.severity === 'critical').length;
+      const top = issues.slice(0, 2).map(i => i.message).filter(Boolean);
+      const what = top.length ? `Audit found: ${top.join('; ').slice(0, 120)}.` : '';
+      const outcome = {
+        Performance: 'Fixing these may improve how quickly visitors see your main content.',
+        SEO: 'Resolving these can improve how search engines rank and display your pages.',
+        Security: 'Addressing these hardens the site against common vulnerabilities.',
+        Accessibility: 'Fixing these ensures all visitors can navigate and use the site.',
+      }[cat] || 'Addressing these will improve your score.';
+      return `${what} ${outcome}`.trim();
+    };
+
     const discoveries = [];
     for (const g of groups) {
       if (g.score == null || g.score >= 90) continue;
@@ -843,12 +888,12 @@ export default function ReportClient({ isPro, userName, userAvatar }) {
       if (issues.length === 0) continue;
       const conf = g.score < 50 ? 'high' : g.score < 70 ? 'medium' : 'low';
       discoveries.push({
-        title: `${g.category} needs attention (score: ${g.score})`,
-        explanation: `${issues.length} issue${issues.length > 1 ? 's' : ''} detected affecting your ${g.category.toLowerCase()} score. Addressing these can meaningfully improve ranking and user experience.`,
+        title: discoveryTitle(g.category, issues, g.score),
+        explanation: discoveryExplanation(g.category, issues, g.score),
         confidence: conf, category: g.category,
         actions: issues.map(i => ({
           title: i.message,
-          detail: i.description || i.fix || 'Review and resolve this issue to improve your score.',
+          detail: i.description || i.fix || 'Review and resolve this issue.',
           impact: i.severity === 'critical' ? 'high' : 'medium', effort: 'medium',
         })),
       });
@@ -960,42 +1005,6 @@ export default function ReportClient({ isPro, userName, userAvatar }) {
         </div>
       )}
 
-      {/* Category breakdown mini-grid */}
-      <div style={{ background: '#fff', border: '1px solid #e9eaf2', borderRadius: 17,
-        padding: '18px 20px' }}>
-        <div style={{ fontFamily: 'var(--font-manrope, Manrope, sans-serif)',
-          fontWeight: 800, fontSize: 13, color: '#151621', marginBottom: 14 }}>Score breakdown</div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 10 }}>
-          {[
-            { label: 'Performance',   score: report.scores?.performance,   cat: 'Performance' },
-            { label: 'SEO',           score: report.scores?.seo,           cat: 'SEO' },
-            { label: 'Security',      score: report.scores?.security,      cat: 'Security' },
-            { label: 'Accessibility', score: report.scores?.accessibility, cat: 'Accessibility' },
-          ].map(c => {
-            const color = c.score == null ? '#83899c' : c.score >= 80 ? '#19b987' : c.score >= 60 ? '#efa642' : '#ef6473';
-            const crit  = allIssues.filter(i => i.severity === 'critical' &&
-              detailCategories.find(d => d.label === c.cat)?.match(i)).length;
-            return (
-              <button key={c.label} onClick={() => goToFindings(c.cat)}
-                style={{ background: '#f8f9fd', border: '1px solid #e9eaf2', borderRadius: 12,
-                  padding: '13px 14px', textAlign: 'left', cursor: 'pointer',
-                  fontFamily: 'inherit', transition: 'box-shadow .15s' }}>
-                <div style={{ fontFamily: 'var(--font-manrope, Manrope, sans-serif)',
-                  fontWeight: 800, fontSize: 28, lineHeight: 1, color, marginBottom: 4 }}>
-                  {c.score ?? '—'}
-                </div>
-                <div style={{ fontSize: 11, fontWeight: 700, color: '#83899c' }}>{c.label}</div>
-                {crit > 0 && (
-                  <div style={{ fontSize: 10, color: '#ef6473', fontWeight: 700, marginTop: 3 }}>
-                    {crit} critical
-                  </div>
-                )}
-                <div style={{ fontSize: 9, color: '#b0b4c8', marginTop: 3, fontWeight: 600 }}>View findings →</div>
-              </button>
-            );
-          })}
-        </div>
-      </div>
     </div>
   );
 
@@ -1212,41 +1221,53 @@ export default function ReportClient({ isPro, userName, userAvatar }) {
                   {createdAt && <span style={{ fontSize: 11, color: '#b0b4c4' }}>· {createdAt}</span>}
                 </div>
 
-                {/* Domain + Score strip */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 20, flexWrap: 'wrap' }}>
-                  <h1 style={{ fontFamily: 'var(--font-manrope, Manrope, sans-serif)', fontWeight: 800,
-                    fontSize: 'clamp(20px, 2.5vw, 26px)', letterSpacing: '-.05em',
-                    color: '#151621', margin: 0, flex: 1, minWidth: 0 }}>{domain}</h1>
-                  {/* Inline score chips */}
-                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                    {[
-                      { label: 'Perf',  score: report.scores?.performance,   cat: 'Performance' },
-                      { label: 'SEO',   score: report.scores?.seo,           cat: 'SEO' },
-                      { label: 'Sec',   score: report.scores?.security,      cat: 'Security' },
-                      { label: 'A11y',  score: report.scores?.accessibility, cat: 'Accessibility' },
-                      { label: 'UX',    score: uxScore,                      cat: null },
-                    ].map(c => {
-                      const color = c.score == null ? '#83899c' : c.score >= 80 ? '#19b987' : c.score >= 60 ? '#efa642' : '#ef6473';
-                      return (
-                        <button key={c.label}
-                          onClick={c.cat ? () => goToFindings(c.cat) : undefined}
-                          style={{ display: 'flex', alignItems: 'baseline', gap: 5,
-                            background: '#fff', border: '1px solid #e9eaf2', borderRadius: 10,
-                            padding: '6px 12px', cursor: c.cat ? 'pointer' : 'default',
-                            fontFamily: 'inherit', transition: 'box-shadow .12s' }}>
-                          <span style={{ fontFamily: 'var(--font-manrope, Manrope, sans-serif)',
-                            fontWeight: 800, fontSize: 20, color, lineHeight: 1 }}>
-                            {c.score ?? '—'}
-                          </span>
-                          <span style={{ fontSize: 10, fontWeight: 700, color: '#83899c' }}>{c.label}</span>
-                        </button>
-                      );
-                    })}
-                  </div>
+                {/* Domain heading */}
+                <h1 style={{ fontFamily: 'var(--font-manrope, Manrope, sans-serif)', fontWeight: 800,
+                  fontSize: 'clamp(20px, 2.5vw, 28px)', letterSpacing: '-.05em',
+                  color: '#151621', margin: '0 0 18px' }}>{domain}</h1>
+
+                {/* Prominent score cards */}
+                <div style={{ display: 'grid',
+                  gridTemplateColumns: 'repeat(5, 1fr)',
+                  gap: 10, marginBottom: 0 }}>
+                  {[
+                    { label: 'Performance',   score: report.scores?.performance,   cat: 'Performance' },
+                    { label: 'SEO',           score: report.scores?.seo,           cat: 'SEO' },
+                    { label: 'Security',      score: report.scores?.security,      cat: 'Security' },
+                    { label: 'Accessibility', score: report.scores?.accessibility, cat: 'Accessibility' },
+                    { label: 'UX',            score: uxScore,                      cat: 'Visual' },
+                  ].map(c => {
+                    const color = c.score == null ? '#83899c' : c.score >= 80 ? '#19b987' : c.score >= 60 ? '#efa642' : '#ef6473';
+                    const critCount = allIssues.filter(i => i.severity === 'critical' &&
+                      detailCategories.find(d => d.label === c.cat)?.match(i)).length;
+                    return (
+                      <button key={c.label}
+                        onClick={() => goToFindings(c.cat)}
+                        className="score-tile"
+                        style={{ background: '#fff', border: '1px solid #e9eaf2', borderRadius: 14,
+                          padding: '18px 14px 14px', textAlign: 'center', cursor: 'pointer',
+                          fontFamily: 'inherit', boxShadow: '0 2px 8px #1b1d3205' }}>
+                        <div style={{ fontFamily: 'var(--font-manrope, Manrope, sans-serif)',
+                          fontWeight: 800, fontSize: 38, lineHeight: 1, color, marginBottom: 5 }}>
+                          {c.score ?? '—'}
+                        </div>
+                        <div style={{ fontSize: 11, fontWeight: 700, color: '#83899c', marginBottom: 4 }}>{c.label}</div>
+                        {critCount > 0
+                          ? <div style={{ fontSize: 10, color: '#ef6473', fontWeight: 700 }}>{critCount} critical</div>
+                          : c.score != null
+                            ? <div style={{ fontSize: 10, color: '#19b987', fontWeight: 700 }}>
+                                {c.score >= 90 ? 'Excellent' : c.score >= 80 ? 'Good' : c.score >= 60 ? 'Fair' : 'Needs work'}
+                              </div>
+                            : <div style={{ fontSize: 10, color: '#b0b4c8', fontWeight: 600 }}>Not evaluated</div>
+                        }
+                      </button>
+                    );
+                  })}
                 </div>
 
                 {/* Tabs */}
-                <div style={{ display: 'flex', gap: 0, borderBottom: '1px solid #e9eaf2', marginBottom: 24 }}>
+                <div style={{ display: 'flex', gap: 0, borderBottom: '1px solid #e9eaf2',
+                  marginBottom: 24, marginTop: 6 }}>
                   {[
                     { key: 'overview',  label: 'Overview',    icon: 'M3 3h7v7H3zm11 0h7v7h-7zM3 14h7v7H3zm11 0h7v7h-7z' },
                     { key: 'action',    label: 'Action plan', icon: 'm5 12 4 4 10-10' },
