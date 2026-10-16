@@ -1,11 +1,56 @@
 import { NextResponse } from 'next/server';
 import Stripe from 'stripe';
+import { auth } from '@clerk/nextjs/server';
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
-// POST /api/checkout
-// Body: { reportId }
-// Returns: { url } — Stripe checkout URL
+function getAppUrl(request) {
+  const host = request.headers.get('host') || '';
+  const proto = host.startsWith('localhost') ? 'http' : 'https';
+  return process.env.NEXT_PUBLIC_APP_URL || (host ? `${proto}://${host}` : 'https://cernly.ai');
+}
+
+// GET /api/checkout?plan=pro  — subscription checkout
+export async function GET(request) {
+  const { userId } = await auth();
+  const plan = new URL(request.url).searchParams.get('plan');
+
+  if (plan !== 'pro') {
+    return NextResponse.redirect(new URL('/pricing', request.url));
+  }
+
+  if (!process.env.STRIPE_PRO_PRICE_ID) {
+    // Stripe not configured — redirect to pricing with a note
+    return NextResponse.redirect(new URL('/pricing?error=not_configured', request.url));
+  }
+
+  const appUrl = getAppUrl(request);
+
+  try {
+    const sessionParams = {
+      payment_method_types: ['card'],
+      line_items: [{ price: process.env.STRIPE_PRO_PRICE_ID, quantity: 1 }],
+      mode: 'subscription',
+      success_url: `${appUrl}/dashboard?upgraded=1`,
+      cancel_url: `${appUrl}/pricing`,
+      allow_promotion_codes: true,
+    };
+
+    // Attach Clerk userId so the webhook can link the subscription
+    if (userId) {
+      sessionParams.client_reference_id = userId;
+    }
+
+    const session = await stripe.checkout.sessions.create(sessionParams);
+    return NextResponse.redirect(session.url);
+  } catch (e) {
+    console.error('[Checkout/Pro]', e.message);
+    return NextResponse.redirect(new URL('/pricing?error=stripe', request.url));
+  }
+}
+
+// POST /api/checkout  — one-time report purchase
+// Body: { reportId, url? }
 export async function POST(request) {
   let body = {};
   try { body = await request.json(); } catch {}
@@ -13,10 +58,7 @@ export async function POST(request) {
   const { reportId } = body;
   if (!reportId) return NextResponse.json({ error: 'reportId required' }, { status: 400 });
 
-  // Derive base URL from the incoming request so redirects work on any host
-  const host = request.headers.get('host') || '';
-  const proto = host.startsWith('localhost') ? 'http' : 'https';
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL || (host ? `${proto}://${host}` : 'https://cernly.ai');
+  const appUrl = getAppUrl(request);
 
   const session = await stripe.checkout.sessions.create({
     payment_method_types: ['card'],

@@ -1292,13 +1292,13 @@ export default function DashboardClient({ reports: initialReports = [], isPro, u
                   ))}
                 </div>
                 <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-                  <Link href="/api/checkout?plan=pro"
+                  <a href="/api/checkout?plan=pro"
                     style={{ display: 'inline-flex', alignItems: 'center', gap: 8,
                       background: 'linear-gradient(110deg,#8650fa,#3c8df6)', color: '#fff',
                       border: 0, borderRadius: 10, padding: '12px 18px', fontSize: 12,
                       fontWeight: 800, textDecoration: 'none' }}>
                     Explore $15/mo Pro →
-                  </Link>
+                  </a>
                   <button onClick={() => setModal(null)}
                     style={{ background: '#fff', color: '#343747', border: '1px solid #e9eaf2',
                       borderRadius: 10, padding: '12px 16px', fontSize: 12, fontWeight: 800,
