@@ -591,7 +591,7 @@ export default function ReportClient({ isPro, userName, userAvatar }) {
     issue.severity === 'critical' || idx < 2 ? 'high' : idx < 5 ? 'medium' : 'low';
 
   const detailCategories = [
-    { label: 'Performance',   accent: '#7948f6', match: i => i.area?.toLowerCase().includes('perf') || i.source === 'lighthouse' },
+    { label: 'Performance',   accent: '#7948f6', match: i => i.area?.toLowerCase().includes('perf') || i.area?.toLowerCase().includes('best') },
     { label: 'SEO',           accent: '#3687fa', match: i => i.area?.toLowerCase().includes('seo')  || i.source === 'seo' },
     { label: 'Security',      accent: '#19b987', match: i => i.area?.toLowerCase().includes('sec')  || i.source === 'ssl' },
     { label: 'Accessibility', accent: '#efa642', match: i => i.area?.toLowerCase().includes('access') || i.source === 'a11y' },
@@ -706,7 +706,7 @@ export default function ReportClient({ isPro, userName, userAvatar }) {
                         { label: 'SEO',           score: report.scores?.seo },
                         { label: 'Security',      score: report.scores?.security },
                         { label: 'Accessibility', score: report.scores?.accessibility },
-                        { label: 'UX',            score: report.uxScore ?? null },
+                        { label: 'UX',            score: report.uxScore ?? (report.scores?.performance != null && report.scores?.accessibility != null ? Math.round((report.scores.performance + report.scores.accessibility) / 2) : null) },
                       ].map(c => <ScoreTile key={c.label} score={c.score} label={c.label} />)}
                     </div>
 
@@ -727,7 +727,7 @@ export default function ReportClient({ isPro, userName, userAvatar }) {
 
                     {/* UX Analysis — always show (screenshot at minimum) */}
                     <UxCard
-                      uxScore={report.uxScore}
+                      uxScore={report.uxScore ?? (report.scores?.performance != null && report.scores?.accessibility != null ? Math.round((report.scores.performance + report.scores.accessibility) / 2) : null)}
                       uxInsights={report.uxInsights}
                       siteType={report.siteType}
                       url={report.url}
