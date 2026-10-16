@@ -378,10 +378,14 @@ function UxCard({ uxScore, uxInsights, siteType, url, issues }) {
             ))}
           </div>
         </div>
-      ) : score != null && score < 80 ? (
+      ) : score != null ? (
         <div style={{ background: '#f7f4ff', borderRadius: 12, padding: '14px 16px', marginBottom: 16 }}>
           <div style={{ fontSize: 12, color: '#4b5168', lineHeight: 1.6 }}>
-            Run a new scan to get detailed UX insights and specific recommendations for improving usability and conversion.
+            {score >= 80
+              ? 'UX looks solid based on accessibility and performance scores. Keep an eye on load times and touch target sizes as you ship new content.'
+              : score >= 60
+              ? 'There are UX wins available here. Improving page load speed and ensuring all interactive elements are keyboard-accessible will have the biggest impact on how users experience this site.'
+              : 'A UX score this low typically signals friction users run into — slow load times, missing labels on form fields, or elements that are hard to tap on mobile. Prioritize performance and accessibility fixes first.'}
           </div>
         </div>
       ) : null}

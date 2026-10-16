@@ -16,12 +16,16 @@ export async function GET(request) {
   const canAccess = report.paid || !!sessionId;
 
   if (!canAccess) {
-    // Return free preview only
+    // Return free preview — AI summaries + scores are free; full issue list is paid
     return NextResponse.json({
       id: report.id,
       url: report.url,
       scores: report.scores,
       aiSummary: report.aiSummary,
+      siteType: report.siteType,
+      uxScore: report.uxScore,
+      uxInsights: report.uxInsights,
+      aiInsights: report.aiInsights,
       issues: report.issues.slice(0, 3),
       issueCount: report.issues.length,
       paid: false,
