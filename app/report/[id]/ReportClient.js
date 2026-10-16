@@ -289,10 +289,11 @@ function DiscoveriesSection({ discoveries, isAi }) {
 }
 
 /* ─── UX Analysis card ─── */
-function UxCard({ uxScore, uxInsights, uxAnnotations, siteType, url, issues }) {
+function UxCard({ uxScore, uxInsights, uxAnnotations, visionStatus, siteType, url, issues }) {
   const [activePin, setActivePin] = useState(null);
   const score = uxScore ?? null;
   const color = score == null ? '#83899c' : score >= 80 ? '#19b987' : score >= 60 ? '#efa642' : '#ef6473';
+  const visionLoading = visionStatus === 'loading';
 
   const sevColor = s => s === 'good' ? '#19b987' : s === 'warning' ? '#efa642' : '#ef6473';
   const sevBg    = s => s === 'good' ? '#f0fdf8' : s === 'warning' ? '#fffbf0' : '#fff5f6';
@@ -356,7 +357,16 @@ function UxCard({ uxScore, uxInsights, uxAnnotations, siteType, url, issues }) {
       {/* ── Annotated screenshot ── */}
       {(screenshotUrl || url) && (
         <div style={{ marginBottom: annotations.length ? 0 : 16 }}>
-          {annotations.length > 0 && (
+          {visionLoading && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+              <div style={{ width: 14, height: 14, border: '2px solid #e9eaf2', borderTopColor: '#7948f6',
+                borderRadius: '50%', animation: 'spin .7s linear infinite', flexShrink: 0 }} />
+              <span style={{ fontSize: 11, fontWeight: 700, color: '#7948f6' }}>
+                AI vision analysis running — annotations will appear in ~20s…
+              </span>
+            </div>
+          )}
+          {!visionLoading && annotations.length > 0 && (
             <div style={{ fontSize: 11, fontWeight: 800, color: '#83899c',
               letterSpacing: '.07em', marginBottom: 10 }}>VISUAL ANALYSIS — click a pin to see the finding</div>
           )}
@@ -857,6 +867,8 @@ export default function ReportClient({ isPro, userName, userAvatar }) {
   const [status, setStatus] = useState('loading');
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [visionStatus, setVisionStatus] = useState('idle'); // idle | loading | done | error
+  const [liveAnnotations, setLiveAnnotations] = useState(null);
 
   const displayName = userName || 'User';
 
@@ -865,7 +877,30 @@ export default function ReportClient({ isPro, userName, userAvatar }) {
     if (sessionId) params.set('session_id', sessionId);
     fetch(`/api/report?${params}`)
       .then(r => r.json())
-      .then(d => { if (d.error) { setStatus('error'); return; } setReport(d); setStatus('ok'); })
+      .then(d => {
+        if (d.error) { setStatus('error'); return; }
+        setReport(d);
+        setStatus('ok');
+        // If the report has no vision annotations yet, kick off the async vision analysis
+        if (!d.uxAnnotations) {
+          setVisionStatus('loading');
+          fetch('/api/vision', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ reportId: d.id }),
+          })
+            .then(r => r.json())
+            .then(v => {
+              if (v.uxAnnotations) {
+                setLiveAnnotations(v.uxAnnotations);
+                setVisionStatus('done');
+              } else {
+                setVisionStatus('error');
+              }
+            })
+            .catch(() => setVisionStatus('error'));
+        }
+      })
       .catch(() => setStatus('error'));
   }, [id, sessionId]);
 
@@ -1095,7 +1130,8 @@ export default function ReportClient({ isPro, userName, userAvatar }) {
                     <UxCard
                       uxScore={report.uxScore ?? (report.scores?.performance != null && report.scores?.accessibility != null ? Math.round((report.scores.performance + report.scores.accessibility) / 2) : null)}
                       uxInsights={report.uxInsights}
-                      uxAnnotations={report.uxAnnotations}
+                      uxAnnotations={liveAnnotations || report.uxAnnotations}
+                      visionStatus={visionStatus}
                       siteType={report.siteType}
                       url={report.url}
                       issues={allIssues}

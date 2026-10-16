@@ -5,7 +5,6 @@ import { runSeoAudit } from '@/lib/analyzers/seo';
 import { runSslCheck } from '@/lib/analyzers/ssl';
 import { runA11yCheck } from '@/lib/analyzers/a11y';
 import { runAiSummary } from '@/lib/analyzers/ai';
-import { runVisionAnalysis } from '@/lib/analyzers/vision';
 import { saveReport } from '@/lib/store';
 
 // POST /api/analyze
@@ -56,16 +55,11 @@ export async function POST(request) {
     return (order[a.severity] ?? 2) - (order[b.severity] ?? 2);
   });
 
-  // AI summary + vision analysis run in parallel (vision needs screenshot fetch + Claude vision)
-  const [aiResult, visionResult] = await Promise.allSettled([
-    runAiSummary({ url, scores, issues }),
-    runVisionAnalysis({ url }),
-  ]);
+  // AI summary (vision runs separately via /api/vision after the report is saved)
+  const aiResult = await runAiSummary({ url, scores, issues }).catch(() => null);
 
   const { aiSummary, siteType, uxScore, uxInsights, aiInsights } =
-    aiResult.status === 'fulfilled' ? aiResult.value : { aiSummary: null, siteType: null, uxScore: null, uxInsights: null, aiInsights: null };
-
-  const uxAnnotations = visionResult.status === 'fulfilled' ? visionResult.value : null;
+    aiResult || { aiSummary: null, siteType: null, uxScore: null, uxInsights: null, aiInsights: null };
 
   // Merge UX score into scores
   if (uxScore !== null && uxScore !== undefined) scores.ux = uxScore;
@@ -79,7 +73,7 @@ export async function POST(request) {
     siteType,
     uxScore,
     uxInsights,
-    uxAnnotations,
+    uxAnnotations: null,
     aiInsights,
     lhData,
     seoData,
@@ -94,7 +88,7 @@ export async function POST(request) {
     aiSummary,
     siteType:      siteType      || null,
     uxInsights:    uxInsights    || null,
-    uxAnnotations: uxAnnotations || null,
+    uxAnnotations: null,
     aiInsights:    aiInsights    || null,
     issues,
     reportId,
