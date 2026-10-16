@@ -16,7 +16,24 @@ export async function GET(request) {
   const canAccess = report.paid || !!sessionId;
 
   if (!canAccess) {
-    // Return free preview — AI summaries + scores are free; full issue list is paid
+    // Free preview:
+    // - AI summaries + scores + UX insights are always free
+    // - Return all critical issues (so every failing category shows its problems)
+    // - Plus up to 2 warnings per category (detail/fix copy stays locked in UI)
+    const allIssues = report.issues || [];
+    const criticals = allIssues.filter(i => i.severity === 'critical');
+    const warnings  = allIssues.filter(i => i.severity === 'warning');
+
+    // Sample: up to 2 warnings per area so no category is blank
+    const areasSeen = {};
+    const sampledWarnings = warnings.filter(i => {
+      const key = i.area || i.source || 'other';
+      areasSeen[key] = (areasSeen[key] || 0) + 1;
+      return areasSeen[key] <= 2;
+    });
+
+    const freeIssues = [...criticals, ...sampledWarnings];
+
     return NextResponse.json({
       id: report.id,
       url: report.url,
@@ -26,8 +43,8 @@ export async function GET(request) {
       uxScore: report.uxScore,
       uxInsights: report.uxInsights,
       aiInsights: report.aiInsights,
-      issues: report.issues.slice(0, 3),
-      issueCount: report.issues.length,
+      issues: freeIssues,
+      issueCount: allIssues.length,
       paid: false,
     });
   }
