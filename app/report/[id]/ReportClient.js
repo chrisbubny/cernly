@@ -263,14 +263,20 @@ function DiscoveryCard({ d, index }) {
   );
 }
 
-function DiscoveriesSection({ discoveries }) {
+function DiscoveriesSection({ discoveries, isAi }) {
   if (!Array.isArray(discoveries) || discoveries.length === 0) return null;
   return (
     <div style={{ marginBottom: 20 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
         <span style={{ fontSize: 14 }}>✦</span>
         <span style={{ fontFamily: 'var(--font-manrope, Manrope, sans-serif)',
-          fontWeight: 800, fontSize: 13, color: '#151621' }}>Cernly Discoveries</span>
+          fontWeight: 800, fontSize: 13, color: '#151621' }}>
+          {isAi ? 'Cernly Discoveries' : 'Issues by category'}
+        </span>
+        {isAi && (
+          <span style={{ fontSize: 10, fontWeight: 700, color: '#7948f6',
+            background: '#f1edff', padding: '2px 8px', borderRadius: 5 }}>AI ANALYSIS</span>
+        )}
         <span style={{ fontSize: 11, color: '#83899c', marginLeft: 'auto' }}>
           {discoveries.length} finding{discoveries.length !== 1 ? 's' : ''}
         </span>
@@ -283,9 +289,26 @@ function DiscoveriesSection({ discoveries }) {
 }
 
 /* ─── UX Analysis card ─── */
-function UxCard({ uxScore, uxInsights, siteType, url }) {
+function UxCard({ uxScore, uxInsights, siteType, url, issues }) {
   const score = uxScore ?? null;
   const color = score == null ? '#83899c' : score >= 80 ? '#19b987' : score >= 60 ? '#efa642' : '#ef6473';
+
+  // UX-relevant issues from accessibility + performance when no AI insights
+  const uxIssues = !uxInsights && Array.isArray(issues)
+    ? issues.filter(i =>
+        (i.severity === 'critical' || i.severity === 'warning') &&
+        (i.area?.toLowerCase().includes('access') ||
+         i.area?.toLowerCase().includes('mobile') ||
+         i.area?.toLowerCase().includes('cls') ||
+         i.area?.toLowerCase().includes('lcp') ||
+         i.area?.toLowerCase().includes('layout') ||
+         i.message?.toLowerCase().includes('tap') ||
+         i.message?.toLowerCase().includes('touch') ||
+         i.message?.toLowerCase().includes('contrast') ||
+         i.message?.toLowerCase().includes('label') ||
+         i.message?.toLowerCase().includes('button'))
+      ).slice(0, 4)
+    : [];
 
   return (
     <div style={{ background: '#fff', border: '1px solid #e9eaf2', borderRadius: 17,
@@ -320,7 +343,7 @@ function UxCard({ uxScore, uxInsights, siteType, url }) {
         )}
       </div>
 
-      {uxInsights && (
+      {uxInsights ? (
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 16 }}>
           <div style={{ background: '#f7f8fc', borderRadius: 12, padding: '14px 16px' }}>
             <div style={{ fontSize: 10, fontWeight: 800, color: '#83899c',
@@ -337,7 +360,31 @@ function UxCard({ uxScore, uxInsights, siteType, url }) {
             </div>
           </div>
         </div>
-      )}
+      ) : uxIssues.length > 0 ? (
+        <div style={{ marginBottom: 16 }}>
+          <div style={{ fontSize: 11, fontWeight: 800, color: '#83899c',
+            letterSpacing: '.07em', marginBottom: 10 }}>UX-RELATED ISSUES</div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
+            {uxIssues.map((issue, i) => (
+              <div key={i} style={{ background: '#f8f9fd', borderRadius: 10, padding: '10px 14px',
+                borderLeft: `3px solid ${issue.severity === 'critical' ? '#ef6473' : '#efa642'}` }}>
+                <div style={{ fontSize: 13, fontWeight: 600, color: '#151621', marginBottom: 3 }}>{issue.message}</div>
+                {(issue.description || issue.fix) && (
+                  <div style={{ fontSize: 12, color: '#4b5168', lineHeight: 1.6 }}>
+                    {(issue.description || issue.fix || '').replace(/\[([^\]]+)\]\([^)]+\)/g, '$1').slice(0, 140)}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : score != null && score < 80 ? (
+        <div style={{ background: '#f7f4ff', borderRadius: 12, padding: '14px 16px', marginBottom: 16 }}>
+          <div style={{ fontSize: 12, color: '#4b5168', lineHeight: 1.6 }}>
+            Run a new scan to get detailed UX insights and specific recommendations for improving usability and conversion.
+          </div>
+        </div>
+      ) : null}
 
       {/* Screenshot preview */}
       <div style={{ borderRadius: 12, overflow: 'hidden', border: '1px solid #e9eaf2', position: 'relative', background: '#f4f5fb' }}>
@@ -684,6 +731,57 @@ export default function ReportClient({ isPro, userName, userAvatar }) {
   const getImpact = (issue, idx) =>
     issue.severity === 'critical' || idx < 2 ? 'high' : idx < 5 ? 'medium' : 'low';
 
+  // Build fallback discoveries from issue data when AI insights are missing
+  const fallbackDiscoveries = (() => {
+    if (report?.aiInsights) return null; // use AI version
+    const scores = report?.scores || {};
+    const groups = [
+      {
+        category: 'Performance',
+        match: i => i.area?.toLowerCase().includes('perf') || i.area?.toLowerCase().includes('best'),
+        score: scores.performance,
+      },
+      {
+        category: 'SEO',
+        match: i => i.area?.toLowerCase().includes('seo') || i.source === 'seo',
+        score: scores.seo,
+      },
+      {
+        category: 'Security',
+        match: i => i.area?.toLowerCase().includes('sec') || i.source === 'ssl',
+        score: scores.security,
+      },
+      {
+        category: 'Accessibility',
+        match: i => i.area?.toLowerCase().includes('access') || i.source === 'a11y',
+        score: scores.accessibility,
+      },
+    ];
+
+    const discoveries = [];
+    for (const g of groups) {
+      if (g.score == null || g.score >= 90) continue; // skip passing categories
+      const issues = allIssues.filter(i => (i.severity === 'critical' || i.severity === 'warning') && g.match(i)).slice(0, 3);
+      if (issues.length === 0) continue;
+      const conf = g.score < 50 ? 'high' : g.score < 70 ? 'medium' : 'low';
+      discoveries.push({
+        title: `${g.category} needs attention (score: ${g.score})`,
+        explanation: `${issues.length} issue${issues.length > 1 ? 's' : ''} detected that are affecting your ${g.category.toLowerCase()} score. Addressing these can meaningfully improve your ranking and user experience.`,
+        confidence: conf,
+        category: g.category,
+        actions: issues.map(i => ({
+          title: i.message,
+          detail: i.description || i.fix || 'Review and resolve this issue to improve your score.',
+          impact: i.severity === 'critical' ? 'high' : 'medium',
+          effort: 'medium',
+        })),
+      });
+    }
+    return discoveries.length > 0 ? discoveries : null;
+  })();
+
+  const effectiveDiscoveries = report?.aiInsights || fallbackDiscoveries;
+
   const detailCategories = [
     { label: 'Performance',   accent: '#7948f6', match: i => i.area?.toLowerCase().includes('perf') || i.area?.toLowerCase().includes('best') },
     { label: 'SEO',           accent: '#3687fa', match: i => i.area?.toLowerCase().includes('seo')  || i.source === 'seo' },
@@ -819,8 +917,8 @@ export default function ReportClient({ isPro, userName, userAvatar }) {
                       </div>
                     )}
 
-                    {/* Cernly Discoveries — AI-grouped insights with ranked actions */}
-                    <DiscoveriesSection discoveries={report.aiInsights} />
+                    {/* Cernly Discoveries — AI-grouped insights (or issue-derived fallback) */}
+                    <DiscoveriesSection discoveries={effectiveDiscoveries} isAi={!!report.aiInsights} />
 
                     {/* UX Analysis — always show (screenshot at minimum) */}
                     <UxCard
@@ -828,6 +926,7 @@ export default function ReportClient({ isPro, userName, userAvatar }) {
                       uxInsights={report.uxInsights}
                       siteType={report.siteType}
                       url={report.url}
+                      issues={allIssues}
                     />
 
                     {/* Recommended fixes */}
