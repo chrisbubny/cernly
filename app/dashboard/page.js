@@ -1,9 +1,10 @@
+import { Suspense } from 'react';
 import { auth, currentUser } from '@clerk/nextjs/server';
 import { redirect } from 'next/navigation';
 import { getUserReports, getUserSubscription } from '@/lib/store';
 import DashboardClient from './DashboardClient';
 
-export default async function DashboardPage() {
+async function DashboardData() {
   const { userId } = await auth();
   if (!userId) redirect('/sign-in');
 
@@ -15,7 +16,6 @@ export default async function DashboardPage() {
 
   const reports = reportsResult.status === 'fulfilled' ? reportsResult.value : [];
   const subscription = subscriptionResult.status === 'fulfilled' ? subscriptionResult.value : null;
-  const userInfo = subscriptionResult.status === 'fulfilled' ? subscriptionResult.value : null;
   const clerkUser = user.status === 'fulfilled' ? user.value : null;
 
   if (reportsResult.status === 'rejected') {
@@ -30,5 +30,18 @@ export default async function DashboardPage() {
       userAvatar={clerkUser?.imageUrl || null}
       userEmail={clerkUser?.emailAddresses?.[0]?.emailAddress || ''}
     />
+  );
+}
+
+export default function DashboardPage() {
+  return (
+    <Suspense fallback={
+      <div style={{ minHeight: '100vh', background: '#f8f9fd', display: 'flex',
+        alignItems: 'center', justifyContent: 'center', color: '#83899c', fontSize: 13 }}>
+        Loading…
+      </div>
+    }>
+      <DashboardData />
+    </Suspense>
   );
 }

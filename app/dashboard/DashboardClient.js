@@ -1,8 +1,8 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useClerk } from '@clerk/nextjs';
 
 /* ─── SVG icon helpers ─── */
@@ -221,16 +221,33 @@ function FixQueueView({ reports, onOpenGuide }) {
   );
 }
 
-export default function DashboardClient({ reports, isPro, userName, userAvatar, userEmail, isAdmin }) {
+export default function DashboardClient({ reports: initialReports, isPro, userName, userAvatar, userEmail, isAdmin }) {
+  const searchParams = useSearchParams();
   const [url, setUrl] = useState('');
   const [scanning, setScanning] = useState(false);
   const [scanStage, setScanStage] = useState(0);
-  const [view, setView] = useState('overview');
+  const [view, setView] = useState(() => {
+    const v = searchParams.get('v');
+    return ['overview','websites','history','tasks','billing','settings'].includes(v) ? v : 'overview';
+  });
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [toast, setToast] = useState({ msg: '', show: false });
   const [modal, setModal] = useState(null); // null | 'pro' | 'image' | 'meta' | 'fonts' | ...
+  const [localReports, setLocalReports] = useState(initialReports);
+  const [deletingId, setDeletingId] = useState(null); // id currently showing confirm
   const router = useRouter();
   const { signOut } = useClerk();
+
+  // Handle ?rescan=<url> query param — pre-fill URL and switch to scan form
+  useEffect(() => {
+    const rescanUrl = searchParams.get('rescan');
+    if (rescanUrl) {
+      setUrl(decodeURIComponent(rescanUrl));
+      setView('overview');
+      // Give DOM a tick to render before focusing
+      setTimeout(() => document.getElementById('scan-url')?.focus(), 150);
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const notify = (msg) => {
     setToast({ msg, show: true });
@@ -274,7 +291,7 @@ export default function DashboardClient({ reports, isPro, userName, userAvatar, 
 
   /* ── Derived data from real reports ── */
   const latestByDomain = {};
-  reports.forEach(r => {
+  localReports.forEach(r => {
     try {
       const d = new URL(r.url).hostname;
       if (!latestByDomain[d] || new Date(r.created_at) > new Date(latestByDomain[d].created_at)) {
@@ -283,6 +300,22 @@ export default function DashboardClient({ reports, isPro, userName, userAvatar, 
     } catch {}
   });
   const siteList = Object.values(latestByDomain);
+
+  /* ── Delete a report ── */
+  async function handleDeleteReport(id) {
+    try {
+      const res = await fetch(`/api/reports/${id}`, { method: 'DELETE' });
+      if (res.ok) {
+        setLocalReports(prev => prev.filter(r => r.id !== id));
+        setDeletingId(null);
+        notify('Scan deleted.');
+      } else {
+        notify('Could not delete scan. Please try again.');
+      }
+    } catch {
+      notify('Could not delete scan. Please try again.');
+    }
+  }
 
   const avgScore = (s) => {
     const vals = [s?.performance, s?.seo, s?.security, s?.accessibility].filter(v => v != null);
@@ -381,7 +414,7 @@ export default function DashboardClient({ reports, isPro, userName, userAvatar, 
           <nav style={{ display: 'grid', gap: 4 }}>
             {[
               { id: 'overview',  label: 'Overview',    icon: <Icons.Grid />  },
-              { id: 'websites',  label: 'My websites', icon: <Icons.Globe />, count: siteList.length || null },
+              { id: 'websites',  label: 'My websites', icon: <Icons.Globe />, count: siteList.length > 0 ? siteList.length : null },
               { id: 'history',   label: 'Scan history',icon: <Icons.Clock /> },
               { id: 'tasks',     label: 'Fix queue',   icon: <Icons.Check />, count: reports.length > 0 ? 7 : null },
             ].map(({ id, label, icon, count }) => (
@@ -599,19 +632,21 @@ export default function DashboardClient({ reports, isPro, userName, userAvatar, 
                       gap: 12, margin: '25px 0 15px' }}>
                       <h2 style={{ fontFamily: 'var(--font-manrope, Manrope, sans-serif)',
                         fontSize: 17, fontWeight: 800, letterSpacing: '-.04em', margin: 0 }}>
-                        Your websites
+                        Recent websites
                         <span style={{ fontFamily: 'inherit', fontWeight: 600, fontSize: 12, color: '#83899c', marginLeft: 8 }}>
-                          ({siteList.length})
+                          ({Math.min(siteList.length, 4)}{siteList.length > 4 ? ` of ${siteList.length}` : ''})
                         </span>
                       </h2>
-                      <button onClick={() => setView('websites')}
-                        style={{ border: 0, background: 'transparent', color: '#7651e8',
-                          fontSize: 11, fontWeight: 800, cursor: 'pointer', fontFamily: 'inherit' }}>
-                        View all websites →
-                      </button>
+                      {siteList.length > 0 && (
+                        <button onClick={() => setView('websites')}
+                          style={{ border: 0, background: 'transparent', color: '#7651e8',
+                            fontSize: 11, fontWeight: 800, cursor: 'pointer', fontFamily: 'inherit' }}>
+                          View all websites →
+                        </button>
+                      )}
                     </div>
 
-                    {/* Site cards grid */}
+                    {/* Site cards grid — overview shows 4 most recent */}
                     {siteList.length === 0 ? (
                       <div style={{ background: '#fff', border: '1px solid #e9eaf2', borderRadius: 17,
                         padding: '40px 24px', textAlign: 'center' }}>
@@ -622,7 +657,7 @@ export default function DashboardClient({ reports, isPro, userName, userAvatar, 
                     ) : (
                       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2,minmax(0,1fr))', gap: 15 }}
                         className="sites-grid">
-                        {siteList.map(r => {
+                        {siteList.slice(0, 4).map(r => {
                           const domain = (() => { try { return new URL(r.url).hostname; } catch { return r.url; } })();
                           const s = r.scores || {};
                           const score = avgScore(s) ?? 0;
@@ -803,10 +838,10 @@ export default function DashboardClient({ reports, isPro, userName, userAvatar, 
                       </p>
                       <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, margin: '20px 0 10px' }}>
                         <span>Scans used</span>
-                        <b style={{ color: '#4c4c60' }}>{reports.length} {!isPro && '/ 3'}</b>
+                        <b style={{ color: '#4c4c60' }}>{localReports.length} {!isPro && '/ 3'}</b>
                       </div>
                       <div style={{ height: 7, background: '#f0eff6', borderRadius: 20, overflow: 'hidden' }}>
-                        <div style={{ height: '100%', width: isPro ? '40%' : `${Math.min(100, (reports.length / 3) * 100)}%`,
+                        <div style={{ height: '100%', width: isPro ? '40%' : `${Math.min(100, (localReports.length / 3) * 100)}%`,
                           background: 'linear-gradient(90deg,#8650fa,#4d8dfa)', borderRadius: 20 }} />
                       </div>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center',
@@ -829,7 +864,7 @@ export default function DashboardClient({ reports, isPro, userName, userAvatar, 
                         fontSize: 14, fontWeight: 800, letterSpacing: '-.03em', margin: '0 0 4px' }}>
                         Recent activity
                       </h3>
-                      {reports.slice(0, 3).map(r => {
+                      {localReports.slice(0, 3).map(r => {
                         const domain = (() => { try { return new URL(r.url).hostname; } catch { return r.url; } })();
                         const date = new Date(r.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
                         return (
@@ -848,7 +883,7 @@ export default function DashboardClient({ reports, isPro, userName, userAvatar, 
                           </div>
                         );
                       })}
-                      {reports.length === 0 && (
+                      {localReports.length === 0 && (
                         <p style={{ fontSize: 11, color: '#83899c', margin: '12px 0 0' }}>No scans yet.</p>
                       )}
                     </div>
@@ -939,7 +974,7 @@ export default function DashboardClient({ reports, isPro, userName, userAvatar, 
                     <h1 style={{ fontFamily: 'var(--font-manrope, Manrope, sans-serif)',
                       fontSize: 'clamp(29px,3.3vw,41px)', letterSpacing: '-.045em',
                       fontWeight: 800, margin: '9px 0' }}>Scan history</h1>
-                    <p style={{ color: '#83899c', fontSize: 13, margin: 0 }}>See how your websites change between scans.</p>
+                    <p style={{ color: '#83899c', fontSize: 13, margin: 0 }}>All your scans — view or delete any report.</p>
                   </div>
                   {!isPro && (
                     <button onClick={() => setModal('pro')}
@@ -952,7 +987,7 @@ export default function DashboardClient({ reports, isPro, userName, userAvatar, 
                   )}
                 </div>
                 <div style={{ background: '#fff', border: '1px solid #e9eaf2', borderRadius: 17, overflow: 'hidden' }}>
-                  {reports.length === 0 ? (
+                  {localReports.length === 0 ? (
                     <div style={{ padding: '48px 24px', textAlign: 'center', color: '#83899c', fontSize: 13 }}>
                       No scans yet.
                     </div>
@@ -970,10 +1005,11 @@ export default function DashboardClient({ reports, isPro, userName, userAvatar, 
                           </tr>
                         </thead>
                         <tbody>
-                          {reports.map(r => {
+                          {localReports.map(r => {
                             const domain = (() => { try { return new URL(r.url).hostname; } catch { return r.url; } })();
                             const score = avgScore(r.scores ?? {}) ?? '—';
                             const date = new Date(r.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+                            const isDeleting = deletingId === r.id;
                             return (
                               <tr key={r.id}>
                                 <td style={{ padding: '12px 14px', borderBottom: '1px solid #e9eaf2',
@@ -981,12 +1017,38 @@ export default function DashboardClient({ reports, isPro, userName, userAvatar, 
                                 <td style={{ padding: '12px 14px', borderBottom: '1px solid #e9eaf2', color: '#83899c' }}>{date}</td>
                                 <td style={{ padding: '12px 14px', borderBottom: '1px solid #e9eaf2', color: '#83899c' }}>{score}</td>
                                 <td style={{ padding: '12px 14px', borderBottom: '1px solid #e9eaf2' }}>
-                                  <button onClick={() => router.push(`/report/${r.id}`)}
-                                    style={{ background: '#f2efff', border: 0, color: '#7650e9',
-                                      padding: '8px 11px', borderRadius: 7, fontSize: 11,
-                                      fontWeight: 800, cursor: 'pointer', fontFamily: 'inherit' }}>
-                                    View
-                                  </button>
+                                  <div style={{ display: 'flex', gap: 7, alignItems: 'center' }}>
+                                    <button onClick={() => router.push(`/report/${r.id}`)}
+                                      style={{ background: '#f2efff', border: 0, color: '#7650e9',
+                                        padding: '8px 11px', borderRadius: 7, fontSize: 11,
+                                        fontWeight: 800, cursor: 'pointer', fontFamily: 'inherit' }}>
+                                      View
+                                    </button>
+                                    {isDeleting ? (
+                                      <>
+                                        <button onClick={() => handleDeleteReport(r.id)}
+                                          style={{ background: '#fff0f2', border: '1px solid #f5c0c6', color: '#ef6473',
+                                            padding: '7px 10px', borderRadius: 7, fontSize: 11,
+                                            fontWeight: 800, cursor: 'pointer', fontFamily: 'inherit' }}>
+                                          Confirm delete
+                                        </button>
+                                        <button onClick={() => setDeletingId(null)}
+                                          style={{ background: 'transparent', border: 0, color: '#83899c',
+                                            padding: '7px 8px', borderRadius: 7, fontSize: 11,
+                                            fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
+                                          Cancel
+                                        </button>
+                                      </>
+                                    ) : (
+                                      <button onClick={() => setDeletingId(r.id)}
+                                        style={{ background: 'transparent', border: '1px solid #e9eaf2', color: '#9398a8',
+                                          padding: '7px 10px', borderRadius: 7, fontSize: 11,
+                                          fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}
+                                        title="Delete scan">
+                                        Delete
+                                      </button>
+                                    )}
+                                  </div>
                                 </td>
                               </tr>
                             );
@@ -1073,7 +1135,7 @@ export default function DashboardClient({ reports, isPro, userName, userAvatar, 
                   className="admin-grid">
                   {[
                     { label: 'Registered users', value: '—', sub: 'Live from DB' },
-                    { label: 'Scans (30 days)',   value: reports.length, sub: 'Across all users' },
+                    { label: 'Scans (30 days)',   value: localReports.length, sub: 'Across all users' },
                     { label: 'Report revenue',    value: '—', sub: 'Via Stripe' },
                     { label: 'Pro subscriptions', value: '—', sub: 'Active subs' },
                   ].map(t => (
@@ -1107,7 +1169,7 @@ export default function DashboardClient({ reports, isPro, userName, userAvatar, 
                         </tr>
                       </thead>
                       <tbody>
-                        {reports.slice(0, 10).map(r => {
+                        {localReports.slice(0, 10).map(r => {
                           const domain = (() => { try { return new URL(r.url).hostname; } catch { return r.url; } })();
                           const score = avgScore(r.scores ?? {}) ?? '—';
                           const date = new Date(r.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
@@ -1123,7 +1185,7 @@ export default function DashboardClient({ reports, isPro, userName, userAvatar, 
                             </tr>
                           );
                         })}
-                        {reports.length === 0 && (
+                        {localReports.length === 0 && (
                           <tr><td colSpan={4} style={{ padding: '24px 14px', color: '#83899c', fontSize: 12 }}>No scans yet.</td></tr>
                         )}
                       </tbody>
