@@ -7,11 +7,8 @@ import { useClerk } from '@clerk/nextjs';
 
 /* ─── SVG stroke attrs ─── */
 const sa = { fill: 'none', stroke: 'currentColor', strokeWidth: 1.8, strokeLinecap: 'round', strokeLinejoin: 'round' };
-const Icon = ({ children, size = 18, ...rest }) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" {...sa} {...rest}>{children}</svg>
-);
 
-/* ─── Cernly logo mark — exact mark from home page ─── */
+/* ─── Cernly logo mark ─── */
 const LogoMark = ({ size = 29 }) => (
   <svg aria-hidden="true" focusable="false" width={size} height={size}
     viewBox="195 175 895 875" xmlns="http://www.w3.org/2000/svg"
@@ -23,16 +20,24 @@ const LogoMark = ({ size = 29 }) => (
   </svg>
 );
 
-/* ─── Score tile ─── */
-function ScoreTile({ score, label }) {
+/* ─── Score tile — clickable when onClick provided ─── */
+function ScoreTile({ score, label, onClick }) {
   const color = score == null ? '#83899c' : score >= 80 ? '#19b987' : score >= 60 ? '#efa642' : '#ef6473';
+  const isNull = score == null;
   return (
-    <div style={{ background: '#fff', border: '1px solid #e9eaf2', borderRadius: 17,
-      padding: '22px 14px', textAlign: 'center', boxShadow: '0 2px 8px #1b1d3205' }}>
+    <button onClick={onClick}
+      style={{ background: '#fff', border: '1px solid #e9eaf2', borderRadius: 17,
+        padding: '20px 14px', textAlign: 'center', boxShadow: '0 2px 8px #1b1d3205',
+        cursor: onClick ? 'pointer' : 'default', fontFamily: 'inherit',
+        transition: 'box-shadow .15s, transform .12s',
+        ':hover': onClick ? { boxShadow: '0 4px 16px #1b1d3212' } : {} }}>
       <div style={{ fontFamily: 'var(--font-manrope, Manrope, sans-serif)', fontWeight: 800,
-        fontSize: 46, lineHeight: 1, color, marginBottom: 8 }}>{score ?? '—'}</div>
-      <div style={{ fontSize: 11, fontWeight: 700, color: '#83899c' }}>{label}</div>
-    </div>
+        fontSize: 42, lineHeight: 1, color, marginBottom: 6 }}>{isNull ? '—' : score}</div>
+      <div style={{ fontSize: 10, fontWeight: 700, color: '#83899c', letterSpacing: '.04em' }}>{label}</div>
+      {onClick && !isNull && (
+        <div style={{ fontSize: 9, color: '#b0b4c8', marginTop: 4, fontWeight: 600 }}>View findings →</div>
+      )}
+    </button>
   );
 }
 
@@ -55,7 +60,7 @@ function SevDot({ sev }) {
   return <div style={{ width: 8, height: 8, borderRadius: '50%', flexShrink: 0, marginTop: 5, background: c[sev] || c.info }} />;
 }
 
-/* ─── Finding row — expandable, shows real description ─── */
+/* ─── Finding row — expandable ─── */
 function FindingRow({ issue }) {
   const [open, setOpen] = useState(false);
   const hasDetail = !!(issue.description || issue.detail || issue.fix);
@@ -67,7 +72,6 @@ function FindingRow({ issue }) {
     info:     { bg: '#f4f5fb', color: '#83899c', label: 'Info' },
   }[sev] || { bg: '#f4f5fb', color: '#83899c', label: 'Info' };
 
-  // Clean description — strip markdown links like [text](url)
   const cleanDesc = (str) => str?.replace(/\[([^\]]+)\]\([^)]+\)/g, '$1') || '';
 
   return (
@@ -78,13 +82,9 @@ function FindingRow({ issue }) {
           cursor: hasDetail ? 'pointer' : 'default', fontFamily: 'inherit' }}>
         <SevDot sev={sev} />
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: 13, fontWeight: 600, color: '#151621', lineHeight: 1.45 }}>
-            {issue.message}
-          </div>
+          <div style={{ fontSize: 13, fontWeight: 600, color: '#151621', lineHeight: 1.45 }}>{issue.message}</div>
           {issue.displayValue && (
-            <div style={{ fontSize: 11, color: '#83899c', marginTop: 2, fontFamily: 'monospace' }}>
-              {issue.displayValue}
-            </div>
+            <div style={{ fontSize: 11, color: '#83899c', marginTop: 2, fontFamily: 'monospace' }}>{issue.displayValue}</div>
           )}
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 7, flexShrink: 0, marginTop: 1 }}>
@@ -155,11 +155,10 @@ function CategorySection({ label, accent, issues }) {
   );
 }
 
-/* ─── Recommended fix accordion ─── */
+/* ─── Fix item accordion ─── */
 function FixItem({ n, title, detail, impact, defaultOpen }) {
   const [open, setOpen] = useState(!!defaultOpen);
   const cleanDesc = (str) => str?.replace(/\[([^\]]+)\]\([^)]+\)/g, '$1') || '';
-
   return (
     <div style={{ border: '1px solid #e9eaf2', borderRadius: 13, overflow: 'hidden', marginBottom: 10 }}>
       <button onClick={() => setOpen(o => !o)}
@@ -179,16 +178,14 @@ function FixItem({ n, title, detail, impact, defaultOpen }) {
       </button>
       {open && detail && (
         <div style={{ padding: '12px 16px 16px', borderTop: '1px solid #f0f0f8' }}>
-          <p style={{ fontSize: 13, color: '#4b5168', lineHeight: 1.75, margin: 0 }}>
-            {cleanDesc(detail)}
-          </p>
+          <p style={{ fontSize: 13, color: '#4b5168', lineHeight: 1.75, margin: 0 }}>{cleanDesc(detail)}</p>
         </div>
       )}
     </div>
   );
 }
 
-/* ─── Discoveries section ─── */
+/* ─── Discovery card ─── */
 const CATEGORY_ACCENT = {
   Performance: '#7948f6', SEO: '#3687fa', Security: '#19b987',
   Accessibility: '#efa642', UX: '#ef6473',
@@ -216,13 +213,9 @@ function DiscoveryCard({ d, index }) {
         </div>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 7, flexWrap: 'wrap', marginBottom: 4 }}>
-            <span style={{ fontSize: 10, fontWeight: 800, color: accent, letterSpacing: '.06em' }}>
-              {d.category?.toUpperCase()}
-            </span>
+            <span style={{ fontSize: 10, fontWeight: 800, color: accent, letterSpacing: '.06em' }}>{d.category?.toUpperCase()}</span>
             <span style={{ fontSize: 10, fontWeight: 700, color: confColor,
-              background: confBg, padding: '2px 7px', borderRadius: 5 }}>
-              {d.confidence?.toUpperCase()} CONFIDENCE
-            </span>
+              background: confBg, padding: '2px 7px', borderRadius: 5 }}>{d.confidence?.toUpperCase()} CONFIDENCE</span>
           </div>
           <div style={{ fontSize: 14, fontWeight: 700, color: '#151621', lineHeight: 1.4 }}>{d.title}</div>
           <p style={{ fontSize: 13, color: '#4b5168', lineHeight: 1.7, margin: '5px 0 0' }}>{d.explanation}</p>
@@ -232,16 +225,15 @@ function DiscoveryCard({ d, index }) {
           <path d={open ? 'm18 15-6-6-6 6' : 'm6 9 6 6 6-6'}/>
         </svg>
       </button>
-
       {open && Array.isArray(d.actions) && d.actions.length > 0 && (
-        <div style={{ borderTop: '1px solid #f0f1f8', padding: '4px 18px 16px 18px' }}>
+        <div style={{ borderTop: '1px solid #f0f1f8', padding: '4px 18px 16px' }}>
           <div style={{ fontSize: 11, fontWeight: 800, color: '#83899c',
             letterSpacing: '.07em', margin: '12px 0 10px' }}>RECOMMENDED ACTIONS</div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {d.actions.map((a, ai) => {
               const impactColor = { high: '#ef6473', medium: '#efa642', low: '#83899c' }[a.impact] || '#83899c';
-              const effortBg   = { low: '#edf9f4', medium: '#fff8ed', high: '#fff0f2' }[a.effort] || '#f4f5fb';
-              const effortColor= { low: '#16a34a', medium: '#d97706', high: '#ef6473' }[a.effort] || '#83899c';
+              const effortBg    = { low: '#edf9f4', medium: '#fff8ed', high: '#fff0f2' }[a.effort] || '#f4f5fb';
+              const effortColor = { low: '#16a34a', medium: '#d97706', high: '#ef6473' }[a.effort] || '#83899c';
               return (
                 <div key={ai} style={{ background: '#f8f9fd', borderRadius: 10, padding: '11px 14px',
                   borderLeft: `3px solid ${impactColor}` }}>
@@ -263,32 +255,7 @@ function DiscoveryCard({ d, index }) {
   );
 }
 
-function DiscoveriesSection({ discoveries, isAi }) {
-  if (!Array.isArray(discoveries) || discoveries.length === 0) return null;
-  return (
-    <div style={{ marginBottom: 20 }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
-        <span style={{ fontSize: 14 }}>✦</span>
-        <span style={{ fontFamily: 'var(--font-manrope, Manrope, sans-serif)',
-          fontWeight: 800, fontSize: 13, color: '#151621' }}>
-          {isAi ? 'Cernly Discoveries' : 'Issues by category'}
-        </span>
-        {isAi && (
-          <span style={{ fontSize: 10, fontWeight: 700, color: '#7948f6',
-            background: '#f1edff', padding: '2px 8px', borderRadius: 5 }}>AI ANALYSIS</span>
-        )}
-        <span style={{ fontSize: 11, color: '#83899c', marginLeft: 'auto' }}>
-          {discoveries.length} finding{discoveries.length !== 1 ? 's' : ''}
-        </span>
-      </div>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-        {discoveries.map((d, i) => <DiscoveryCard key={i} d={d} index={i} />)}
-      </div>
-    </div>
-  );
-}
-
-/* ─── UX Analysis card ─── */
+/* ─── UX / Visual Experience card — used in Findings tab ─── */
 function UxCard({ uxScore, uxInsights, uxAnnotations, visionStatus, siteType, url, issues }) {
   const [activePin, setActivePin] = useState(null);
   const score = uxScore ?? null;
@@ -299,11 +266,10 @@ function UxCard({ uxScore, uxInsights, uxAnnotations, visionStatus, siteType, ur
   const sevBg    = s => s === 'good' ? '#f0fdf8' : s === 'warning' ? '#fffbf0' : '#fff5f6';
   const sevLabel = s => s === 'good' ? 'GOOD' : s === 'warning' ? 'NEEDS WORK' : 'CRITICAL';
 
-  const annotations    = uxAnnotations?.annotations || [];
-  const screenshotUrl  = uxAnnotations?.screenshotUrl || null;
-  const observations   = uxInsights?.observations || [];
+  const annotations   = uxAnnotations?.annotations || [];
+  const screenshotUrl = uxAnnotations?.screenshotUrl || null;
+  const observations  = uxInsights?.observations || [];
 
-  // Fallback UX issues when no AI data
   const uxIssues = !uxInsights && !annotations.length && Array.isArray(issues)
     ? issues.filter(i =>
         (i.severity === 'critical' || i.severity === 'warning') &&
@@ -319,15 +285,13 @@ function UxCard({ uxScore, uxInsights, uxAnnotations, visionStatus, siteType, ur
     <div style={{ background: '#fff', border: '1px solid #e9eaf2', borderRadius: 17,
       padding: '20px 22px', marginBottom: 20 }}>
 
-      {/* Header */}
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 16, marginBottom: 18 }}>
         <div style={{ flex: 1 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 3, flexWrap: 'wrap' }}>
             <div style={{ width: 28, height: 28, borderRadius: 8, background: '#f1edff',
               display: 'grid', placeItems: 'center', flexShrink: 0 }}>
               <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="#7948f6" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-                <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7z"/>
-                <circle cx="12" cy="12" r="3"/>
+                <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/>
               </svg>
             </div>
             <h2 style={{ fontFamily: 'var(--font-manrope, Manrope, sans-serif)', fontWeight: 800,
@@ -341,9 +305,7 @@ function UxCard({ uxScore, uxInsights, uxAnnotations, visionStatus, siteType, ur
                 background: '#f1edff', color: '#7948f6', letterSpacing: '.06em' }}>AI VISION</span>
             )}
           </div>
-          <p style={{ fontSize: 12, color: '#83899c', margin: 0 }}>
-            Design, usability, and conversion experience
-          </p>
+          <p style={{ fontSize: 12, color: '#83899c', margin: 0 }}>Design, usability, and conversion experience</p>
         </div>
         {score != null && (
           <div style={{ textAlign: 'center', flexShrink: 0 }}>
@@ -354,7 +316,7 @@ function UxCard({ uxScore, uxInsights, uxAnnotations, visionStatus, siteType, ur
         )}
       </div>
 
-      {/* ── Annotated screenshot ── */}
+      {/* Annotated screenshot */}
       {(screenshotUrl || url) && (
         <div style={{ marginBottom: annotations.length ? 0 : 16 }}>
           {visionLoading && (
@@ -381,83 +343,46 @@ function UxCard({ uxScore, uxInsights, uxAnnotations, visionStatus, siteType, ur
               letterSpacing: '.07em', marginBottom: 10 }}>VISUAL ANALYSIS — click a pin to see the finding</div>
           )}
           <div style={{ position: 'relative', borderRadius: 13, overflow: 'hidden',
-            border: '1px solid #e9eaf2', background: '#f4f5fb',
-            /* 16:10 viewport aspect ratio */
-            aspectRatio: '16 / 10' }}>
-
-            {/* Screenshot image */}
+            border: '1px solid #e9eaf2', background: '#f4f5fb', aspectRatio: '16 / 10' }}>
             <img
               src={screenshotUrl || `https://api.microlink.io/?url=${encodeURIComponent(url)}&screenshot=true&embed=screenshot.url`}
               alt={`Screenshot of ${url}`}
               style={{ width: '100%', height: '100%', objectFit: 'cover', objectPosition: 'top', display: 'block' }}
               onError={e => { e.target.style.display = 'none'; }}
             />
-
-            {/* Annotation pins */}
             {annotations.map((ann, i) => {
               const c = sevColor(ann.severity);
               const isActive = activePin === i;
               return (
-                <button
-                  key={i}
-                  onClick={() => setActivePin(isActive ? null : i)}
-                  style={{
-                    position: 'absolute',
-                    left:   `${ann.x * 100}%`,
-                    top:    `${ann.y * 100}%`,
-                    transform: 'translate(-50%, -50%)',
-                    width: 26, height: 26,
-                    borderRadius: '50%',
-                    background: isActive ? c : '#fff',
-                    border: `2.5px solid ${c}`,
-                    color: isActive ? '#fff' : c,
-                    fontSize: 11, fontWeight: 800,
-                    display: 'grid', placeItems: 'center',
-                    cursor: 'pointer',
-                    boxShadow: `0 2px 10px ${c}55`,
-                    zIndex: isActive ? 10 : 5,
-                    transition: 'all .15s ease',
-                    padding: 0,
-                    lineHeight: 1,
-                  }}
-                  title={ann.label}
-                >
-                  {i + 1}
-                </button>
+                <button key={i} onClick={() => setActivePin(isActive ? null : i)}
+                  style={{ position: 'absolute', left: `${ann.x * 100}%`, top: `${ann.y * 100}%`,
+                    transform: 'translate(-50%, -50%)', width: 26, height: 26, borderRadius: '50%',
+                    background: isActive ? c : '#fff', border: `2.5px solid ${c}`,
+                    color: isActive ? '#fff' : c, fontSize: 11, fontWeight: 800,
+                    display: 'grid', placeItems: 'center', cursor: 'pointer',
+                    boxShadow: `0 2px 10px ${c}55`, zIndex: isActive ? 10 : 5,
+                    transition: 'all .15s ease', padding: 0, lineHeight: 1 }}
+                  title={ann.label}>{i + 1}</button>
               );
             })}
-
-            {/* Active annotation tooltip */}
             {activePin !== null && annotations[activePin] && (() => {
               const ann = annotations[activePin];
               const c   = sevColor(ann.severity);
-              // Position tooltip: if pin is in right half, show to the left; else to the right
               const fromLeft = ann.x > 0.55;
               return (
-                <div style={{
-                  position: 'absolute',
+                <div style={{ position: 'absolute',
                   left:  fromLeft ? 'auto' : `calc(${ann.x * 100}% + 16px)`,
                   right: fromLeft ? `calc(${(1 - ann.x) * 100}% + 16px)` : 'auto',
-                  top:   `${Math.min(ann.y * 100, 70)}%`,
-                  width: 220,
-                  background: '#fff',
-                  borderRadius: 11,
-                  padding: '12px 14px',
-                  boxShadow: '0 4px 24px #0003',
-                  border: `1.5px solid ${c}33`,
-                  zIndex: 20,
-                  pointerEvents: 'none',
-                }}>
+                  top:   `${Math.min(ann.y * 100, 70)}%`, width: 220,
+                  background: '#fff', borderRadius: 11, padding: '12px 14px',
+                  boxShadow: '0 4px 24px #0003', border: `1.5px solid ${c}33`,
+                  zIndex: 20, pointerEvents: 'none' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
                     <div style={{ width: 7, height: 7, borderRadius: '50%', background: c, flexShrink: 0 }} />
-                    <div style={{ fontSize: 10, fontWeight: 800, color: c, letterSpacing: '.06em' }}>
-                      {sevLabel(ann.severity)}
-                    </div>
+                    <div style={{ fontSize: 10, fontWeight: 800, color: c, letterSpacing: '.06em' }}>{sevLabel(ann.severity)}</div>
                     <div style={{ fontSize: 9, color: '#83899c', marginLeft: 'auto' }}>{ann.area}</div>
                   </div>
-                  <div style={{ fontSize: 12, fontWeight: 700, color: '#151621', marginBottom: 5, lineHeight: 1.4 }}>
-                    {ann.label}
-                  </div>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: '#151621', marginBottom: 5, lineHeight: 1.4 }}>{ann.label}</div>
                   <div style={{ fontSize: 11, color: '#4b5168', lineHeight: 1.6 }}>{ann.detail}</div>
                 </div>
               );
@@ -466,7 +391,7 @@ function UxCard({ uxScore, uxInsights, uxAnnotations, visionStatus, siteType, ur
         </div>
       )}
 
-      {/* ── Annotation legend ── */}
+      {/* Annotation legend */}
       {annotations.length > 0 && (
         <div style={{ marginTop: 12, marginBottom: 16 }}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
@@ -474,23 +399,16 @@ function UxCard({ uxScore, uxInsights, uxAnnotations, visionStatus, siteType, ur
               const c = sevColor(ann.severity);
               const isActive = activePin === i;
               return (
-                <button
-                  key={i}
-                  onClick={() => setActivePin(isActive ? null : i)}
-                  style={{
-                    display: 'flex', alignItems: 'flex-start', gap: 10,
+                <button key={i} onClick={() => setActivePin(isActive ? null : i)}
+                  style={{ display: 'flex', alignItems: 'flex-start', gap: 10,
                     background: isActive ? sevBg(ann.severity) : '#f8f9fd',
                     border: `1px solid ${isActive ? c + '44' : '#e9eaf2'}`,
                     borderRadius: 10, padding: '10px 13px',
                     cursor: 'pointer', textAlign: 'left', width: '100%',
-                    transition: 'all .12s ease',
-                  }}
-                >
+                    transition: 'all .12s ease' }}>
                   <div style={{ width: 22, height: 22, borderRadius: '50%', background: c,
                     color: '#fff', fontSize: 10, fontWeight: 800, flexShrink: 0,
-                    display: 'grid', placeItems: 'center', marginTop: 1 }}>
-                    {i + 1}
-                  </div>
+                    display: 'grid', placeItems: 'center', marginTop: 1 }}>{i + 1}</div>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 }}>
                       <div style={{ fontSize: 12, fontWeight: 700, color: '#151621' }}>{ann.label}</div>
@@ -506,7 +424,7 @@ function UxCard({ uxScore, uxInsights, uxAnnotations, visionStatus, siteType, ur
         </div>
       )}
 
-      {/* ── AI: conversion focus + top recommendation ── */}
+      {/* AI insights blocks */}
       {uxInsights && (uxInsights.conversion_focus || uxInsights.top_recommendation) && (
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 16 }}>
           {uxInsights.conversion_focus && (
@@ -522,15 +440,12 @@ function UxCard({ uxScore, uxInsights, uxAnnotations, visionStatus, siteType, ur
             <div style={{ background: '#f7f4ff', borderRadius: 12, padding: '13px 15px' }}>
               <div style={{ fontSize: 10, fontWeight: 800, color: '#7948f6',
                 textTransform: 'uppercase', letterSpacing: '.09em', marginBottom: 5 }}>Top recommendation</div>
-              <div style={{ fontSize: 12, color: '#4b5168', lineHeight: 1.6 }}>
-                {uxInsights.top_recommendation}
-              </div>
+              <div style={{ fontSize: 12, color: '#4b5168', lineHeight: 1.6 }}>{uxInsights.top_recommendation}</div>
             </div>
           )}
         </div>
       )}
 
-      {/* ── Per-area observations (from uxInsights, not annotations) ── */}
       {observations.length > 0 && !annotations.length && (
         <div style={{ marginBottom: 16 }}>
           <div style={{ fontSize: 11, fontWeight: 800, color: '#83899c',
@@ -538,17 +453,14 @@ function UxCard({ uxScore, uxInsights, uxAnnotations, visionStatus, siteType, ur
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {observations.map((obs, i) => (
               <div key={i} style={{ borderRadius: 11, padding: '12px 15px',
-                background: sevBg(obs.verdict),
-                border: `1px solid ${sevColor(obs.verdict)}22` }}>
+                background: sevBg(obs.verdict), border: `1px solid ${sevColor(obs.verdict)}22` }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
                   <div style={{ width: 6, height: 6, borderRadius: '50%', flexShrink: 0,
                     background: sevColor(obs.verdict) }} />
                   <div style={{ fontSize: 10, fontWeight: 800, color: sevColor(obs.verdict),
                     letterSpacing: '.07em' }}>{obs.area?.toUpperCase()}</div>
                   <div style={{ marginLeft: 'auto', fontSize: 9, fontWeight: 800,
-                    color: sevColor(obs.verdict), opacity: .7, letterSpacing: '.06em' }}>
-                    {sevLabel(obs.verdict)}
-                  </div>
+                    color: sevColor(obs.verdict), opacity: .7, letterSpacing: '.06em' }}>{sevLabel(obs.verdict)}</div>
                 </div>
                 <div style={{ fontSize: 12, fontWeight: 600, color: '#151621',
                   marginBottom: obs.fix ? 4 : 0, paddingLeft: 14 }}>{obs.finding}</div>
@@ -563,7 +475,6 @@ function UxCard({ uxScore, uxInsights, uxAnnotations, visionStatus, siteType, ur
         </div>
       )}
 
-      {/* ── Fallback: issue-based list ── */}
       {!uxInsights && !annotations.length && uxIssues.length > 0 && (
         <div style={{ marginBottom: 16 }}>
           <div style={{ fontSize: 11, fontWeight: 800, color: '#83899c',
@@ -584,7 +495,6 @@ function UxCard({ uxScore, uxInsights, uxAnnotations, visionStatus, siteType, ur
         </div>
       )}
 
-      {/* ── Fallback: score text ── */}
       {!uxInsights && !annotations.length && uxIssues.length === 0 && score != null && (
         <div style={{ background: '#f7f4ff', borderRadius: 12, padding: '14px 16px', marginBottom: 16 }}>
           <div style={{ fontSize: 12, color: '#4b5168', lineHeight: 1.6 }}>
@@ -600,35 +510,23 @@ function UxCard({ uxScore, uxInsights, uxAnnotations, visionStatus, siteType, ur
   );
 }
 
-/* ─── Ask Cernly AI panel — fixed height, no scroll jump ─── */
-function AskCernlyPanel({ reportId, domain }) {
-  const PANEL_HEIGHT = 'calc(100vh - 120px)';
-  const [messages, setMessages] = useState([
-    {
-      role: 'assistant',
-      content: `Hi! I've analyzed **${domain || 'this site'}** and I'm ready to help. Ask me what a finding means, how to fix it, or where to start.`,
-    }
-  ]);
+/* ─── Ask Cernly drawer ─── */
+function AskCernlyDrawer({ reportId, domain, onClose }) {
+  const [messages, setMessages] = useState([{
+    role: 'assistant',
+    content: `Hi! I've analyzed **${domain || 'this site'}** and I'm ready to help. Ask me what a finding means, how to fix it, or where to start.`,
+  }]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const msgsRef = useRef(null);
 
-  const SUGGESTED = [
-    'What should I fix first?',
-    'How do I improve my LCP score?',
-    'What SEO issues hurt me most?',
-  ];
+  const SUGGESTED = ['What should I fix first?', 'How do I improve my LCP score?', 'What SEO issues hurt me most?'];
 
-  // Scroll to bottom inside the messages container only — no page jump
   const scrollToBottom = useCallback(() => {
-    if (msgsRef.current) {
-      msgsRef.current.scrollTop = msgsRef.current.scrollHeight;
-    }
+    if (msgsRef.current) msgsRef.current.scrollTop = msgsRef.current.scrollHeight;
   }, []);
 
-  useEffect(() => {
-    scrollToBottom();
-  }, [messages, scrollToBottom]);
+  useEffect(() => { scrollToBottom(); }, [messages, scrollToBottom]);
 
   async function send(text) {
     const q = (text || input).trim();
@@ -651,7 +549,6 @@ function AskCernlyPanel({ reportId, domain }) {
     setLoading(false);
   }
 
-  // Render **bold** markdown
   function renderContent(text) {
     return text.split(/(\*\*[^*]+\*\*)/g).map((p, i) =>
       p.startsWith('**') && p.endsWith('**') ? <strong key={i}>{p.slice(2, -2)}</strong> : p
@@ -661,104 +558,105 @@ function AskCernlyPanel({ reportId, domain }) {
   const userHasMessaged = messages.some(m => m.role === 'user');
 
   return (
-    <div style={{ background: '#fff', border: '1px solid #e9eaf2', borderRadius: 17,
-      display: 'flex', flexDirection: 'column', height: PANEL_HEIGHT,
-      maxHeight: 570, minHeight: 440, overflow: 'hidden' }}>
+    <>
+      {/* Backdrop */}
+      <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: '#0d102040', zIndex: 49 }} />
 
-      {/* Header */}
-      <div style={{ padding: '15px 16px 13px', borderBottom: '1px solid #f0f1f8',
-        display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
-        <div style={{ width: 32, height: 32, borderRadius: 10, flexShrink: 0,
-          background: 'linear-gradient(135deg,#8a46f8,#3687fa)',
-          display: 'grid', placeItems: 'center' }}>
-          <span style={{ color: '#fff', fontSize: 14, lineHeight: 1 }}>✦</span>
-        </div>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontFamily: 'var(--font-manrope, Manrope, sans-serif)',
-            fontWeight: 800, fontSize: 13, color: '#151621' }}>Ask Cernly AI</div>
-          <div style={{ fontSize: 11, color: '#83899c' }}>Knows this report</div>
-        </div>
-        <span style={{ fontSize: 10, fontWeight: 800, padding: '3px 8px',
-          borderRadius: 6, background: '#f1edff', color: '#7948f6', flexShrink: 0 }}>AI</span>
-      </div>
+      {/* Drawer */}
+      <div style={{ position: 'fixed', top: 0, right: 0, bottom: 0, width: 380, maxWidth: '92vw',
+        background: '#fff', borderLeft: '1px solid #e9eaf2',
+        boxShadow: '-8px 0 40px #1b1d3215', zIndex: 50,
+        display: 'flex', flexDirection: 'column', animation: 'slideIn .22s ease' }}>
 
-      {/* Messages — bounded scroll container, never scrolls the page */}
-      <div ref={msgsRef} style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden',
-        padding: '14px 14px 8px', display: 'flex', flexDirection: 'column', gap: 10,
-        scrollBehavior: 'smooth',
-        /* Prevent scroll bleed to page */
-        overscrollBehavior: 'contain' }}>
-        {messages.map((m, i) => (
-          <div key={i} style={{ display: 'flex', justifyContent: m.role === 'user' ? 'flex-end' : 'flex-start' }}>
-            <div style={{
-              maxWidth: '86%', fontSize: 13, lineHeight: 1.65,
-              padding: '9px 13px',
-              borderRadius: m.role === 'user' ? '13px 13px 3px 13px' : '3px 13px 13px 13px',
-              background: m.role === 'user' ? '#7948f6' : '#f4f5fb',
-              color: m.role === 'user' ? '#fff' : '#151621',
-              wordBreak: 'break-word',
-            }}>
-              {renderContent(m.content)}
-            </div>
+        {/* Header */}
+        <div style={{ padding: '16px 18px', borderBottom: '1px solid #f0f1f8',
+          display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
+          <div style={{ width: 32, height: 32, borderRadius: 10, flexShrink: 0,
+            background: 'linear-gradient(135deg,#8a46f8,#3687fa)',
+            display: 'grid', placeItems: 'center' }}>
+            <span style={{ color: '#fff', fontSize: 14, lineHeight: 1 }}>✦</span>
           </div>
-        ))}
-        {loading && (
-          <div style={{ display: 'flex' }}>
-            <div style={{ background: '#f4f5fb', borderRadius: '3px 13px 13px 13px',
-              padding: '11px 14px', display: 'flex', gap: 5, alignItems: 'center' }}>
-              {[0,1,2].map(j => (
-                <div key={j} style={{ width: 6, height: 6, borderRadius: '50%', background: '#b0b4c8',
-                  animation: `bounce .9s ${j * .2}s infinite ease-in-out` }} />
-              ))}
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontFamily: 'var(--font-manrope, Manrope, sans-serif)',
+              fontWeight: 800, fontSize: 13, color: '#151621' }}>Ask Cernly AI</div>
+            <div style={{ fontSize: 11, color: '#83899c' }}>Knows this report</div>
+          </div>
+          <button onClick={onClose} style={{ border: 0, background: '#f4f5fb', color: '#83899c',
+            borderRadius: 8, width: 30, height: 30, display: 'grid', placeItems: 'center',
+            cursor: 'pointer', fontSize: 16, lineHeight: 1 }}>✕</button>
+        </div>
+
+        {/* Messages */}
+        <div ref={msgsRef} style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden',
+          padding: '14px 14px 8px', display: 'flex', flexDirection: 'column', gap: 10,
+          scrollBehavior: 'smooth', overscrollBehavior: 'contain' }}>
+          {messages.map((m, i) => (
+            <div key={i} style={{ display: 'flex', justifyContent: m.role === 'user' ? 'flex-end' : 'flex-start' }}>
+              <div style={{ maxWidth: '86%', fontSize: 13, lineHeight: 1.65, padding: '9px 13px',
+                borderRadius: m.role === 'user' ? '13px 13px 3px 13px' : '3px 13px 13px 13px',
+                background: m.role === 'user' ? '#7948f6' : '#f4f5fb',
+                color: m.role === 'user' ? '#fff' : '#151621', wordBreak: 'break-word' }}>
+                {renderContent(m.content)}
+              </div>
             </div>
+          ))}
+          {loading && (
+            <div style={{ display: 'flex' }}>
+              <div style={{ background: '#f4f5fb', borderRadius: '3px 13px 13px 13px',
+                padding: '11px 14px', display: 'flex', gap: 5, alignItems: 'center' }}>
+                {[0,1,2].map(j => (
+                  <div key={j} style={{ width: 6, height: 6, borderRadius: '50%', background: '#b0b4c8',
+                    animation: `bounce .9s ${j * .2}s infinite ease-in-out` }} />
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {!userHasMessaged && (
+          <div style={{ padding: '0 12px 10px', display: 'flex', flexDirection: 'column', gap: 5, flexShrink: 0 }}>
+            {SUGGESTED.map(s => (
+              <button key={s} onClick={() => send(s)}
+                style={{ background: '#f4f5fb', border: 0, borderRadius: 9, padding: '8px 12px',
+                  fontSize: 12, fontWeight: 600, color: '#5a5e75', cursor: 'pointer',
+                  textAlign: 'left', fontFamily: 'inherit', lineHeight: 1.3 }}>{s}</button>
+            ))}
           </div>
         )}
-      </div>
 
-      {/* Suggested prompts */}
-      {!userHasMessaged && (
-        <div style={{ padding: '0 12px 10px', display: 'flex', flexDirection: 'column', gap: 5, flexShrink: 0 }}>
-          {SUGGESTED.map(s => (
-            <button key={s} onClick={() => send(s)}
-              style={{ background: '#f4f5fb', border: 0, borderRadius: 9, padding: '8px 12px',
-                fontSize: 12, fontWeight: 600, color: '#5a5e75', cursor: 'pointer',
-                textAlign: 'left', fontFamily: 'inherit', lineHeight: 1.3 }}>
-              {s}
+        {/* Input */}
+        <div style={{ padding: '10px 12px 12px', borderTop: '1px solid #f0f1f8', flexShrink: 0 }}>
+          <form onSubmit={e => { e.preventDefault(); send(); }}
+            style={{ display: 'flex', gap: 8, alignItems: 'center',
+              background: '#f4f5fb', borderRadius: 12, padding: '8px 8px 8px 13px' }}>
+            <input value={input} onChange={e => setInput(e.target.value)}
+              placeholder="Ask anything about this report…"
+              autoFocus
+              style={{ flex: 1, background: 'none', border: 0, outline: 0, fontSize: 13,
+                color: '#151621', fontFamily: 'inherit', minWidth: 0 }} />
+            <button type="submit" disabled={loading || !input.trim()}
+              style={{ border: 0, background: input.trim() ? '#7948f6' : '#e9eaf2',
+                color: input.trim() ? '#fff' : '#b0b4c8', borderRadius: 9, width: 32, height: 32,
+                display: 'grid', placeItems: 'center', cursor: input.trim() ? 'pointer' : 'default',
+                transition: 'background .15s, color .15s', flexShrink: 0 }}>
+              <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                <line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>
+              </svg>
             </button>
-          ))}
+          </form>
         </div>
-      )}
 
-      {/* Input */}
-      <div style={{ padding: '10px 12px 12px', borderTop: '1px solid #f0f1f8', flexShrink: 0 }}>
-        <form onSubmit={e => { e.preventDefault(); send(); }}
-          style={{ display: 'flex', gap: 8, alignItems: 'center',
-            background: '#f4f5fb', borderRadius: 12, padding: '8px 8px 8px 13px' }}>
-          <input value={input} onChange={e => setInput(e.target.value)}
-            placeholder="Ask anything about this report…"
-            style={{ flex: 1, background: 'none', border: 0, outline: 0, fontSize: 13,
-              color: '#151621', fontFamily: 'inherit', minWidth: 0 }} />
-          <button type="submit" disabled={loading || !input.trim()}
-            style={{ border: 0, background: input.trim() ? '#7948f6' : '#e9eaf2',
-              color: input.trim() ? '#fff' : '#b0b4c8', borderRadius: 9, width: 32, height: 32,
-              display: 'grid', placeItems: 'center', cursor: input.trim() ? 'pointer' : 'default',
-              transition: 'background .15s, color .15s', flexShrink: 0 }}>
-            <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor"
-              strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-              <line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>
-            </svg>
-          </button>
-        </form>
+        <style>{`
+          @keyframes slideIn { from { transform: translateX(100%) } to { transform: translateX(0) } }
+          @keyframes bounce  { 0%,80%,100%{transform:translateY(0)} 40%{transform:translateY(-4px)} }
+        `}</style>
       </div>
-
-      <style>{`@keyframes bounce { 0%,80%,100%{transform:translateY(0)} 40%{transform:translateY(-4px)} }`}</style>
-    </div>
+    </>
   );
 }
 
-/* ═══════════════════════════════════════════════════════════════
-   Sidebar
-═══════════════════════════════════════════════════════════════ */
+/* ─── Sidebar ─── */
 function Sidebar({ isPro, displayName, userAvatar, sidebarOpen }) {
   const router = useRouter();
   const { signOut } = useClerk();
@@ -783,9 +681,7 @@ function Sidebar({ isPro, displayName, userAvatar, sidebarOpen }) {
           fontSize: 14, lineHeight: 1, fontWeight: 700 }}>✦</div>
         <div>
           <strong style={{ fontSize: 12, display: 'block' }}>Personal workspace</strong>
-          <small style={{ fontSize: 10, color: '#83899c', display: 'block', marginTop: 3 }}>
-            {isPro ? 'Pro plan' : 'Free plan'}
-          </small>
+          <small style={{ fontSize: 10, color: '#83899c', display: 'block', marginTop: 3 }}>{isPro ? 'Pro plan' : 'Free plan'}</small>
         </div>
       </div>
 
@@ -801,7 +697,8 @@ function Sidebar({ isPro, displayName, userAvatar, sidebarOpen }) {
           <Link key={label} href={href} style={{ color: '#707688', display: 'flex', alignItems: 'center',
             gap: 13, padding: '12px 14px', borderRadius: 10, fontWeight: 700, fontSize: 12,
             textDecoration: 'none' }}>
-            <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round"><path d={d}/></svg>
+            <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="currentColor"
+              strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round"><path d={d}/></svg>
             {label}
           </Link>
         ))}
@@ -817,7 +714,8 @@ function Sidebar({ isPro, displayName, userAvatar, sidebarOpen }) {
           <Link key={label} href={href} style={{ color: '#707688', display: 'flex', alignItems: 'center',
             gap: 13, padding: '12px 14px', borderRadius: 10, fontWeight: 700, fontSize: 12,
             textDecoration: 'none' }}>
-            <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round"><path d={d}/></svg>
+            <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="currentColor"
+              strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round"><path d={d}/></svg>
             {label}
           </Link>
         ))}
@@ -865,20 +763,23 @@ function Sidebar({ isPro, displayName, userAvatar, sidebarOpen }) {
   );
 }
 
-/* ═══════════════════════════════════════════════════════════════
+/* ════════════════════════════════════════════════════════════════
    Main component
-═══════════════════════════════════════════════════════════════ */
+════════════════════════════════════════════════════════════════ */
 export default function ReportClient({ isPro, userName, userAvatar }) {
   const { id } = useParams();
   const searchParams = useSearchParams();
   const sessionId = searchParams.get('session_id');
 
-  const [report, setReport] = useState(null);
-  const [status, setStatus] = useState('loading');
-  const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [copied, setCopied] = useState(false);
-  const [visionStatus, setVisionStatus] = useState('idle'); // idle | loading | done | error
+  const [report, setReport]               = useState(null);
+  const [status, setStatus]               = useState('loading');
+  const [sidebarOpen, setSidebarOpen]     = useState(false);
+  const [copied, setCopied]               = useState(false);
+  const [visionStatus, setVisionStatus]   = useState('idle');
   const [liveAnnotations, setLiveAnnotations] = useState(null);
+  const [activeTab, setActiveTab]         = useState('overview');
+  const [findingsFilter, setFindingsFilter] = useState(null); // null = All
+  const [drawerOpen, setDrawerOpen]       = useState(false);
 
   const displayName = userName || 'User';
 
@@ -891,32 +792,20 @@ export default function ReportClient({ isPro, userName, userAvatar }) {
         if (d.error) { setStatus('error'); return; }
         setReport(d);
         setStatus('ok');
-        // If annotations already exist (re-loaded report), mark done immediately
-        if (d.uxAnnotations) {
-          setVisionStatus('done');
-          return;
-        }
-        // Otherwise kick off the async vision analysis
-        {
-          setVisionStatus('loading');
-          fetch('/api/vision', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ reportId: d.id }),
+        if (d.uxAnnotations) { setVisionStatus('done'); return; }
+        setVisionStatus('loading');
+        fetch('/api/vision', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ reportId: d.id }),
+        })
+          .then(r => r.json())
+          .then(v => {
+            if (v.uxAnnotations) { setLiveAnnotations(v.uxAnnotations); setVisionStatus('done'); }
+            else { setVisionStatus('error'); }
           })
-            .then(r => r.json())
-            .then(v => {
-              if (v.uxAnnotations) {
-                setLiveAnnotations(v.uxAnnotations);
-                setVisionStatus('done');
-              } else {
-                setVisionStatus('error');
-              }
-            })
-            .catch(() => setVisionStatus('error'));
-        }
-      }
-      )
+          .catch(() => setVisionStatus('error'));
+      })
       .catch(() => setStatus('error'));
   }, [id, sessionId]);
 
@@ -928,24 +817,8 @@ export default function ReportClient({ isPro, userName, userAvatar }) {
     ? new Date(report.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
     : null;
 
-  const css = `
-    :root { color-scheme: light }
-    *, *::before, *::after { box-sizing: border-box }
-    @keyframes spin { to { transform: rotate(360deg) } }
-    @media (max-width: 940px) {
-      .rep-outer { grid-template-columns: 1fr !important }
-      .dash-sidebar { position: fixed; left: -260px; top: 0; bottom: 0; transition: left .25s; z-index: 20 }
-      .dash-sidebar.open { left: 0; box-shadow: 4px 0 24px #0d102040 }
-      .rep-cols { grid-template-columns: 1fr !important }
-    }
-    @media (max-width: 1100px) {
-      .rep-cols { grid-template-columns: minmax(0,1fr) 320px !important }
-    }
-  `;
-
   const allIssues = report?.issues || [];
 
-  // Top priorities for recommended fixes section
   const priorities = allIssues
     .filter(i => i.severity === 'critical' || i.severity === 'warning')
     .slice(0, 7);
@@ -953,49 +826,30 @@ export default function ReportClient({ isPro, userName, userAvatar }) {
   const getImpact = (issue, idx) =>
     issue.severity === 'critical' || idx < 2 ? 'high' : idx < 5 ? 'medium' : 'low';
 
-  // Build fallback discoveries from issue data when AI insights are missing
+  // Fallback discoveries
   const fallbackDiscoveries = (() => {
-    if (report?.aiInsights) return null; // use AI version
+    if (report?.aiInsights) return null;
     const scores = report?.scores || {};
     const groups = [
-      {
-        category: 'Performance',
-        match: i => i.area?.toLowerCase().includes('perf') || i.area?.toLowerCase().includes('best'),
-        score: scores.performance,
-      },
-      {
-        category: 'SEO',
-        match: i => i.area?.toLowerCase().includes('seo') || i.source === 'seo',
-        score: scores.seo,
-      },
-      {
-        category: 'Security',
-        match: i => i.area?.toLowerCase().includes('sec') || i.source === 'ssl',
-        score: scores.security,
-      },
-      {
-        category: 'Accessibility',
-        match: i => i.area?.toLowerCase().includes('access') || i.source === 'a11y',
-        score: scores.accessibility,
-      },
+      { category: 'Performance', match: i => i.area?.toLowerCase().includes('perf') || i.area?.toLowerCase().includes('best'), score: scores.performance },
+      { category: 'SEO',         match: i => i.area?.toLowerCase().includes('seo')  || i.source === 'seo',   score: scores.seo },
+      { category: 'Security',    match: i => i.area?.toLowerCase().includes('sec')  || i.source === 'ssl',   score: scores.security },
+      { category: 'Accessibility', match: i => i.area?.toLowerCase().includes('access') || i.source === 'a11y', score: scores.accessibility },
     ];
-
     const discoveries = [];
     for (const g of groups) {
-      if (g.score == null || g.score >= 90) continue; // skip passing categories
+      if (g.score == null || g.score >= 90) continue;
       const issues = allIssues.filter(i => (i.severity === 'critical' || i.severity === 'warning') && g.match(i)).slice(0, 3);
       if (issues.length === 0) continue;
       const conf = g.score < 50 ? 'high' : g.score < 70 ? 'medium' : 'low';
       discoveries.push({
         title: `${g.category} needs attention (score: ${g.score})`,
-        explanation: `${issues.length} issue${issues.length > 1 ? 's' : ''} detected that are affecting your ${g.category.toLowerCase()} score. Addressing these can meaningfully improve your ranking and user experience.`,
-        confidence: conf,
-        category: g.category,
+        explanation: `${issues.length} issue${issues.length > 1 ? 's' : ''} detected affecting your ${g.category.toLowerCase()} score. Addressing these can meaningfully improve ranking and user experience.`,
+        confidence: conf, category: g.category,
         actions: issues.map(i => ({
           title: i.message,
           detail: i.description || i.fix || 'Review and resolve this issue to improve your score.',
-          impact: i.severity === 'critical' ? 'high' : 'medium',
-          effort: 'medium',
+          impact: i.severity === 'critical' ? 'high' : 'medium', effort: 'medium',
         })),
       });
     }
@@ -1011,6 +865,245 @@ export default function ReportClient({ isPro, userName, userAvatar }) {
     { label: 'Accessibility', accent: '#efa642', match: i => i.area?.toLowerCase().includes('access') || i.source === 'a11y' },
   ];
 
+  // Navigate to Findings tab filtered to a category
+  function goToFindings(cat) {
+    setActiveTab('findings');
+    setFindingsFilter(cat);
+  }
+
+  const uxScore = report?.uxScore ?? (
+    report?.scores?.performance != null && report?.scores?.accessibility != null
+      ? Math.round((report.scores.performance + report.scores.accessibility) / 2)
+      : null
+  );
+
+  const css = `
+    :root { color-scheme: light }
+    *, *::before, *::after { box-sizing: border-box }
+    @keyframes spin { to { transform: rotate(360deg) } }
+    .score-tile:hover { box-shadow: 0 4px 16px #1b1d3212; transform: translateY(-1px) }
+    .tab-btn { transition: color .15s, border-color .15s }
+    @media (max-width: 940px) {
+      .rep-outer { grid-template-columns: 1fr !important }
+      .dash-sidebar { position: fixed; left: -260px; top: 0; bottom: 0; transition: left .25s; z-index: 20 }
+      .dash-sidebar.open { left: 0; box-shadow: 4px 0 24px #0d102040 }
+    }
+  `;
+
+  /* ── Tab content ── */
+  const renderOverview = () => (
+    <div>
+      {/* AI Brief — the centerpiece */}
+      {report.aiSummary && (
+        <div style={{ background: 'linear-gradient(145deg,#f6f1ff,#eef6ff 90%)',
+          border: '1px solid #e5deff', borderRadius: 17, padding: '22px 24px', marginBottom: 22 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+            <div style={{ width: 32, height: 32, borderRadius: 10,
+              background: 'linear-gradient(135deg,#8a46f8,#3687fa)',
+              display: 'grid', placeItems: 'center', flexShrink: 0 }}>
+              <span style={{ color: '#fff', fontSize: 15, lineHeight: 1 }}>✦</span>
+            </div>
+            <div>
+              <div style={{ fontFamily: 'var(--font-manrope, Manrope, sans-serif)',
+                fontWeight: 800, fontSize: 14, color: '#151621' }}>Cernly's analysis</div>
+              <div style={{ fontSize: 11, color: '#83899c', marginTop: 1 }}>AI-generated · based on audit data</div>
+            </div>
+          </div>
+          <p style={{ fontSize: 14, lineHeight: 1.8, color: '#2e3148', margin: '0 0 14px', fontWeight: 500 }}>
+            {report.aiSummary}
+          </p>
+          {/* Next action CTA */}
+          {priorities[0] && (
+            <div style={{ background: 'rgba(255,255,255,.7)', borderRadius: 11, padding: '12px 14px',
+              display: 'flex', alignItems: 'center', gap: 12 }}>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 10, fontWeight: 800, color: '#7948f6',
+                  letterSpacing: '.07em', marginBottom: 3 }}>RECOMMENDED NEXT ACTION</div>
+                <div style={{ fontSize: 13, fontWeight: 700, color: '#151621' }}>{priorities[0].message}</div>
+              </div>
+              <button onClick={() => setActiveTab('action')}
+                style={{ border: 0, background: '#7948f6', color: '#fff', borderRadius: 9,
+                  padding: '8px 14px', fontSize: 12, fontWeight: 700, cursor: 'pointer',
+                  fontFamily: 'inherit', whiteSpace: 'nowrap', flexShrink: 0 }}>
+                See action plan →
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Top discoveries — show first 3 */}
+      {Array.isArray(effectiveDiscoveries) && effectiveDiscoveries.length > 0 && (
+        <div style={{ marginBottom: 22 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 13 }}>
+            <span style={{ fontFamily: 'var(--font-manrope, Manrope, sans-serif)',
+              fontWeight: 800, fontSize: 13, color: '#151621' }}>Key discoveries</span>
+            {report.aiInsights && (
+              <span style={{ fontSize: 10, fontWeight: 700, color: '#7948f6',
+                background: '#f1edff', padding: '2px 8px', borderRadius: 5 }}>AI ANALYSIS</span>
+            )}
+            <span style={{ fontSize: 11, color: '#83899c', marginLeft: 'auto' }}>
+              {effectiveDiscoveries.length} finding{effectiveDiscoveries.length !== 1 ? 's' : ''}
+            </span>
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {effectiveDiscoveries.slice(0, 3).map((d, i) => <DiscoveryCard key={i} d={d} index={i} />)}
+          </div>
+          {effectiveDiscoveries.length > 3 && (
+            <button onClick={() => setActiveTab('findings')}
+              style={{ border: '1px solid #e9eaf2', background: '#fff', color: '#7948f6',
+                borderRadius: 10, padding: '10px 16px', width: '100%', marginTop: 8,
+                fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
+              View all {effectiveDiscoveries.length} findings in Findings →
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* Category breakdown mini-grid */}
+      <div style={{ background: '#fff', border: '1px solid #e9eaf2', borderRadius: 17,
+        padding: '18px 20px' }}>
+        <div style={{ fontFamily: 'var(--font-manrope, Manrope, sans-serif)',
+          fontWeight: 800, fontSize: 13, color: '#151621', marginBottom: 14 }}>Score breakdown</div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 10 }}>
+          {[
+            { label: 'Performance',   score: report.scores?.performance,   cat: 'Performance' },
+            { label: 'SEO',           score: report.scores?.seo,           cat: 'SEO' },
+            { label: 'Security',      score: report.scores?.security,      cat: 'Security' },
+            { label: 'Accessibility', score: report.scores?.accessibility, cat: 'Accessibility' },
+          ].map(c => {
+            const color = c.score == null ? '#83899c' : c.score >= 80 ? '#19b987' : c.score >= 60 ? '#efa642' : '#ef6473';
+            const crit  = allIssues.filter(i => i.severity === 'critical' &&
+              detailCategories.find(d => d.label === c.cat)?.match(i)).length;
+            return (
+              <button key={c.label} onClick={() => goToFindings(c.cat)}
+                style={{ background: '#f8f9fd', border: '1px solid #e9eaf2', borderRadius: 12,
+                  padding: '13px 14px', textAlign: 'left', cursor: 'pointer',
+                  fontFamily: 'inherit', transition: 'box-shadow .15s' }}>
+                <div style={{ fontFamily: 'var(--font-manrope, Manrope, sans-serif)',
+                  fontWeight: 800, fontSize: 28, lineHeight: 1, color, marginBottom: 4 }}>
+                  {c.score ?? '—'}
+                </div>
+                <div style={{ fontSize: 11, fontWeight: 700, color: '#83899c' }}>{c.label}</div>
+                {crit > 0 && (
+                  <div style={{ fontSize: 10, color: '#ef6473', fontWeight: 700, marginTop: 3 }}>
+                    {crit} critical
+                  </div>
+                )}
+                <div style={{ fontSize: 9, color: '#b0b4c8', marginTop: 3, fontWeight: 600 }}>View findings →</div>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+
+  const renderActionPlan = () => (
+    <div>
+      <div style={{ marginBottom: 16 }}>
+        <h2 style={{ fontFamily: 'var(--font-manrope, Manrope, sans-serif)', fontWeight: 800,
+          fontSize: 16, color: '#151621', margin: '0 0 4px', letterSpacing: '-.02em' }}>
+          Action plan
+        </h2>
+        <p style={{ fontSize: 13, color: '#83899c', margin: 0 }}>
+          {priorities.length} prioritized fixes · highest impact first.
+        </p>
+      </div>
+      {priorities.length === 0 ? (
+        <div style={{ background: '#edf9f4', borderRadius: 14, padding: '22px 20px', textAlign: 'center' }}>
+          <div style={{ fontSize: 28, marginBottom: 8 }}>🎉</div>
+          <div style={{ fontFamily: 'var(--font-manrope, Manrope, sans-serif)',
+            fontWeight: 800, fontSize: 15, color: '#151621', marginBottom: 6 }}>No critical issues found</div>
+          <div style={{ fontSize: 13, color: '#4b5168' }}>This site is in good shape. Keep monitoring for regressions.</div>
+        </div>
+      ) : (
+        priorities.map((issue, i) => (
+          <FixItem key={i} n={i + 1} title={issue.message}
+            detail={issue.description || issue.detail}
+            impact={getImpact(issue, i)} defaultOpen={i === 0} />
+        ))
+      )}
+    </div>
+  );
+
+  const renderFindings = () => {
+    const filters = ['All', 'Performance', 'SEO', 'Security', 'Accessibility', 'Visual'];
+    const active = findingsFilter || 'All';
+    return (
+      <div>
+        {/* Filter pills */}
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 18 }}>
+          {filters.map(f => (
+            <button key={f}
+              onClick={() => setFindingsFilter(f === 'All' ? null : f)}
+              style={{ border: `1.5px solid ${active === f ? '#7948f6' : '#e9eaf2'}`,
+                background: active === f ? '#7948f6' : '#fff',
+                color: active === f ? '#fff' : '#707688',
+                borderRadius: 9, padding: '6px 13px', fontSize: 12, fontWeight: 700,
+                cursor: 'pointer', fontFamily: 'inherit', transition: 'all .12s' }}>
+              {f}
+            </button>
+          ))}
+        </div>
+
+        {/* Visual Experience sub-view */}
+        {(active === 'All' || active === 'Visual') && (
+          <UxCard
+            uxScore={uxScore}
+            uxInsights={report.uxInsights}
+            uxAnnotations={liveAnnotations || report.uxAnnotations}
+            visionStatus={visionStatus}
+            siteType={report.siteType}
+            url={report.url}
+            issues={allIssues}
+          />
+        )}
+
+        {/* Technical categories */}
+        {active !== 'Visual' && detailCategories
+          .filter(c => active === 'All' || c.label === active)
+          .map(({ label, accent, match }) => (
+            <CategorySection key={label} label={label} accent={accent}
+              issues={allIssues.filter(match)} />
+          ))
+        }
+      </div>
+    );
+  };
+
+  const renderProgress = () => (
+    <div>
+      <div style={{ background: '#fff', border: '1px solid #e9eaf2', borderRadius: 17,
+        padding: '28px 24px', textAlign: 'center', marginBottom: 16 }}>
+        <div style={{ fontSize: 38, marginBottom: 14 }}>📈</div>
+        <div style={{ fontFamily: 'var(--font-manrope, Manrope, sans-serif)',
+          fontWeight: 800, fontSize: 16, color: '#151621', marginBottom: 8 }}>
+          Track your progress over time
+        </div>
+        <p style={{ fontSize: 13, color: '#83899c', margin: '0 auto 20px', maxWidth: 360, lineHeight: 1.65 }}>
+          Run regular scans to see how your scores change after each fix. Compare Core Web Vitals,
+          spot regressions, and get AI-generated explanations of what changed.
+        </p>
+        {!isPro ? (
+          <Link href="/dashboard?v=billing"
+            style={{ background: '#7948f6', color: '#fff', padding: '11px 24px',
+              borderRadius: 10, fontWeight: 700, fontSize: 13,
+              display: 'inline-block', textDecoration: 'none' }}>
+            Upgrade to Pro to unlock →
+          </Link>
+        ) : (
+          <Link href={`/dashboard?rescan=${encodeURIComponent(report?.url || '')}`}
+            style={{ background: '#7948f6', color: '#fff', padding: '11px 24px',
+              borderRadius: 10, fontWeight: 700, fontSize: 13,
+              display: 'inline-block', textDecoration: 'none' }}>
+            Run a new scan →
+          </Link>
+        )}
+      </div>
+    </div>
+  );
+
   return (
     <div style={{ background: '#f8f9fd', minHeight: '100vh', colorScheme: 'light',
       fontFamily: 'var(--font-dm-sans, DM Sans, sans-serif)', color: '#151621' }}>
@@ -1019,6 +1112,11 @@ export default function ReportClient({ isPro, userName, userAvatar }) {
       {sidebarOpen && (
         <div onClick={() => setSidebarOpen(false)}
           style={{ position: 'fixed', inset: 0, background: '#0d102060', zIndex: 19 }} />
+      )}
+
+      {/* Ask Cernly drawer — shown on demand */}
+      {drawerOpen && report && (
+        <AskCernlyDrawer reportId={id} domain={domain} onClose={() => setDrawerOpen(false)} />
       )}
 
       <div style={{ display: 'grid', gridTemplateColumns: '244px minmax(0,1fr)', minHeight: '100vh' }}
@@ -1038,6 +1136,17 @@ export default function ReportClient({ isPro, userName, userAvatar }) {
               <span style={{ color: '#151621', fontWeight: 700 }}>Website report</span>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
+              {/* Ask Cernly button */}
+              {report && (
+                <button onClick={() => setDrawerOpen(true)}
+                  style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 13px',
+                    background: 'linear-gradient(135deg,#8a46f8,#3687fa)', color: '#fff',
+                    border: 0, borderRadius: 9, fontWeight: 700, fontSize: 12,
+                    cursor: 'pointer', fontFamily: 'inherit' }}>
+                  <span style={{ fontSize: 12, lineHeight: 1 }}>✦</span>
+                  Ask Cernly
+                </button>
+              )}
               <button
                 onClick={() => {
                   navigator.clipboard?.writeText(window.location.href)
@@ -1061,7 +1170,7 @@ export default function ReportClient({ isPro, userName, userAvatar }) {
           </header>
 
           {/* Content */}
-          <div style={{ flex: 1, padding: '26px 26px 60px', overflowY: 'auto' }}>
+          <div style={{ flex: 1, padding: '26px 26px 60px' }}>
 
             {status === 'loading' && (
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 300 }}>
@@ -1092,7 +1201,7 @@ export default function ReportClient({ isPro, userName, userAvatar }) {
             {status === 'ok' && (
               <>
                 {/* Page header */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 18, flexWrap: 'wrap' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 6, flexWrap: 'wrap' }}>
                   <Link href="/dashboard" style={{ display: 'flex', alignItems: 'center', gap: 5,
                     fontSize: 12, fontWeight: 600, color: '#83899c', textDecoration: 'none' }}>
                     <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round"><path d="M20 12H4m7-7-7 7 7 7"/></svg>
@@ -1103,101 +1212,80 @@ export default function ReportClient({ isPro, userName, userAvatar }) {
                   {createdAt && <span style={{ fontSize: 11, color: '#b0b4c4' }}>· {createdAt}</span>}
                 </div>
 
-                <h1 style={{ fontFamily: 'var(--font-manrope, Manrope, sans-serif)', fontWeight: 800,
-                  fontSize: 'clamp(20px, 2.5vw, 28px)', letterSpacing: '-.05em',
-                  color: '#151621', margin: '0 0 22px' }}>{domain}</h1>
-
-                {/* Two-column layout */}
-                <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) 360px',
-                  gap: 20, alignItems: 'start' }} className="rep-cols">
-
-                  {/* ── Left: all content ── */}
-                  <div>
-                    {/* Score tiles */}
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5,1fr)', gap: 10, marginBottom: 20 }}>
-                      {[
-                        { label: 'Performance',   score: report.scores?.performance },
-                        { label: 'SEO',           score: report.scores?.seo },
-                        { label: 'Security',      score: report.scores?.security },
-                        { label: 'Accessibility', score: report.scores?.accessibility },
-                        { label: 'UX',            score: report.uxScore ?? (report.scores?.performance != null && report.scores?.accessibility != null ? Math.round((report.scores.performance + report.scores.accessibility) / 2) : null) },
-                      ].map(c => <ScoreTile key={c.label} score={c.score} label={c.label} />)}
-                    </div>
-
-                    {/* Cernly's take */}
-                    {report.aiSummary && (
-                      <div style={{ background: 'linear-gradient(145deg,#f6f1ff,#eef6ff 90%)',
-                        border: '1px solid #e5deff', borderRadius: 17, padding: '18px 20px', marginBottom: 20 }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-                          <span style={{ fontSize: 14 }}>✦</span>
+                {/* Domain + Score strip */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 20, flexWrap: 'wrap' }}>
+                  <h1 style={{ fontFamily: 'var(--font-manrope, Manrope, sans-serif)', fontWeight: 800,
+                    fontSize: 'clamp(20px, 2.5vw, 26px)', letterSpacing: '-.05em',
+                    color: '#151621', margin: 0, flex: 1, minWidth: 0 }}>{domain}</h1>
+                  {/* Inline score chips */}
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                    {[
+                      { label: 'Perf',  score: report.scores?.performance,   cat: 'Performance' },
+                      { label: 'SEO',   score: report.scores?.seo,           cat: 'SEO' },
+                      { label: 'Sec',   score: report.scores?.security,      cat: 'Security' },
+                      { label: 'A11y',  score: report.scores?.accessibility, cat: 'Accessibility' },
+                      { label: 'UX',    score: uxScore,                      cat: null },
+                    ].map(c => {
+                      const color = c.score == null ? '#83899c' : c.score >= 80 ? '#19b987' : c.score >= 60 ? '#efa642' : '#ef6473';
+                      return (
+                        <button key={c.label}
+                          onClick={c.cat ? () => goToFindings(c.cat) : undefined}
+                          style={{ display: 'flex', alignItems: 'baseline', gap: 5,
+                            background: '#fff', border: '1px solid #e9eaf2', borderRadius: 10,
+                            padding: '6px 12px', cursor: c.cat ? 'pointer' : 'default',
+                            fontFamily: 'inherit', transition: 'box-shadow .12s' }}>
                           <span style={{ fontFamily: 'var(--font-manrope, Manrope, sans-serif)',
-                            fontWeight: 800, fontSize: 13, color: '#7948f6' }}>Cernly's take</span>
-                        </div>
-                        <p style={{ fontSize: 13, lineHeight: 1.75, color: '#4b5168', margin: 0 }}>
-                          {report.aiSummary}
-                        </p>
-                      </div>
-                    )}
-
-                    {/* Cernly Discoveries — AI-grouped insights (or issue-derived fallback) */}
-                    <DiscoveriesSection discoveries={effectiveDiscoveries} isAi={!!report.aiInsights} />
-
-                    {/* UX Analysis — always show (screenshot at minimum) */}
-                    <UxCard
-                      uxScore={report.uxScore ?? (report.scores?.performance != null && report.scores?.accessibility != null ? Math.round((report.scores.performance + report.scores.accessibility) / 2) : null)}
-                      uxInsights={report.uxInsights}
-                      uxAnnotations={liveAnnotations || report.uxAnnotations}
-                      visionStatus={visionStatus}
-                      siteType={report.siteType}
-                      url={report.url}
-                      issues={allIssues}
-                    />
-
-                    {/* Recommended fixes */}
-                    {priorities.length > 0 && (
-                      <div style={{ background: '#fff', border: '1px solid #e9eaf2', borderRadius: 17,
-                        padding: '18px 20px', marginBottom: 20 }}>
-                        <div style={{ marginBottom: 14 }}>
-                          <h2 style={{ fontFamily: 'var(--font-manrope, Manrope, sans-serif)', fontWeight: 800,
-                            fontSize: 14, color: '#151621', margin: '0 0 2px', letterSpacing: '-.02em' }}>
-                            Your recommended fixes
-                          </h2>
-                          <p style={{ fontSize: 12, color: '#83899c', margin: 0 }}>Highest impact first.</p>
-                        </div>
-                        {priorities.map((issue, i) => (
-                          <FixItem
-                            key={i}
-                            n={i + 1}
-                            title={issue.message}
-                            detail={issue.description || issue.detail}
-                            impact={getImpact(issue, i)}
-                            defaultOpen={i === 0}
-                          />
-                        ))}
-                      </div>
-                    )}
-
-                    {/* Detailed findings */}
-                    <div>
-                      <h2 style={{ fontFamily: 'var(--font-manrope, Manrope, sans-serif)', fontWeight: 800,
-                        fontSize: 14, letterSpacing: '-.02em', color: '#151621', margin: '0 0 12px' }}>
-                        Detailed findings
-                      </h2>
-                      {detailCategories.map(({ label, accent, match }) => (
-                        <CategorySection
-                          key={label} label={label} accent={accent}
-                          issues={allIssues.filter(match)}
-                        />
-                      ))}
-                    </div>
+                            fontWeight: 800, fontSize: 20, color, lineHeight: 1 }}>
+                            {c.score ?? '—'}
+                          </span>
+                          <span style={{ fontSize: 10, fontWeight: 700, color: '#83899c' }}>{c.label}</span>
+                        </button>
+                      );
+                    })}
                   </div>
-
-                  {/* ── Right: AI panel — sticky, self-contained scroll ── */}
-                  <div style={{ position: 'sticky', top: 78 }}>
-                    <AskCernlyPanel reportId={id} domain={domain} />
-                  </div>
-
                 </div>
+
+                {/* Tabs */}
+                <div style={{ display: 'flex', gap: 0, borderBottom: '1px solid #e9eaf2', marginBottom: 24 }}>
+                  {[
+                    { key: 'overview',  label: 'Overview',    icon: 'M3 3h7v7H3zm11 0h7v7h-7zM3 14h7v7H3zm11 0h7v7h-7z' },
+                    { key: 'action',    label: 'Action plan', icon: 'm5 12 4 4 10-10' },
+                    { key: 'findings',  label: 'Findings',    icon: 'M9 11l3 3L22 4' + 'M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11' },
+                    { key: 'progress',  label: 'Progress',    icon: 'M3 20h18M6 16v-6m6 6V4m6 12v-9' },
+                  ].map(t => {
+                    const isActive = activeTab === t.key;
+                    return (
+                      <button key={t.key}
+                        onClick={() => { setActiveTab(t.key); if (t.key !== 'findings') setFindingsFilter(null); }}
+                        className="tab-btn"
+                        style={{ display: 'flex', alignItems: 'center', gap: 6,
+                          padding: '11px 18px 11px', marginBottom: -1,
+                          background: 'none', border: 0, fontFamily: 'inherit',
+                          fontSize: 13, fontWeight: isActive ? 800 : 600,
+                          color: isActive ? '#7948f6' : '#83899c',
+                          borderBottom: isActive ? '2px solid #7948f6' : '2px solid transparent',
+                          cursor: 'pointer' }}>
+                        <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                          strokeWidth={isActive ? 2.2 : 1.8} strokeLinecap="round" strokeLinejoin="round">
+                          <path d={t.icon}/>
+                        </svg>
+                        {t.label}
+                        {t.key === 'action' && priorities.length > 0 && (
+                          <span style={{ fontSize: 10, fontWeight: 800, background: '#ef6473',
+                            color: '#fff', borderRadius: 20, padding: '1px 6px', lineHeight: 1.5 }}>
+                            {priorities.filter(p => p.severity === 'critical').length || priorities.length}
+                          </span>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* Tab content */}
+                {activeTab === 'overview' && renderOverview()}
+                {activeTab === 'action'   && renderActionPlan()}
+                {activeTab === 'findings' && renderFindings()}
+                {activeTab === 'progress' && renderProgress()}
               </>
             )}
           </div>
