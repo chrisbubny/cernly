@@ -1,6 +1,3 @@
-'use client' // needed for scan form interactivity — split into server/client below
-
-// This is actually a server component that passes data to a client shell
 import { auth, currentUser } from '@clerk/nextjs/server';
 import { redirect } from 'next/navigation';
 import { getUserReports, getUserSubscription } from '@/lib/store';
