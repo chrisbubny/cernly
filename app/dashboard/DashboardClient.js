@@ -57,9 +57,19 @@ function ReportRow({ report }) {
   );
 }
 
+const SCAN_STAGES = [
+  { label: 'Checking performance…',   pct: 18 },
+  { label: 'Auditing SEO signals…',   pct: 36 },
+  { label: 'Testing security…',       pct: 54 },
+  { label: 'Scanning accessibility…', pct: 72 },
+  { label: 'Running AI analysis…',    pct: 88 },
+  { label: 'Finalizing report…',      pct: 96 },
+];
+
 export default function DashboardClient({ reports, isPro, userName, userAvatar, userEmail }) {
   const [url, setUrl] = useState('');
   const [scanning, setScanning] = useState(false);
+  const [scanStage, setScanStage] = useState(0);
   const [profileOpen, setProfileOpen] = useState(false);
   const router = useRouter();
   const { signOut } = useClerk();
@@ -70,12 +80,22 @@ export default function DashboardClient({ reports, isPro, userName, userAvatar, 
     let target = url.trim();
     if (!/^https?:\/\//i.test(target)) target = 'https://' + target;
     setScanning(true);
+    setScanStage(0);
+
+    // Cycle through stages while fetch is in flight
+    let stageIdx = 0;
+    const stageTimer = setInterval(() => {
+      stageIdx = Math.min(stageIdx + 1, SCAN_STAGES.length - 1);
+      setScanStage(stageIdx);
+    }, 3200);
+
     try {
       const res = await fetch('/api/analyze', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ url: target }),
       });
+      clearInterval(stageTimer);
       const data = await res.json();
       if (data.reportId) {
         router.push(`/report/${data.reportId}`);
@@ -84,21 +104,66 @@ export default function DashboardClient({ reports, isPro, userName, userAvatar, 
         setScanning(false);
       }
     } catch {
+      clearInterval(stageTimer);
       alert('Scan failed. Please try again.');
       setScanning(false);
     }
   }
 
+  const stage = SCAN_STAGES[scanStage];
+
   return (
     <div style={{ background: '#fafaff', minHeight: '100vh', fontFamily: 'DM Sans, sans-serif' }}>
+
+      {/* Analyzing overlay — matches homepage experience */}
+      {scanning && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 200,
+          background: 'rgba(17,19,29,0.72)', backdropFilter: 'blur(8px)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div style={{ background: '#fff', borderRadius: 20, padding: '40px 48px',
+            textAlign: 'center', maxWidth: 360, width: '90%',
+            boxShadow: '0 24px 64px rgba(0,0,0,0.18)' }}>
+            {/* Animated logo mark */}
+            <div style={{ width: 56, height: 56, borderRadius: 16,
+              background: 'linear-gradient(135deg,#8a46f8,#258de9)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              margin: '0 auto 20px', animation: 'pulse 1.4s ease-in-out infinite' }}>
+              <Search size={24} color="#fff" />
+            </div>
+            <h3 style={{ fontFamily: 'Manrope,sans-serif', fontWeight: 800,
+              fontSize: 18, letterSpacing: '-0.04em', color: '#11131d', margin: '0 0 8px' }}>
+              Analyzing your website
+            </h3>
+            <p style={{ fontSize: 13, color: '#9099b2', margin: '0 0 24px', lineHeight: 1.5 }}>
+              {stage.label}
+            </p>
+            {/* Progress bar */}
+            <div style={{ background: '#f0f0f5', borderRadius: 100, height: 6, overflow: 'hidden' }}>
+              <div style={{ height: '100%', borderRadius: 100,
+                background: 'linear-gradient(90deg,#8a46f8,#258de9)',
+                width: `${stage.pct}%`, transition: 'width 0.8s ease' }} />
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Nav */}
       <header style={{ position: 'sticky', top: 0, zIndex: 50, background: '#ffffffed',
         backdropFilter: 'blur(16px)', borderBottom: '1px solid #f0f0f4' }}>
         <div style={{ maxWidth: 860, margin: '0 auto', padding: '0 24px',
           height: 64, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <Link href="/" style={{ fontFamily: 'Manrope, sans-serif', fontWeight: 800,
-            fontSize: 18, letterSpacing: '-0.06em', color: '#11131d', textDecoration: 'none' }}>
+          {/* Logo — matches homepage brand mark */}
+          <Link href="/" style={{ display: 'inline-flex', alignItems: 'center', gap: 10,
+            fontFamily: 'Manrope, sans-serif', fontWeight: 800, fontSize: 20,
+            letterSpacing: '-0.07em', color: '#11131d', textDecoration: 'none' }}>
+            <svg width="22" height="22" viewBox="0 0 32 32" fill="none">
+              <rect width="32" height="32" rx="9" fill="url(#dg)"/>
+              <circle cx="14" cy="14" r="6" stroke="#fff" strokeWidth="2.2" fill="none"/>
+              <line x1="18.8" y1="18.8" x2="25" y2="25" stroke="#fff" strokeWidth="2.4" strokeLinecap="round"/>
+              <defs><linearGradient id="dg" x1="0" y1="0" x2="32" y2="32" gradientUnits="userSpaceOnUse">
+                <stop stopColor="#8a46f8"/><stop offset="1" stopColor="#258de9"/>
+              </linearGradient></defs>
+            </svg>
             cernly<span style={{ fontWeight: 600 }}>.ai</span>
           </Link>
 
@@ -192,7 +257,7 @@ export default function DashboardClient({ reports, isPro, userName, userAvatar, 
               style={{ width: '100%', padding: '12px 14px 12px 36px', fontSize: 14,
                 border: '1.5px solid #e8eaf1', borderRadius: 11, outline: 'none',
                 fontFamily: 'DM Sans, sans-serif', background: '#fff',
-                boxSizing: 'border-box' }}
+                color: '#11131d', boxSizing: 'border-box' }}
             />
           </div>
           <button type="submit" disabled={scanning}
@@ -236,6 +301,10 @@ export default function DashboardClient({ reports, isPro, userName, userAvatar, 
 
       <style>{`
         .report-row:hover { background: #fafaff !important; }
+        @keyframes pulse {
+          0%, 100% { transform: scale(1); opacity: 1; }
+          50% { transform: scale(1.08); opacity: 0.85; }
+        }
       `}</style>
     </div>
   );

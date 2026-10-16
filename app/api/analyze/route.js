@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { auth } from '@clerk/nextjs/server';
 import { runLighthouse } from '@/lib/analyzers/lighthouse';
 import { runSeoAudit } from '@/lib/analyzers/seo';
 import { runSslCheck } from '@/lib/analyzers/ssl';
@@ -10,6 +11,10 @@ import { saveReport } from '@/lib/store';
 // Body: { url: string }
 // Returns: { scores, aiSummary, issues, reportId }
 export async function POST(request) {
+  // Get auth'd user if signed in (optional — anonymous scans allowed)
+  let userId = null;
+  try { const { userId: uid } = await auth(); userId = uid || null; } catch {}
+
   let body = {};
   try { body = await request.json(); } catch {}
 
@@ -57,7 +62,7 @@ export async function POST(request) {
   // Merge UX score into scores
   if (uxScore !== null && uxScore !== undefined) scores.ux = uxScore;
 
-  // Save report for potential purchase
+  // Save report for potential purchase (attach userId so it appears in scan history)
   const reportId = await saveReport({
     url,
     scores,
@@ -69,6 +74,7 @@ export async function POST(request) {
     seoData,
     sslData,
     a11yData,
+    userId,
   }).catch(() => null);
 
   return NextResponse.json({

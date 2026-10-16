@@ -53,6 +53,8 @@ export async function GET(request) {
         expires_at   TIMESTAMPTZ
       )
     `);
+    // Safe migration: add user_id column if table was created before it existed
+    await client.query(`ALTER TABLE reports ADD COLUMN IF NOT EXISTS user_id TEXT`);
     await client.query(`CREATE INDEX IF NOT EXISTS idx_reports_user    ON reports(user_id) WHERE user_id IS NOT NULL`);
     await client.query(`CREATE INDEX IF NOT EXISTS idx_reports_created ON reports(created_at)`);
     await client.query(`
