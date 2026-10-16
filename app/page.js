@@ -2,6 +2,7 @@
 
 import { useRouter } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
+import NavAuthButton from './components/NavAuthButton';
 
 const CSS = `
 :root {
@@ -777,7 +778,7 @@ export default function Home() {
             <a href="#pricing">Pricing</a>
           </nav>
           <div className="navright">
-            <a href="/sign-in">Sign In</a>
+            <NavAuthButton />
             <a className="btn btn-dark" href="#hero-form" onClick={e => { e.preventDefault(); document.getElementById('hero-form')?.querySelector('input')?.focus(); document.getElementById('hero-form')?.scrollIntoView({behavior:'smooth',block:'center'}); }}>Try it free <svg className="icon sm"><use href="#i-arrow"/></svg></a>
           </div>
         </div>
