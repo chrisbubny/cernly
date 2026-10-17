@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import Link from 'next/link';
 import { useParams, useSearchParams, useRouter } from 'next/navigation';
 import { useClerk } from '@clerk/nextjs';
@@ -1149,85 +1149,64 @@ export default function ReportClient({ isPro, userName, userAvatar }) {
   const renderOverview = () => (
     <div>
       {/* Cernly AI Advisor panel */}
-      <div style={{ background: 'linear-gradient(145deg,#f6f1ff,#eef6ff 90%)',
-        border: '1px solid #e5deff', borderRadius: 17, padding: '20px 22px', marginBottom: 22 }}>
-        {/* Header */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
-          <div style={{ width: 36, height: 36, borderRadius: 11,
+      <div style={{ background: 'linear-gradient(145deg,#f7f4ff,#eef6ff 90%)',
+        border: '1px solid #e5deff', borderRadius: 16, padding: '16px 18px', marginBottom: 22 }}>
+
+        {/* Header row */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginBottom: 10 }}>
+          <div style={{ width: 30, height: 30, borderRadius: 9,
             background: 'linear-gradient(135deg,#8a46f8,#3687fa)',
             display: 'grid', placeItems: 'center', flexShrink: 0 }}>
-            <span style={{ color: '#fff', fontSize: 16, lineHeight: 1 }}>✦</span>
+            <span style={{ color: '#fff', fontSize: 13, lineHeight: 1 }}>✦</span>
           </div>
-          <div style={{ flex: 1 }}>
+          <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontFamily: 'var(--font-manrope, Manrope, sans-serif)',
-              fontWeight: 800, fontSize: 14, color: '#151621' }}>Cernly AI Advisor</div>
-            <div style={{ fontSize: 11, color: '#83899c', marginTop: 1 }}>
-              {report.url ? `Analyzing ${new URL(report.url).hostname}` : 'AI-generated · based on audit data'}
-            </div>
+              fontWeight: 800, fontSize: 13, color: '#151621' }}>Cernly AI Advisor</div>
+            <div style={{ fontSize: 11, color: '#83899c' }}>AI-generated · based on audit data</div>
           </div>
-          <span style={{ fontSize: 10, fontWeight: 800, background: '#7948f620', color: '#7948f6',
-            borderRadius: 6, padding: '3px 8px', letterSpacing: '.06em' }}>AI ADVISOR</span>
+          <button onClick={() => { setDrawerContext(null); setDrawerOpen(true); }}
+            style={{ border: '1.5px solid #c9bcf7', background: '#fff', color: '#7948f6',
+              borderRadius: 8, padding: '5px 12px', fontSize: 11, fontWeight: 700,
+              cursor: 'pointer', fontFamily: 'inherit', display: 'flex', alignItems: 'center',
+              gap: 5, whiteSpace: 'nowrap', flexShrink: 0 }}>
+            <span style={{ fontSize: 12 }}>✦</span> Ask Cernly
+          </button>
         </div>
 
         {/* Brief */}
         {report.aiSummary && (
-          <p style={{ fontSize: 14, lineHeight: 1.8, color: '#2e3148', margin: '0 0 16px', fontWeight: 500 }}>
+          <p style={{ fontSize: 13, lineHeight: 1.75, color: '#2e3148', margin: '0 0 12px' }}>
             {report.aiSummary}
           </p>
         )}
 
-        {/* Primary CTA */}
-        <button
-          onClick={() => { setDrawerContext(null); setDrawerOpen(true); }}
-          style={{ width: '100%', border: 0, background: '#7948f6', color: '#fff',
-            borderRadius: 11, padding: '13px 18px', fontSize: 13, fontWeight: 700,
-            cursor: 'pointer', fontFamily: 'inherit', display: 'flex', alignItems: 'center',
-            justifyContent: 'center', gap: 8, marginBottom: 12, letterSpacing: '-.01em' }}>
-          <span style={{ fontSize: 15 }}>✦</span>
-          Show me how to fix it
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M5 12h14m-7-7 7 7-7 7"/></svg>
-        </button>
-
-        {/* Suggested question chips */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6, marginBottom: 14 }}>
-          {[
-            'Why is my site slow?',
-            'Which fixes matter most?',
-            'Explain my SEO issues',
-            'What can I fix myself?',
-          ].map(q => (
+        {/* Suggested chips + input row */}
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
+          {['Why is my site slow?', 'Which fixes matter most?', 'Explain my SEO issues', 'What can I fix myself?'].map(q => (
             <button key={q}
-              onClick={() => { setDrawerContext(null); setDrawerOpen(true); setTimeout(() => {}, 300); }}
-              style={{ background: 'rgba(255,255,255,.75)', border: '1px solid #e5deff',
-                borderRadius: 9, padding: '8px 11px', fontSize: 12, fontWeight: 600,
-                color: '#4b4e6a', cursor: 'pointer', fontFamily: 'inherit',
-                textAlign: 'left', lineHeight: 1.35 }}>
+              onClick={() => { setDrawerContext(null); setDrawerOpen(true); }}
+              style={{ background: 'rgba(255,255,255,.8)', border: '1px solid #ddd6f9',
+                borderRadius: 20, padding: '4px 11px', fontSize: 11, fontWeight: 600,
+                color: '#5b4b8a', cursor: 'pointer', fontFamily: 'inherit', lineHeight: 1.4 }}>
               {q}
             </button>
           ))}
         </div>
 
         {/* Inline input */}
-        <div style={{ background: 'rgba(255,255,255,.8)', borderRadius: 11,
-          border: '1px solid #ddd9f7', display: 'flex', alignItems: 'center',
-          padding: '8px 8px 8px 13px', gap: 8 }}>
+        <div style={{ background: '#fff', borderRadius: 10, border: '1px solid #ddd6f9',
+          display: 'flex', alignItems: 'center', padding: '7px 7px 7px 12px', gap: 7 }}>
           <input
-            placeholder="Ask Cernly anything about this report…"
-            onKeyDown={e => {
-              if (e.key === 'Enter' && e.target.value.trim()) {
-                setDrawerContext(null);
-                setDrawerOpen(true);
-              }
-            }}
+            placeholder="Ask anything about this report…"
+            onKeyDown={e => { if (e.key === 'Enter' && e.target.value.trim()) { setDrawerContext(null); setDrawerOpen(true); } }}
             style={{ flex: 1, background: 'none', border: 0, outline: 0,
-              fontSize: 13, color: '#151621', fontFamily: 'inherit', minWidth: 0 }}
+              fontSize: 12, color: '#151621', fontFamily: 'inherit', minWidth: 0 }}
           />
-          <button
-            onClick={() => { setDrawerContext(null); setDrawerOpen(true); }}
-            style={{ border: 0, background: '#7948f6', color: '#fff', borderRadius: 8,
-              width: 30, height: 30, display: 'grid', placeItems: 'center',
+          <button onClick={() => { setDrawerContext(null); setDrawerOpen(true); }}
+            style={{ border: 0, background: '#7948f6', color: '#fff', borderRadius: 7,
+              width: 26, height: 26, display: 'grid', placeItems: 'center',
               cursor: 'pointer', flexShrink: 0 }}>
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
           </button>
         </div>
       </div>

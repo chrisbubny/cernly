@@ -121,18 +121,23 @@ p { line-height: 1.7 }
   height: 76px;
   display: flex;
   align-items: center;
-  gap: 48px
+  justify-content: space-between;
+  position: relative
 }
 .brand {
   display: inline-flex;
   align-items: center;
   gap: 10px;
   font: 800 22px Manrope, sans-serif;
-  letter-spacing: -.07em
+  letter-spacing: -.07em;
+  flex-shrink: 0
 }
 .brand svg { width: 25px; height: 25px }
 .brand span { font-weight: 600 }
 .navlinks {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
   display: flex;
   gap: 32px;
   font-size: 13px;
@@ -141,12 +146,12 @@ p { line-height: 1.7 }
 }
 .navlinks a:hover { color: var(--violet) }
 .navright {
-  margin-left: auto;
   display: flex;
   align-items: center;
   gap: 20px;
   font-size: 13px;
-  font-weight: 700
+  font-weight: 700;
+  flex-shrink: 0
 }
 .hero {
   position: relative;
