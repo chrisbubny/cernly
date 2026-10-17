@@ -1081,37 +1081,140 @@ export default function ReportClient({ isPro, userName, userAvatar }) {
     );
   };
 
-  const renderProgress = () => (
-    <div>
-      <div style={{ background: '#fff', border: '1px solid #e9eaf2', borderRadius: 17,
-        padding: '28px 24px', textAlign: 'center', marginBottom: 16 }}>
-        <div style={{ fontSize: 38, marginBottom: 14 }}>📈</div>
-        <div style={{ fontFamily: 'var(--font-manrope, Manrope, sans-serif)',
-          fontWeight: 800, fontSize: 16, color: '#151621', marginBottom: 8 }}>
-          Track your progress over time
+  const renderProgress = () => {
+    const metrics = [
+      { label: 'Overall scores', detail: 'Performance, SEO, Security, Accessibility, UX', icon: 'M3 20h18M6 16v-6m6 6V4m6 12v-9' },
+      { label: 'Core Web Vitals', detail: 'LCP, CLS, INP — as measured by Lighthouse', icon: 'M13 2L3 14h9l-1 8 10-12h-9l1-8z' },
+      { label: 'Resolved findings', detail: 'Issues fixed since your previous scan', icon: 'm5 12 4 4 10-10' },
+      { label: 'Regressions', detail: 'New issues that appeared after a change', icon: 'M12 9v4m0 4h.01M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z' },
+      { label: 'AI change summaries', detail: 'Plain-English explanation of what changed and why', icon: 'M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z' },
+    ];
+    return (
+      <div>
+        {/* Timeline preview */}
+        <div style={{ background: '#fff', border: '1px solid #e9eaf2', borderRadius: 17,
+          padding: '28px 28px 24px', marginBottom: 16 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20 }}>
+            <div style={{ width: 36, height: 36, borderRadius: 10, background: '#f0ebff',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#7948f6" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M3 20h18M6 16v-6m6 6V4m6 12v-9"/>
+              </svg>
+            </div>
+            <div>
+              <div style={{ fontFamily: 'var(--font-manrope, Manrope, sans-serif)',
+                fontWeight: 800, fontSize: 15, color: '#151621' }}>Track your progress over time</div>
+              <div style={{ fontSize: 12, color: '#83899c', marginTop: 2 }}>Compare scans, spot regressions, and measure the impact of every fix</div>
+            </div>
+          </div>
+
+          {/* Scan timeline illustration */}
+          <div style={{ background: '#f8f9fd', borderRadius: 12, padding: '18px 20px', marginBottom: 20, position: 'relative', overflow: 'hidden' }}>
+            <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
+              background: 'linear-gradient(135deg, #f0ebff22, transparent 60%)', pointerEvents: 'none' }} />
+            {/* Timeline row */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 0, marginBottom: 16, position: 'relative' }}>
+              {/* Scan A */}
+              <div style={{ textAlign: 'center', flex: 1 }}>
+                <div style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
+                  <div style={{ width: 32, height: 32, borderRadius: '50%', background: '#efa64222',
+                    border: '2px solid #efa642', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#efa642" strokeWidth="2.5" strokeLinecap="round">
+                      <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
+                    </svg>
+                  </div>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: '#efa642' }}>Scan 1</div>
+                  <div style={{ fontSize: 10, color: '#b0b4c8' }}>Today</div>
+                </div>
+              </div>
+              {/* Connector */}
+              <div style={{ flex: 2, height: 2, background: 'linear-gradient(90deg, #efa642, #7948f6)',
+                borderRadius: 2, position: 'relative', top: -12 }}>
+                <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%,-50%)',
+                  background: '#f8f9fd', padding: '0 6px', fontSize: 10, color: '#83899c', fontWeight: 600, whiteSpace: 'nowrap' }}>
+                  after fixes →
+                </div>
+              </div>
+              {/* Scan B */}
+              <div style={{ textAlign: 'center', flex: 1 }}>
+                <div style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
+                  <div style={{ width: 32, height: 32, borderRadius: '50%', background: '#7948f622',
+                    border: '2px dashed #7948f6', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#7948f6" strokeWidth="2.5" strokeLinecap="round">
+                      <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
+                    </svg>
+                  </div>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: '#7948f6' }}>Scan 2</div>
+                  <div style={{ fontSize: 10, color: '#b0b4c8' }}>After fixes</div>
+                </div>
+              </div>
+            </div>
+            {/* Sample diff */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+              {[
+                { label: 'Performance', before: 52, after: 71, color: '#efa642', afterColor: '#19b987' },
+                { label: 'SEO', before: 78, after: 91, color: '#efa642', afterColor: '#19b987' },
+              ].map(m => (
+                <div key={m.label} style={{ background: '#fff', borderRadius: 8, padding: '10px 12px',
+                  border: '1px solid #e9eaf2', display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <div style={{ fontSize: 11, color: '#83899c', fontWeight: 600, flex: 1 }}>{m.label}</div>
+                  <div style={{ fontSize: 13, fontWeight: 800, color: m.color }}>{m.before}</div>
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#b0b4c8" strokeWidth="2.5" strokeLinecap="round">
+                    <path d="M5 12h14m-7-7 7 7-7 7"/>
+                  </svg>
+                  <div style={{ fontSize: 13, fontWeight: 800, color: m.afterColor }}>{m.after}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* What gets tracked */}
+          <div style={{ marginBottom: 22 }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: '#83899c', letterSpacing: '.06em',
+              textTransform: 'uppercase', marginBottom: 10 }}>What Cernly compares between scans</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {metrics.map(m => (
+                <div key={m.label} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <div style={{ width: 28, height: 28, borderRadius: 8, background: '#f0ebff',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#7948f6" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d={m.icon}/>
+                    </svg>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: '#151621' }}>{m.label}</div>
+                    <div style={{ fontSize: 11, color: '#83899c' }}>{m.detail}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {!isPro ? (
+            <Link href="/dashboard?v=billing"
+              style={{ background: '#7948f6', color: '#fff', padding: '12px 22px',
+                borderRadius: 10, fontWeight: 700, fontSize: 13,
+                display: 'inline-flex', alignItems: 'center', gap: 8, textDecoration: 'none' }}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
+              </svg>
+              Unlock progress tracking with Pro
+            </Link>
+          ) : (
+            <Link href={`/dashboard?rescan=${encodeURIComponent(report?.url || '')}`}
+              style={{ background: '#7948f6', color: '#fff', padding: '12px 22px',
+                borderRadius: 10, fontWeight: 700, fontSize: 13,
+                display: 'inline-flex', alignItems: 'center', gap: 8, textDecoration: 'none' }}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 12a9 9 0 1 1-6.219-8.56"/>
+              </svg>
+              Run a new scan
+            </Link>
+          )}
         </div>
-        <p style={{ fontSize: 13, color: '#83899c', margin: '0 auto 20px', maxWidth: 360, lineHeight: 1.65 }}>
-          Run regular scans to see how your scores change after each fix. Compare Core Web Vitals,
-          spot regressions, and get AI-generated explanations of what changed.
-        </p>
-        {!isPro ? (
-          <Link href="/dashboard?v=billing"
-            style={{ background: '#7948f6', color: '#fff', padding: '11px 24px',
-              borderRadius: 10, fontWeight: 700, fontSize: 13,
-              display: 'inline-block', textDecoration: 'none' }}>
-            Upgrade to Pro to unlock →
-          </Link>
-        ) : (
-          <Link href={`/dashboard?rescan=${encodeURIComponent(report?.url || '')}`}
-            style={{ background: '#7948f6', color: '#fff', padding: '11px 24px',
-              borderRadius: 10, fontWeight: 700, fontSize: 13,
-              display: 'inline-block', textDecoration: 'none' }}>
-            Run a new scan →
-          </Link>
-        )}
       </div>
-    </div>
-  );
+    );
+  };
 
   return (
     <div style={{ background: '#f8f9fd', minHeight: '100vh', colorScheme: 'light',

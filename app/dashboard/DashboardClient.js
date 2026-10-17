@@ -573,14 +573,6 @@ export default function DashboardClient({ reports: initialReports = [], isPro, u
                       Here&apos;s where your websites stand—and what to improve next.
                     </p>
                   </div>
-                  <button onClick={() => document.getElementById('scan-url')?.focus()}
-                    style={{ display: 'inline-flex', alignItems: 'center', gap: 9,
-                      color: 'white', background: 'linear-gradient(110deg,#8650fa,#3c8df6)',
-                      boxShadow: '0 8px 20px #6651e526', border: 0, borderRadius: 10,
-                      padding: '12px 16px', fontSize: 12, fontWeight: 800, cursor: 'pointer',
-                      fontFamily: 'inherit', whiteSpace: 'nowrap' }}>
-                    <Icons.Plus /> New website scan
-                  </button>
                 </div>
 
                 {/* Two-column layout */}
