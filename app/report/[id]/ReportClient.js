@@ -270,15 +270,21 @@ function UxCard({ uxScore, uxInsights, uxAnnotations, visionStatus, siteType, ur
   const screenshotUrl = uxAnnotations?.screenshotUrl || null;
   const observations  = uxInsights?.observations || [];
 
+  // Broad fallback: any critical/warning issue that has a fixable description
+  // Prioritise a11y + UX-signal keywords, then fill with other critical issues
   const uxIssues = !uxInsights && !annotations.length && Array.isArray(issues)
-    ? issues.filter(i =>
-        (i.severity === 'critical' || i.severity === 'warning') &&
-        (i.source === 'a11y' ||
-         i.message?.toLowerCase().includes('contrast') ||
-         i.message?.toLowerCase().includes('label') ||
-         i.message?.toLowerCase().includes('button') ||
-         i.message?.toLowerCase().includes('tap'))
-      ).slice(0, 5)
+    ? (() => {
+        const isUxSignal = i =>
+          i.source === 'a11y' ||
+          /contrast|label|aria|button|tap|touch|mobile|image|logo|hero|cta|click|link|nav|menu|font|text|color|layout|scroll|form|input|heading|h1|h2|lcp|cls|fid|inp|render|visual|ux/i.test(i.message || '');
+        const priority = issues.filter(i =>
+          (i.severity === 'critical' || i.severity === 'warning') && isUxSignal(i));
+        const rest = issues.filter(i =>
+          i.severity === 'critical' && !isUxSignal(i));
+        return [...priority, ...rest]
+          .filter((i, idx, arr) => arr.findIndex(x => x.message === i.message) === idx)
+          .slice(0, 6);
+      })()
     : [];
 
   return (
@@ -477,20 +483,35 @@ function UxCard({ uxScore, uxInsights, uxAnnotations, visionStatus, siteType, ur
 
       {!uxInsights && !annotations.length && uxIssues.length > 0 && (
         <div style={{ marginBottom: 16 }}>
-          <div style={{ fontSize: 11, fontWeight: 800, color: '#83899c',
-            letterSpacing: '.07em', marginBottom: 10 }}>UX-RELATED ISSUES</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+            <div style={{ fontSize: 11, fontWeight: 800, color: '#83899c', letterSpacing: '.07em' }}>
+              WHAT TO FIX
+            </div>
+            <div style={{ fontSize: 10, color: '#b0b4c8', fontWeight: 600 }}>
+              — from audit findings
+            </div>
+          </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
-            {uxIssues.map((issue, i) => (
-              <div key={i} style={{ background: '#f8f9fd', borderRadius: 10, padding: '10px 14px',
-                borderLeft: `3px solid ${issue.severity === 'critical' ? '#ef6473' : '#efa642'}` }}>
-                <div style={{ fontSize: 13, fontWeight: 600, color: '#151621', marginBottom: 3 }}>{issue.message}</div>
-                {(issue.description || issue.fix) && (
-                  <div style={{ fontSize: 12, color: '#4b5168', lineHeight: 1.6 }}>
-                    {(issue.description || issue.fix || '').replace(/\[([^\]]+)\]\([^)]+\)/g, '$1').slice(0, 160)}
+            {uxIssues.map((issue, i) => {
+              const crit = issue.severity === 'critical';
+              const dotColor = crit ? '#ef6473' : '#efa642';
+              return (
+                <div key={i} style={{ background: '#fff', borderRadius: 10, padding: '11px 14px',
+                  border: '1px solid #e9eaf2',
+                  borderLeft: `3px solid ${dotColor}` }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: issue.description || issue.fix ? 4 : 0 }}>
+                    <div style={{ fontSize: 9, fontWeight: 800, color: dotColor,
+                      letterSpacing: '.06em', flexShrink: 0 }}>{crit ? 'CRITICAL' : 'WARNING'}</div>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: '#151621', lineHeight: 1.3 }}>{issue.message}</div>
                   </div>
-                )}
-              </div>
-            ))}
+                  {(issue.description || issue.fix) && (
+                    <div style={{ fontSize: 12, color: '#4b5168', lineHeight: 1.6, paddingLeft: 0 }}>
+                      {(issue.description || issue.fix || '').replace(/\[([^\]]+)\]\([^)]+\)/g, '$1').slice(0, 200)}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
         </div>
       )}
@@ -501,7 +522,7 @@ function UxCard({ uxScore, uxInsights, uxAnnotations, visionStatus, siteType, ur
             {score >= 80
               ? 'UX looks solid. Keep an eye on load times and touch target sizes as you ship new content.'
               : score >= 60
-              ? 'There are UX wins available. Improving load speed and ensuring all interactive elements are keyboard-accessible will have the biggest impact.'
+              ? 'There are UX opportunities here. Improving load speed and ensuring all interactive elements are keyboard-accessible will have the biggest impact.'
               : 'A UX score this low typically signals friction — slow loads, missing form labels, or hard-to-tap elements on mobile. Prioritize performance and accessibility fixes first.'}
           </div>
         </div>
