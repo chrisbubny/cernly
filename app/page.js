@@ -788,9 +788,9 @@ export default function Home() {
         <section className="hero">
           <div className="wrap hero-grid">
             <div className="hero-copy">
-              <span className="eyebrow">Your website, explained</span>
+              <span className="eyebrow">Your AI website advisor</span>
               <h1>See what&apos;s holding your website <span className="gradient-text">back.</span></h1>
-              <p>Enter a URL. Get a clear score on performance, SEO, security, and accessibility—free, no account needed. Unlock a full audit for up to 50 pages with AI-written fixes.</p>
+              <p>Cernly finds what&apos;s slowing your site down, hurting your visibility, or frustrating visitors—then shows you what to fix first.</p>
               <form className="urlform" id="hero-form" onSubmit={handleFormSubmit}>
                 <svg className="icon"><use href="#i-link"/></svg>
                 <input
@@ -802,7 +802,7 @@ export default function Home() {
                   onChange={e => setUrlInput(e.target.value)}
                 />
                 <button className="btn btn-gradient" type="submit">
-                  Scan my site <svg className="icon sm"><use href="#i-arrow"/></svg>
+                  Analyze my site <svg className="icon sm"><use href="#i-arrow"/></svg>
                 </button>
               </form>
             </div>
@@ -843,13 +843,13 @@ export default function Home() {
             <div>
               <span className="eyebrow">Clarity over complexity</span>
               <h2>Less noise.<br/>More <span style={{color:"#a992ff"}}>clarity.</span></h2>
-              <p>Most website tools hand you scores and leave you to figure out the rest. Cernly connects the dots—so you know what matters, why it matters, and what to fix first.</p>
+              <p>Website audits shouldn&apos;t leave you with more questions than answers. Cernly cuts through the technical noise to show you what matters, why it matters, and what to do next.</p>
             </div>
             <div className="value-items">
-              <div className="value-item"><svg className="icon lg"><use href="#i-gauge"/></svg><strong>See the full picture</strong><small>Understand speed, visibility, accessibility, and security together.</small></div>
-              <div className="value-item"><svg className="icon lg"><use href="#i-spark"/></svg><strong>Get clear direction</strong><small>Turn technical findings into an understandable action plan.</small></div>
-              <div className="value-item"><svg className="icon lg"><use href="#i-list"/></svg><strong>Know what comes first</strong><small>Focus on high-impact fixes instead of chasing every warning.</small></div>
-              <div className="value-item"><svg className="icon lg"><use href="#i-clock"/></svg><strong>Save your time</strong><small>Get useful answers without juggling a stack of separate tools.</small></div>
+              <div className="value-item"><svg className="icon lg"><use href="#i-gauge"/></svg><strong>See the full picture</strong><small>Performance, SEO, security, accessibility, and UX—all in one place.</small></div>
+              <div className="value-item"><svg className="icon lg"><use href="#i-spark"/></svg><strong>Get answers, not just scores</strong><small>AI connects the findings and explains what they mean for your website.</small></div>
+              <div className="value-item"><svg className="icon lg"><use href="#i-list"/></svg><strong>Know what to fix first</strong><small>A prioritized action plan helps you focus on the changes that matter.</small></div>
+              <div className="value-item"><svg className="icon lg"><use href="#i-clock"/></svg><strong>See what&apos;s improving</strong><small>Compare scans and track your progress over time with Pro.</small></div>
             </div>
           </div>
         </section>
@@ -875,7 +875,7 @@ export default function Home() {
               <div className="feature-stack">
                 <article className="feature-panel" id="performance">
                   <span className="eyebrow">01 / Performance</span>
-                  <h3>Make every second count.</h3>
+                  <h3>Know what&apos;s slowing you down.</h3>
                   <p>See how quickly your site loads, what slows it down, and which improvements are worth your time.</p>
                   <div className="feature-art">
                     <div className="art-window">
@@ -899,7 +899,7 @@ export default function Home() {
 
                 <article className="feature-panel" id="seo">
                   <span className="eyebrow">02 / Search visibility</span>
-                  <h3>Help people find you.</h3>
+                  <h3>Get found by the right people.</h3>
                   <p>Spot overlooked SEO fundamentals, from metadata and headings to indexability and structured content.</p>
                   <div className="feature-art">
                     <div className="art-window">
@@ -915,7 +915,7 @@ export default function Home() {
 
                 <article className="feature-panel" id="accessibility">
                   <span className="eyebrow">03 / Accessibility</span>
-                  <h3>Make your site work for more people.</h3>
+                  <h3>Make your website easier for everyone.</h3>
                   <p>Catch common barriers in images, forms, contrast, and navigation—and get practical suggestions to address them.</p>
                   <div className="feature-art">
                     <div className="art-window">
@@ -930,7 +930,7 @@ export default function Home() {
 
                 <article className="feature-panel" id="security">
                   <span className="eyebrow">04 / Security</span>
-                  <h3>Find the gaps you can&apos;t see.</h3>
+                  <h3>Spot risks before they become problems.</h3>
                   <p>Check the public-facing security basics, including HTTPS configuration and response headers, without becoming a security expert.</p>
                   <div className="feature-art">
                     <div className="art-window">
@@ -945,8 +945,8 @@ export default function Home() {
 
                 <article className="feature-panel" id="action">
                   <span className="eyebrow">05 / Your next steps</span>
-                  <h3>Finally, a report that tells you what to do.</h3>
-                  <p>Cernly translates audit results into prioritized, plain-English recommendations you can use yourself or share with your team.</p>
+                  <h3>Know exactly what to fix next.</h3>
+                  <p>Cernly turns technical findings into a prioritized action plan, with clear explanations and practical steps to help you make improvements.</p>
                   <div className="feature-art">
                     <div className="art-window">
                       <div className="art-heading">
@@ -970,8 +970,8 @@ export default function Home() {
           <div className="wrap pathway-grid">
             <div className="pathway-intro">
               <span className="eyebrow">Two ways to get started</span>
-              <h2>Scan any site.<br/>Or connect WordPress.</h2>
-              <p>Whether you want a quick snapshot or ongoing visibility, start in the way that works for you.</p>
+              <h2>Scan any website.<br/>Go further with WordPress.</h2>
+              <p>Start with a URL—no installation required. Running WordPress? Connect your site for a more integrated experience.</p>
             </div>
             <div className="path-card">
               <div className="icon-tile"><svg className="icon lg"><use href="#i-search"/></svg></div>
@@ -1024,9 +1024,9 @@ export default function Home() {
             </div>
             <div className="price-grid">
               <div className="plan">
-                <span className="tag">Get a snapshot</span>
+                <span className="tag">Free</span>
                 <div className="price">$0</div>
-                <p>Understand your website at a glance.</p>
+                <p>See where your site stands.</p>
                 <ul>
                   <li><svg className="icon"><use href="#i-check"/></svg>Core website scores</li>
                   <li><svg className="icon"><use href="#i-check"/></svg>Top findings preview</li>
@@ -1035,9 +1035,9 @@ export default function Home() {
                 <a className="btn btn-light" href="#top">Start free <svg className="icon sm"><use href="#i-arrow"/></svg></a>
               </div>
               <div className="plan featured">
-                <span className="tag">Most useful for one-time audits</span>
+                <span className="tag">Full Report</span>
                 <div className="price">$4.99</div>
-                <p>One-time report · No subscription</p>
+                <p>Know what to fix and why.</p>
                 <ul>
                   <li><svg className="icon"><use href="#i-check"/></svg>Deep audit up to 50 pages</li>
                   <li><svg className="icon"><use href="#i-check"/></svg>UX &amp; conversion analysis</li>
@@ -1047,9 +1047,9 @@ export default function Home() {
                 <a className="btn btn-gradient" href="#top">Unlock full report <svg className="icon sm"><use href="#i-arrow"/></svg></a>
               </div>
               <div className="plan">
-                <span className="tag">For ongoing improvement</span>
-                <div className="price">Pro <small>coming later</small></div>
-                <p>More visibility as your website grows.</p>
+                <span className="tag">Pro</span>
+                <div className="price">Pro <small>coming soon</small></div>
+                <p>Keep getting better.</p>
                 <ul>
                   <li><svg className="icon"><use href="#i-check"/></svg>Repeat audits</li>
                   <li><svg className="icon"><use href="#i-check"/></svg>History and trends</li>
@@ -1067,8 +1067,8 @@ export default function Home() {
           <div className="wrap">
             <span className="eyebrow">Your next step starts here</span>
             <h2>A better website starts with <span className="gradient-text">knowing what to fix.</span></h2>
-            <p>Less second-guessing. More meaningful improvements.</p>
-            <a className="btn btn-gradient" href="#top">Scan your website <svg className="icon sm"><use href="#i-arrow"/></svg></a>
+            <p>Stop guessing what&apos;s holding your website back. Get a clear picture of what&apos;s wrong, what matters most, and where to start.</p>
+            <a className="btn btn-gradient" href="#top">Analyze my website <svg className="icon sm"><use href="#i-arrow"/></svg></a>
           </div>
         </section>
       </main>
