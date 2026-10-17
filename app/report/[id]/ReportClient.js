@@ -780,6 +780,41 @@ export default function ReportClient({ isPro, userName, userAvatar }) {
   const [activeTab, setActiveTab]         = useState('overview');
   const [findingsFilter, setFindingsFilter] = useState(null); // null = All
   const [drawerOpen, setDrawerOpen]       = useState(false);
+  const [rescanStatus, setRescanStatus]   = useState('idle'); // idle|scanning|error
+  const [rescanStage, setRescanStage]     = useState(0);
+
+  const RESCAN_STAGES = [
+    'Checking performance…', 'Auditing SEO signals…', 'Testing security…',
+    'Scanning accessibility…', 'Running AI analysis…', 'Finalizing report…',
+  ];
+
+  async function handleRescan() {
+    if (!report?.url) return;
+    setRescanStatus('scanning');
+    setRescanStage(0);
+    let idx = 0;
+    const timer = setInterval(() => {
+      idx = Math.min(idx + 1, RESCAN_STAGES.length - 1);
+      setRescanStage(idx);
+    }, 3200);
+    try {
+      const res = await fetch('/api/analyze', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: report.url }),
+      });
+      clearInterval(timer);
+      const data = await res.json();
+      if (data.reportId) {
+        router.push(`/report/${data.reportId}`);
+      } else {
+        setRescanStatus('error');
+      }
+    } catch {
+      clearInterval(timer);
+      setRescanStatus('error');
+    }
+  }
 
   const displayName = userName || 'User';
 
@@ -1200,16 +1235,40 @@ export default function ReportClient({ isPro, userName, userAvatar }) {
               </svg>
               Unlock progress tracking with Pro
             </Link>
+          ) : rescanStatus === 'scanning' ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <div style={{ width: 18, height: 18, borderRadius: '50%', border: '2.5px solid #7948f6',
+                  borderTopColor: 'transparent', animation: 'spin 0.8s linear infinite', flexShrink: 0 }} />
+                <div style={{ fontSize: 13, fontWeight: 600, color: '#151621' }}>
+                  {RESCAN_STAGES[rescanStage]}
+                </div>
+              </div>
+              <div style={{ height: 4, background: '#e9eaf2', borderRadius: 4, overflow: 'hidden' }}>
+                <div style={{ height: '100%', background: 'linear-gradient(90deg,#7948f6,#3687fa)',
+                  borderRadius: 4, width: `${18 + (rescanStage / (RESCAN_STAGES.length - 1)) * 78}%`,
+                  transition: 'width 0.6s ease' }} />
+              </div>
+              <div style={{ fontSize: 11, color: '#83899c' }}>New report will open when the scan completes</div>
+            </div>
           ) : (
-            <Link href={`/dashboard?rescan=${encodeURIComponent(report?.url || '')}`}
-              style={{ background: '#7948f6', color: '#fff', padding: '12px 22px',
-                borderRadius: 10, fontWeight: 700, fontSize: 13,
-                display: 'inline-flex', alignItems: 'center', gap: 8, textDecoration: 'none' }}>
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M21 12a9 9 0 1 1-6.219-8.56"/>
-              </svg>
-              Run a new scan
-            </Link>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <button onClick={handleRescan}
+                style={{ background: '#7948f6', color: '#fff', padding: '12px 22px',
+                  borderRadius: 10, fontWeight: 700, fontSize: 13, border: 0, cursor: 'pointer',
+                  display: 'inline-flex', alignItems: 'center', gap: 8, fontFamily: 'inherit' }}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M21 12a9 9 0 1 1-6.219-8.56"/><path d="M15 8h6V2"/>
+                </svg>
+                Scan again
+              </button>
+              {rescanStatus === 'error' && (
+                <div style={{ fontSize: 12, color: '#ef6473' }}>Scan failed — please try again.</div>
+              )}
+              <div style={{ fontSize: 11, color: '#83899c' }}>
+                Rescans {report?.url} and opens a new report when complete.
+              </div>
+            </div>
           )}
         </div>
       </div>
