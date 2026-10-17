@@ -156,29 +156,177 @@ function CategorySection({ label, accent, issues }) {
 }
 
 /* ─── Fix item accordion ─── */
-function FixItem({ n, title, detail, impact, defaultOpen }) {
-  const [open, setOpen] = useState(!!defaultOpen);
+/* Generic fix steps derived from issue area */
+function getFixSteps(issue) {
+  const area = (issue.area || issue.source || '').toLowerCase();
+  if (area.includes('perf') || area.includes('lcp') || area.includes('cls')) return [
+    'Open Google PageSpeed Insights for your URL and review the Opportunities section.',
+    'Identify the largest image or render-blocking resource listed.',
+    'Compress images with WebP format and add `loading="lazy"` to below-fold images.',
+    'Defer non-critical JavaScript using `<script defer>` or dynamic imports.',
+    'Click Verify fix below to re-run Lighthouse and confirm the improvement.',
+  ];
+  if (area.includes('seo')) return [
+    'Open your page\'s HTML and locate the `<head>` section.',
+    'Ensure a unique `<title>` (50–60 chars) and `<meta name="description">` (120–160 chars) are present.',
+    'Check that your primary keyword appears in the first heading and first paragraph.',
+    'Validate your sitemap is submitted in Google Search Console.',
+    'Click Verify fix to re-run the SEO audit.',
+  ];
+  if (area.includes('sec') || area.includes('ssl')) return [
+    'Log into your hosting control panel and navigate to SSL/TLS settings.',
+    'Install or renew your SSL certificate — most hosts offer free Let\'s Encrypt certs.',
+    'Set up an HTTP → HTTPS redirect to ensure all traffic is secure.',
+    'Add security headers (CSP, X-Frame-Options, HSTS) via your server config or a plugin.',
+    'Click Verify fix to re-run the security checks.',
+  ];
+  if (area.includes('access') || area.includes('a11y')) return [
+    'Open your browser DevTools and run the Accessibility audit (Lighthouse).',
+    'Ensure all images have descriptive `alt` text; decorative images use `alt=""`.',
+    'Check that all interactive elements are keyboard-navigable with visible focus styles.',
+    'Verify color contrast ratios meet WCAG AA (4.5:1 for normal text).',
+    'Click Verify fix to re-run the accessibility audit.',
+  ];
+  return [
+    'Review the finding detail above to understand the specific issue.',
+    'Check the affected page or resource in your browser\'s DevTools.',
+    'Make the relevant code or configuration change in your site.',
+    'Test the fix locally before deploying.',
+    'Click Verify fix to confirm the issue is resolved.',
+  ];
+}
+
+/* Status config for fix lifecycle */
+const FIX_STATUSES = {
+  open:        { label: 'Open',           color: '#efa642', bg: '#fff8ee' },
+  in_progress: { label: 'In progress',    color: '#3687fa', bg: '#eef5ff' },
+  verify:      { label: 'Ready to verify',color: '#7948f6', bg: '#f1edff' },
+  fixed:       { label: 'Verified fixed', color: '#19b987', bg: '#edf9f4' },
+  still_open:  { label: 'Still detected', color: '#ef6473', bg: '#fff0f2' },
+  dismissed:   { label: 'Dismissed',      color: '#b0b4c8', bg: '#f4f5fb' },
+};
+
+const EVIDENCE_SOURCE = {
+  perf: 'Lighthouse', performance: 'Lighthouse', lcp: 'Lighthouse', cls: 'Lighthouse',
+  seo: 'SEO audit', ssl: 'SSL check', a11y: 'Accessibility audit',
+};
+
+function FixCard({ issue, n, impact, onAskCernly, onVerify }) {
+  const [status, setStatus] = useState('open');
+  const [guideOpen, setGuideOpen] = useState(false);
   const cleanDesc = (str) => str?.replace(/\[([^\]]+)\]\([^)]+\)/g, '$1') || '';
+  const st = FIX_STATUSES[status] || FIX_STATUSES.open;
+  const evidenceKey = (issue.source || issue.area || '').toLowerCase();
+  const evidence = EVIDENCE_SOURCE[evidenceKey] || (issue.source ? issue.source.toUpperCase() : 'Audit');
+  const catColor = { Performance: '#7948f6', SEO: '#3687fa', Security: '#19b987', Accessibility: '#efa642' };
+  const cat = issue.area?.replace(/best.practices?/i, 'Performance') || 'Performance';
+  const accent = catColor[cat] || '#7948f6';
+
   return (
-    <div style={{ border: '1px solid #e9eaf2', borderRadius: 13, overflow: 'hidden', marginBottom: 10 }}>
-      <button onClick={() => setOpen(o => !o)}
-        style={{ width: '100%', background: open ? '#fafaff' : '#fff', border: 0,
-          padding: '14px 16px', display: 'flex', alignItems: 'center', gap: 12,
-          cursor: 'pointer', textAlign: 'left', fontFamily: 'inherit' }}>
-        <div style={{ width: 30, height: 30, borderRadius: 9, background: '#f1edff',
-          color: '#7948f6', display: 'grid', placeItems: 'center',
-          fontSize: 12, fontWeight: 800, flexShrink: 0 }}>
-          {String(n).padStart(2, '0')}
+    <div style={{ background: '#fff', border: '1px solid #e9eaf2', borderRadius: 16,
+      marginBottom: 12, overflow: 'hidden', boxShadow: '0 2px 10px #1b1d3208' }}>
+
+      {/* Card header */}
+      <div style={{ padding: '16px 18px 14px' }}>
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, marginBottom: 14 }}>
+          {/* Icon */}
+          <div style={{ width: 34, height: 34, borderRadius: 10, background: accent + '18',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginTop: 1 }}>
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke={accent} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
+            </svg>
+          </div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 14, fontWeight: 700, color: '#151621',
+              fontFamily: 'var(--font-manrope, Manrope, sans-serif)', lineHeight: 1.35, marginBottom: 5 }}>
+              {issue.message}
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+              <span style={{ fontSize: 11, color: '#83899c', fontWeight: 600 }}>{cat}</span>
+              <span style={{ color: '#d4d6e0', fontSize: 11 }}>·</span>
+              <span style={{ fontSize: 11, color: '#83899c' }}>Detected this scan</span>
+            </div>
+          </div>
+          <ImpactBadge level={impact} />
         </div>
-        <span style={{ flex: 1, fontSize: 13, fontWeight: 700, color: '#151621', minWidth: 0 }}>{title}</span>
-        <ImpactBadge level={impact} />
-        <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="#b0b4c8" strokeWidth={2.5} strokeLinecap="round" style={{ flexShrink: 0, marginLeft: 6 }}>
-          <path d={open ? 'm18 15-6-6-6 6' : 'm6 9 6 6 6-6'}/>
-        </svg>
-      </button>
-      {open && detail && (
-        <div style={{ padding: '12px 16px 16px', borderTop: '1px solid #f0f0f8' }}>
-          <p style={{ fontSize: 13, color: '#4b5168', lineHeight: 1.75, margin: 0 }}>{cleanDesc(detail)}</p>
+
+        {/* Meta row */}
+        <div style={{ display: 'flex', gap: 24, marginBottom: 14 }}>
+          <div>
+            <div style={{ fontSize: 10, fontWeight: 800, color: '#b0b4c8', letterSpacing: '.07em', marginBottom: 3 }}>PRIORITY</div>
+            <div style={{ fontSize: 13, fontWeight: 700, color: '#151621', textTransform: 'capitalize' }}>{impact}</div>
+          </div>
+          <div>
+            <div style={{ fontSize: 10, fontWeight: 800, color: '#b0b4c8', letterSpacing: '.07em', marginBottom: 3 }}>STATUS</div>
+            <button onClick={() => {
+              const cycle = { open: 'in_progress', in_progress: 'verify', verify: 'open', fixed: 'open', still_open: 'open', dismissed: 'open' };
+              setStatus(s => cycle[s] || 'open');
+            }} style={{ border: 0, background: st.bg, color: st.color, borderRadius: 7,
+              padding: '3px 10px', fontSize: 11, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
+              {st.label}
+            </button>
+          </div>
+          <div>
+            <div style={{ fontSize: 10, fontWeight: 800, color: '#b0b4c8', letterSpacing: '.07em', marginBottom: 3 }}>EVIDENCE</div>
+            <div style={{ fontSize: 13, fontWeight: 600, color: '#4b5168' }}>{evidence}</div>
+          </div>
+        </div>
+
+        {/* Why it matters */}
+        {(issue.description || issue.detail) && (
+          <div style={{ background: '#f8f9fd', borderRadius: 10, padding: '12px 14px', marginBottom: 14 }}>
+            <div style={{ fontSize: 10, fontWeight: 800, color: '#83899c',
+              letterSpacing: '.07em', marginBottom: 6 }}>WHY IT MATTERS</div>
+            <p style={{ fontSize: 13, color: '#4b5168', lineHeight: 1.75, margin: 0 }}>
+              {cleanDesc(issue.description || issue.detail)}
+            </p>
+          </div>
+        )}
+
+        {/* Action buttons */}
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <button onClick={() => setGuideOpen(g => !g)}
+            style={{ display: 'flex', alignItems: 'center', gap: 6, border: '1.5px solid #e9eaf2',
+              background: '#fff', color: '#151621', borderRadius: 9, padding: '8px 14px',
+              fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
+            {guideOpen ? 'Hide fix guide' : 'View fix guide'}
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+              <path d={guideOpen ? 'm18 15-6-6-6 6' : 'm5 12h14m-7-7 7 7-7 7'}/>
+            </svg>
+          </button>
+          <button onClick={() => onAskCernly(issue)}
+            style={{ display: 'flex', alignItems: 'center', gap: 6, border: '1.5px solid #ede9ff',
+              background: '#f7f4ff', color: '#7948f6', borderRadius: 9, padding: '8px 14px',
+              fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
+            <span style={{ fontSize: 13 }}>✦</span> Ask Cernly
+          </button>
+          <button onClick={() => onVerify(issue)}
+            style={{ display: 'flex', alignItems: 'center', gap: 6, border: '1.5px solid #e9eaf2',
+              background: status === 'verify' ? '#f1edff' : '#fff',
+              color: status === 'verify' ? '#7948f6' : '#4b5168',
+              borderRadius: 9, padding: '8px 14px',
+              fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+              <path d="M21 12a9 9 0 1 1-9-9M9 12l2 2 4-4"/>
+            </svg>
+            Verify fix
+          </button>
+        </div>
+      </div>
+
+      {/* Fix guide panel */}
+      {guideOpen && (
+        <div style={{ borderTop: '1px solid #f0f1f8', padding: '14px 18px', background: '#fafbff' }}>
+          <div style={{ fontSize: 10, fontWeight: 800, color: '#7948f6',
+            letterSpacing: '.07em', marginBottom: 10 }}>FIX GUIDE</div>
+          <ol style={{ margin: 0, padding: '0 0 0 18px', display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {getFixSteps(issue).map((step, i) => (
+              <li key={i} style={{ fontSize: 13, color: '#4b5168', lineHeight: 1.65 }}>{step}</li>
+            ))}
+          </ol>
+          <div style={{ marginTop: 12, fontSize: 11, color: '#b0b4c8', fontStyle: 'italic' }}>
+            Steps are based on the detected issue. Run Verify fix after making changes to confirm.
+          </div>
         </div>
       )}
     </div>
@@ -532,16 +680,19 @@ function UxCard({ uxScore, uxInsights, uxAnnotations, visionStatus, siteType, ur
 }
 
 /* ─── Ask Cernly drawer ─── */
-function AskCernlyDrawer({ reportId, domain, onClose }) {
-  const [messages, setMessages] = useState([{
-    role: 'assistant',
-    content: `Hi! I've analyzed **${domain || 'this site'}** and I'm ready to help. Ask me what a finding means, how to fix it, or where to start.`,
-  }]);
+function AskCernlyDrawer({ reportId, domain, onClose, initialContext }) {
+  const openingMsg = initialContext
+    ? `I'm looking at the **${initialContext.category || 'finding'}** issue: **${initialContext.title}**.\n\n${initialContext.detail ? initialContext.detail.replace(/\[([^\]]+)\]\([^)]+\)/g, '$1').slice(0, 200) : 'What would you like to know about this finding?'}`
+    : `Hi! I've analyzed **${domain || 'this site'}** and I'm ready to help. Ask me what a finding means, how to fix it, or where to start.`;
+
+  const [messages, setMessages] = useState([{ role: 'assistant', content: openingMsg }]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const msgsRef = useRef(null);
 
-  const SUGGESTED = ['What should I fix first?', 'How do I improve my LCP score?', 'What SEO issues hurt me most?'];
+  const SUGGESTED = initialContext
+    ? [`How do I fix "${initialContext.title?.slice(0, 40)}…"?`, 'How long will this take to fix?', 'Will this improve my score?', 'Show me an example fix']
+    : ['What should I fix first?', 'How do I improve my LCP score?', 'What SEO issues hurt me most?'];
 
   const scrollToBottom = useCallback(() => {
     if (msgsRef.current) msgsRef.current.scrollTop = msgsRef.current.scrollHeight;
@@ -600,7 +751,9 @@ function AskCernlyDrawer({ reportId, domain, onClose }) {
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontFamily: 'var(--font-manrope, Manrope, sans-serif)',
               fontWeight: 800, fontSize: 13, color: '#151621' }}>Ask Cernly AI</div>
-            <div style={{ fontSize: 11, color: '#83899c' }}>Knows this report</div>
+            <div style={{ fontSize: 11, color: '#83899c' }}>
+              {initialContext ? `About: ${initialContext.title?.slice(0, 32)}…` : 'Knows this report'}
+            </div>
           </div>
           <button onClick={onClose} style={{ border: 0, background: '#f4f5fb', color: '#83899c',
             borderRadius: 8, width: 30, height: 30, display: 'grid', placeItems: 'center',
@@ -801,6 +954,7 @@ export default function ReportClient({ isPro, userName, userAvatar }) {
   const [activeTab, setActiveTab]         = useState('overview');
   const [findingsFilter, setFindingsFilter] = useState(null); // null = All
   const [drawerOpen, setDrawerOpen]       = useState(false);
+  const [drawerContext, setDrawerContext] = useState(null); // { title, category, detail }
   const [rescanStatus, setRescanStatus]   = useState('idle'); // idle|scanning|error
   const [rescanStage, setRescanStage]     = useState(0);
 
@@ -994,44 +1148,89 @@ export default function ReportClient({ isPro, userName, userAvatar }) {
   /* ── Tab content ── */
   const renderOverview = () => (
     <div>
-      {/* AI Brief — the centerpiece */}
-      {report.aiSummary && (
-        <div style={{ background: 'linear-gradient(145deg,#f6f1ff,#eef6ff 90%)',
-          border: '1px solid #e5deff', borderRadius: 17, padding: '22px 24px', marginBottom: 22 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
-            <div style={{ width: 32, height: 32, borderRadius: 10,
-              background: 'linear-gradient(135deg,#8a46f8,#3687fa)',
-              display: 'grid', placeItems: 'center', flexShrink: 0 }}>
-              <span style={{ color: '#fff', fontSize: 15, lineHeight: 1 }}>✦</span>
-            </div>
-            <div>
-              <div style={{ fontFamily: 'var(--font-manrope, Manrope, sans-serif)',
-                fontWeight: 800, fontSize: 14, color: '#151621' }}>Cernly's analysis</div>
-              <div style={{ fontSize: 11, color: '#83899c', marginTop: 1 }}>AI-generated · based on audit data</div>
+      {/* Cernly AI Advisor panel */}
+      <div style={{ background: 'linear-gradient(145deg,#f6f1ff,#eef6ff 90%)',
+        border: '1px solid #e5deff', borderRadius: 17, padding: '20px 22px', marginBottom: 22 }}>
+        {/* Header */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
+          <div style={{ width: 36, height: 36, borderRadius: 11,
+            background: 'linear-gradient(135deg,#8a46f8,#3687fa)',
+            display: 'grid', placeItems: 'center', flexShrink: 0 }}>
+            <span style={{ color: '#fff', fontSize: 16, lineHeight: 1 }}>✦</span>
+          </div>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontFamily: 'var(--font-manrope, Manrope, sans-serif)',
+              fontWeight: 800, fontSize: 14, color: '#151621' }}>Cernly AI Advisor</div>
+            <div style={{ fontSize: 11, color: '#83899c', marginTop: 1 }}>
+              {report.url ? `Analyzing ${new URL(report.url).hostname}` : 'AI-generated · based on audit data'}
             </div>
           </div>
-          <p style={{ fontSize: 14, lineHeight: 1.8, color: '#2e3148', margin: '0 0 14px', fontWeight: 500 }}>
+          <span style={{ fontSize: 10, fontWeight: 800, background: '#7948f620', color: '#7948f6',
+            borderRadius: 6, padding: '3px 8px', letterSpacing: '.06em' }}>AI ADVISOR</span>
+        </div>
+
+        {/* Brief */}
+        {report.aiSummary && (
+          <p style={{ fontSize: 14, lineHeight: 1.8, color: '#2e3148', margin: '0 0 16px', fontWeight: 500 }}>
             {report.aiSummary}
           </p>
-          {/* Next action CTA */}
-          {priorities[0] && (
-            <div style={{ background: 'rgba(255,255,255,.7)', borderRadius: 11, padding: '12px 14px',
-              display: 'flex', alignItems: 'center', gap: 12 }}>
-              <div style={{ flex: 1 }}>
-                <div style={{ fontSize: 10, fontWeight: 800, color: '#7948f6',
-                  letterSpacing: '.07em', marginBottom: 3 }}>RECOMMENDED NEXT ACTION</div>
-                <div style={{ fontSize: 13, fontWeight: 700, color: '#151621' }}>{priorities[0].message}</div>
-              </div>
-              <button onClick={() => setActiveTab('action')}
-                style={{ border: 0, background: '#7948f6', color: '#fff', borderRadius: 9,
-                  padding: '8px 14px', fontSize: 12, fontWeight: 700, cursor: 'pointer',
-                  fontFamily: 'inherit', whiteSpace: 'nowrap', flexShrink: 0 }}>
-                See action plan →
-              </button>
-            </div>
-          )}
+        )}
+
+        {/* Primary CTA */}
+        <button
+          onClick={() => { setDrawerContext(null); setDrawerOpen(true); }}
+          style={{ width: '100%', border: 0, background: '#7948f6', color: '#fff',
+            borderRadius: 11, padding: '13px 18px', fontSize: 13, fontWeight: 700,
+            cursor: 'pointer', fontFamily: 'inherit', display: 'flex', alignItems: 'center',
+            justifyContent: 'center', gap: 8, marginBottom: 12, letterSpacing: '-.01em' }}>
+          <span style={{ fontSize: 15 }}>✦</span>
+          Show me how to fix it
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M5 12h14m-7-7 7 7-7 7"/></svg>
+        </button>
+
+        {/* Suggested question chips */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6, marginBottom: 14 }}>
+          {[
+            'Why is my site slow?',
+            'Which fixes matter most?',
+            'Explain my SEO issues',
+            'What can I fix myself?',
+          ].map(q => (
+            <button key={q}
+              onClick={() => { setDrawerContext(null); setDrawerOpen(true); setTimeout(() => {}, 300); }}
+              style={{ background: 'rgba(255,255,255,.75)', border: '1px solid #e5deff',
+                borderRadius: 9, padding: '8px 11px', fontSize: 12, fontWeight: 600,
+                color: '#4b4e6a', cursor: 'pointer', fontFamily: 'inherit',
+                textAlign: 'left', lineHeight: 1.35 }}>
+              {q}
+            </button>
+          ))}
         </div>
-      )}
+
+        {/* Inline input */}
+        <div style={{ background: 'rgba(255,255,255,.8)', borderRadius: 11,
+          border: '1px solid #ddd9f7', display: 'flex', alignItems: 'center',
+          padding: '8px 8px 8px 13px', gap: 8 }}>
+          <input
+            placeholder="Ask Cernly anything about this report…"
+            onKeyDown={e => {
+              if (e.key === 'Enter' && e.target.value.trim()) {
+                setDrawerContext(null);
+                setDrawerOpen(true);
+              }
+            }}
+            style={{ flex: 1, background: 'none', border: 0, outline: 0,
+              fontSize: 13, color: '#151621', fontFamily: 'inherit', minWidth: 0 }}
+          />
+          <button
+            onClick={() => { setDrawerContext(null); setDrawerOpen(true); }}
+            style={{ border: 0, background: '#7948f6', color: '#fff', borderRadius: 8,
+              width: 30, height: 30, display: 'grid', placeItems: 'center',
+              cursor: 'pointer', flexShrink: 0 }}>
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+          </button>
+        </div>
+      </div>
 
       {/* Top discoveries — show first 3 */}
       {Array.isArray(effectiveDiscoveries) && effectiveDiscoveries.length > 0 && (
@@ -1066,15 +1265,28 @@ export default function ReportClient({ isPro, userName, userAvatar }) {
 
   const renderActionPlan = () => (
     <div>
-      <div style={{ marginBottom: 16 }}>
+      {/* Header with journey breadcrumb */}
+      <div style={{ marginBottom: 18 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
+          {['Understand', 'Fix', 'Verify'].map((step, i) => (
+            <React.Fragment key={step}>
+              <span style={{ fontSize: 11, fontWeight: 700,
+                color: step === 'Fix' ? '#7948f6' : '#b0b4c8',
+                background: step === 'Fix' ? '#f1edff' : 'transparent',
+                borderRadius: 6, padding: step === 'Fix' ? '2px 8px' : '2px 0' }}>{step}</span>
+              {i < 2 && <span style={{ color: '#d4d6e0', fontSize: 11 }}>›</span>}
+            </React.Fragment>
+          ))}
+        </div>
         <h2 style={{ fontFamily: 'var(--font-manrope, Manrope, sans-serif)', fontWeight: 800,
           fontSize: 16, color: '#151621', margin: '0 0 4px', letterSpacing: '-.02em' }}>
           Action plan
         </h2>
         <p style={{ fontSize: 13, color: '#83899c', margin: 0 }}>
-          {priorities.length} prioritized fixes · highest impact first.
+          {priorities.length} prioritized fixes · mark progress as you go
         </p>
       </div>
+
       {priorities.length === 0 ? (
         <div style={{ background: '#edf9f4', borderRadius: 14, padding: '22px 20px', textAlign: 'center' }}>
           <div style={{ fontSize: 28, marginBottom: 8 }}>🎉</div>
@@ -1084,9 +1296,16 @@ export default function ReportClient({ isPro, userName, userAvatar }) {
         </div>
       ) : (
         priorities.map((issue, i) => (
-          <FixItem key={i} n={i + 1} title={issue.message}
-            detail={issue.description || issue.detail}
-            impact={getImpact(issue, i)} defaultOpen={i === 0} />
+          <FixCard key={i} issue={issue} n={i + 1} impact={getImpact(issue, i)}
+            onAskCernly={(iss) => {
+              setDrawerContext({ title: iss.message, category: iss.area, detail: iss.description || iss.detail });
+              setDrawerOpen(true);
+            }}
+            onVerify={(iss) => {
+              // placeholder: future verification engine
+              alert(`Verification coming soon!\n\nThis will re-scan "${iss.message}" and compare results to this scan.`);
+            }}
+          />
         ))
       )}
     </div>
@@ -1308,7 +1527,9 @@ export default function ReportClient({ isPro, userName, userAvatar }) {
 
       {/* Ask Cernly drawer — shown on demand */}
       {drawerOpen && report && (
-        <AskCernlyDrawer reportId={id} domain={domain} onClose={() => setDrawerOpen(false)} />
+        <AskCernlyDrawer reportId={id} domain={domain}
+          initialContext={drawerContext}
+          onClose={() => { setDrawerOpen(false); setDrawerContext(null); }} />
       )}
 
       <div style={{ display: 'grid', gridTemplateColumns: '244px minmax(0,1fr)', minHeight: '100vh' }}
