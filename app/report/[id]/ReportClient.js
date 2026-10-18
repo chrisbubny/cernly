@@ -967,6 +967,64 @@ function Sidebar({ isPro, displayName, userAvatar, sidebarOpen }) {
   );
 }
 
+/* ────────────────────────────────────────────────────────────────
+   ScoreAuditModal — shown when user clicks a "Blocked ↗" tile.
+   Extracted as a named component to avoid IIFE-inside-fragment
+   patterns that the Next.js SWC parser rejects.
+──────────────────────────────────────────────────────────────── */
+function ScoreAuditModal({ tileKey, auditStatus: st, onClose }) {
+  const name = tileKey.charAt(0).toUpperCase() + tileKey.slice(1);
+  const stateMessages = {
+    blocked:     { heading: 'Blocked by website', body: st?.error?.message || 'The page could not be fetched. The site may be blocking automated requests or behind authentication.', action: 'Retry check' },
+    failed:      { heading: 'Check failed',        body: st?.error?.message || 'An error occurred while running this check.',                                                          action: 'Retry check' },
+    unavailable: { heading: 'Not available',       body: 'No result was returned for this check.',                                                                                    action: 'Retry check' },
+  };
+  const msg = stateMessages[st?.status] || { heading: 'Not evaluated', body: 'This check was not run as part of this scan.', action: null };
+  return (
+    <div onClick={onClose}
+      style={{ position: 'fixed', inset: 0, background: '#00000040', zIndex: 200,
+        display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <div onClick={e => e.stopPropagation()}
+        style={{ background: '#fff', borderRadius: 16, padding: '24px',
+          maxWidth: 380, width: '90%', boxShadow: '0 20px 60px #00000030' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+          <div style={{ fontFamily: 'var(--font-manrope, Manrope, sans-serif)', fontWeight: 800, fontSize: 16, color: '#151621' }}>
+            {name} — {msg.heading}
+          </div>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#83899c', fontSize: 18, padding: '0 4px' }}>✕</button>
+        </div>
+        <p style={{ fontSize: 13, color: '#4b5168', lineHeight: 1.65, margin: '0 0 16px' }}>{msg.body}</p>
+        {st?.error?.code && (
+          <div style={{ background: '#f4f5fb', borderRadius: 8, padding: '8px 12px', marginBottom: 14 }}>
+            <div style={{ fontSize: 10, color: '#83899c', fontWeight: 700, fontFamily: 'monospace' }}>
+              Error code: {st.error.code}
+            </div>
+          </div>
+        )}
+        {st?.attemptedAt && (
+          <p style={{ fontSize: 11, color: '#b0b4c8', margin: '0 0 14px' }}>
+            Attempted: {new Date(st.attemptedAt).toLocaleString()}
+          </p>
+        )}
+        <div style={{ display: 'flex', gap: 8 }}>
+          {st?.error?.retryable && msg.action && (
+            <button onClick={onClose}
+              style={{ flex: 1, background: '#7948f6', color: '#fff', border: 'none', borderRadius: 10,
+                padding: '10px', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
+              {msg.action}
+            </button>
+          )}
+          <button onClick={onClose}
+            style={{ flex: 1, background: '#f4f5fb', color: '#4b5168', border: 'none', borderRadius: 10,
+              padding: '10px', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>
+            Close
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* ════════════════════════════════════════════════════════════════
    Main component
 ════════════════════════════════════════════════════════════════ */
@@ -1708,62 +1766,15 @@ export default function ReportClient({ isPro, userName, userAvatar }) {
                     </div>
                   </div>
                 )}
-                {/* Tile detail modal — must be a sibling of the score-tile IIFE, not nested inside
-                    its fragment return, to avoid the Next.js SWC "Expected closing JSX tag for <>"
-                    parse error. Uses auditStatuses from component scope instead of closed-over statuses. */}
-                {tileModal && (() => {
-                  const st = auditStatuses[tileModal];
-                  const name = tileModal.charAt(0).toUpperCase() + tileModal.slice(1);
-                  const stateMessages = {
-                    blocked:     { heading: 'Blocked by website', body: st?.error?.message || 'The page could not be fetched. The site may be blocking automated requests or behind authentication.', action: 'Retry check' },
-                    failed:      { heading: 'Check failed',        body: st?.error?.message || 'An error occurred while running this check.',                                                          action: 'Retry check' },
-                    unavailable: { heading: 'Not available',       body: 'No result was returned for this check.',                                                                                    action: 'Retry check' },
-                  };
-                  const msg = stateMessages[st?.status] || { heading: 'Not evaluated', body: 'This check was not run as part of this scan.', action: null };
-                  return (
-                    <div onClick={() => setTileModal(null)}
-                      style={{ position: 'fixed', inset: 0, background: '#00000040', zIndex: 200,
-                        display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                      <div onClick={e => e.stopPropagation()}
-                        style={{ background: '#fff', borderRadius: 16, padding: '24px',
-                          maxWidth: 380, width: '90%', boxShadow: '0 20px 60px #00000030' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-                          <div style={{ fontFamily: 'var(--font-manrope, Manrope, sans-serif)', fontWeight: 800, fontSize: 16, color: '#151621' }}>
-                            {name} — {msg.heading}
-                          </div>
-                          <button onClick={() => setTileModal(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#83899c', fontSize: 18, padding: '0 4px' }}>✕</button>
-                        </div>
-                        <p style={{ fontSize: 13, color: '#4b5168', lineHeight: 1.65, margin: '0 0 16px' }}>{msg.body}</p>
-                        {st?.error?.code && (
-                          <div style={{ background: '#f4f5fb', borderRadius: 8, padding: '8px 12px', marginBottom: 14 }}>
-                            <div style={{ fontSize: 10, color: '#83899c', fontWeight: 700, fontFamily: 'monospace' }}>
-                              Error code: {st.error.code}
-                            </div>
-                          </div>
-                        )}
-                        {st?.attemptedAt && (
-                          <p style={{ fontSize: 11, color: '#b0b4c8', margin: '0 0 14px' }}>
-                            Attempted: {new Date(st.attemptedAt).toLocaleString()}
-                          </p>
-                        )}
-                        <div style={{ display: 'flex', gap: 8 }}>
-                          {st?.error?.retryable && msg.action && (
-                            <button onClick={() => setTileModal(null)}
-                              style={{ flex: 1, background: '#7948f6', color: '#fff', border: 'none', borderRadius: 10,
-                                padding: '10px', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
-                              {msg.action}
-                            </button>
-                          )}
-                          <button onClick={() => setTileModal(null)}
-                            style={{ flex: 1, background: '#f4f5fb', color: '#4b5168', border: 'none', borderRadius: 10,
-                              padding: '10px', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>
-                            Close
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })()}
+                {/* Tile detail modal — uses a named component to avoid IIFE-inside-fragment
+                    patterns that Next.js SWC rejects with "Expected JSX closing tag for <>" */}
+                {tileModal && (
+                  <ScoreAuditModal
+                    tileKey={tileModal}
+                    auditStatus={auditStatuses[tileModal]}
+                    onClose={() => setTileModal(null)}
+                  />
+                )}
                 </div>
 
                 {/* Tabs */}
