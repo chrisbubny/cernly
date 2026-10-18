@@ -63,14 +63,9 @@ export async function GET(request) {
     results.step3_microlink = { error: e.message };
   }
 
-  // ── 4. Claude vision API — minimal 1×1 JPEG ──────────────────────────────────
-  // A tiny hardcoded JPEG so this test never needs Microlink or PSI.
-  const minimalJpeg =
-    '/9j/4AAQSkZJRgABAQEASABIAAD/2wBDAAEBAQEBAQEBAQEBAQEBAQEBAQEBAQEB' +
-    'AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQH/wAAR' +
-    'CAABAAEDASIAAhEBAxEB/8QAFAABAAAAAAAAAAAAAAAAAAAACf/EABQQAQAAA' +
-    'AAAAAAAAAAAAAAAAP/EABQBAQAAAAAAAAAAAAAAAAAAAAD/xAAUEQEAAAAAAAA' +
-    'AAAAAAAAAAAAAP/aAAwDAQACEQMRAD8AJQAB/9k=';
+  // ── 4. Claude vision API — valid 1×1 white PNG ───────────────────────────────
+  // Standard valid 1×1 white PNG base64 (well-known test image).
+  const validPng1x1 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwADhQGAWjR9awAAAABJRU5ErkJggg==';
 
   if (!apiKey) {
     results.step4_claudeVision = { skipped: 'no API key' };
@@ -90,7 +85,7 @@ export async function GET(request) {
           messages: [{
             role: 'user',
             content: [
-              { type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: minimalJpeg } },
+              { type: 'image', source: { type: 'base64', media_type: 'image/png', data: validPng1x1 } },
               { type: 'text', text: 'What color is this tiny image? One word.' },
             ],
           }],
@@ -117,6 +112,88 @@ export async function GET(request) {
       }
     } catch (e) {
       results.step4_claudeVision = { error: e.message };
+    }
+  }
+
+  // ── 5. End-to-end: Microlink download → Claude vision ────────────────────────
+  // Downloads the actual screenshot we confirmed in step 3 and sends it to Claude.
+  if (!apiKey) {
+    results.step5_e2e = { skipped: 'no API key' };
+  } else {
+    try {
+      // Re-fetch the Microlink screenshot URL for testUrl
+      const mlRes2 = await fetch(
+        `https://api.microlink.io/?url=${encodeURIComponent(testUrl)}&screenshot=true`,
+        { signal: AbortSignal.timeout(12000) }
+      );
+      const mlData2 = mlRes2.ok ? await mlRes2.json() : null;
+      const shotUrl = mlData2?.data?.screenshot?.url;
+
+      if (!shotUrl) {
+        results.step5_e2e = { skipped: 'no screenshot URL from Microlink' };
+      } else {
+        // Download the screenshot
+        const imgRes = await fetch(shotUrl, {
+          headers: { 'User-Agent': 'Mozilla/5.0 (compatible; Cernly/1.0)' },
+          redirect: 'follow',
+          signal: AbortSignal.timeout(20000),
+        });
+        const contentType = imgRes.headers.get('content-type') || '';
+        const mediaType   = contentType.split(';')[0].trim() || 'image/jpeg';
+
+        if (!imgRes.ok) {
+          results.step5_e2e = { downloadFailed: imgRes.status };
+        } else {
+          const buf    = await imgRes.arrayBuffer();
+          const b64    = Buffer.from(buf).toString('base64');
+          const kb     = Math.round(buf.byteLength / 1024);
+
+          results.step5_e2e = {
+            downloadOk: true,
+            mediaType,
+            sizeKb: kb,
+            b64Length: b64.length,
+            b64Sample: b64.slice(0, 40) + '…',
+          };
+
+          // Send to Claude
+          const start2 = Date.now();
+          const vRes2  = await fetch('https://api.anthropic.com/v1/messages', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'x-api-key': apiKey,
+              'anthropic-version': '2023-06-01',
+            },
+            body: JSON.stringify({
+              model: 'claude-3-5-sonnet-20241022',
+              max_tokens: 20,
+              messages: [{
+                role: 'user',
+                content: [
+                  { type: 'image', source: { type: 'base64', media_type: mediaType, data: b64 } },
+                  { type: 'text', text: 'What color is the background of this screenshot? One word.' },
+                ],
+              }],
+            }),
+            signal: AbortSignal.timeout(30000),
+          });
+          const elapsed2 = Date.now() - start2;
+          if (vRes2.ok) {
+            const vData2 = await vRes2.json();
+            results.step5_e2e.claudeOk      = true;
+            results.step5_e2e.claudeElapsedMs = elapsed2;
+            results.step5_e2e.claudeResponse  = vData2.content?.[0]?.text || '(empty)';
+          } else {
+            const errBody = await vRes2.text().catch(() => '');
+            results.step5_e2e.claudeOk    = false;
+            results.step5_e2e.claudeStatus = vRes2.status;
+            results.step5_e2e.claudeError  = errBody.slice(0, 400);
+          }
+        }
+      }
+    } catch (e) {
+      results.step5_e2e = { error: e.message };
     }
   }
 
