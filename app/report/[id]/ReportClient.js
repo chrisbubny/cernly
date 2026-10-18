@@ -1775,7 +1775,6 @@ export default function ReportClient({ isPro, userName, userAvatar }) {
                     onClose={() => setTileModal(null)}
                   />
                 )}
-                </div>
 
                 {/* Tabs */}
                 <div style={{ display: 'flex', gap: 0, borderBottom: '1px solid #e9eaf2',
