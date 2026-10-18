@@ -1712,8 +1712,12 @@ export default function ReportClient({ isPro, userName, userAvatar }) {
                     { label: 'UX',            key: 'ux',            score: uxScore,                      cat: 'Visual'  },
                   ].map(c => {
                     const st       = auditStatuses[c.key];
-                    const unavail  = c.key !== 'ux' && (!st || st.status !== 'completed');
-                    const badgeText  = !st ? 'Not evaluated'
+                    // unavail only when there's no score AND no completed audit status.
+                    // Covers old scans without auditStatuses, and scans where score exists
+                    // but auditStatuses wasn't persisted — score presence is the ground truth.
+                    const unavail  = c.key !== 'ux' && c.score == null && (!st || st.status !== 'completed');
+                    const badgeText  = c.score != null ? null  // score exists → no badge
+                                     : !st ? 'Not evaluated'
                                      : st.status === 'blocked'  ? 'Blocked'
                                      : st.status === 'failed'   ? 'Check failed'
                                      : null;
