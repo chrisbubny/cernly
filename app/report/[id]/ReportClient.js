@@ -1683,7 +1683,7 @@ export default function ReportClient({ isPro, userName, userAvatar }) {
             )}
 
             {status === 'ok' && (
-              <>
+              <React.Fragment>
                 {/* Page header */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 6, flexWrap: 'wrap' }}>
                   <Link href="/dashboard" style={{ display: 'flex', alignItems: 'center', gap: 5,
@@ -1819,7 +1819,7 @@ export default function ReportClient({ isPro, userName, userAvatar }) {
                 {activeTab === 'action'   && renderActionPlan()}
                 {activeTab === 'findings' && renderFindings()}
                 {activeTab === 'progress' && renderProgress()}
-              </>
+              </React.Fragment>
             )}
           </div>
         </main>
