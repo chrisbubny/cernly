@@ -80,7 +80,7 @@ export async function GET(request) {
           'anthropic-version': '2023-06-01',
         },
         body: JSON.stringify({
-          model: 'claude-3-5-sonnet-20241022',
+          model: 'claude-sonnet-5-5',
           max_tokens: 20,
           messages: [{
             role: 'user',
@@ -166,7 +166,7 @@ export async function GET(request) {
               'anthropic-version': '2023-06-01',
             },
             body: JSON.stringify({
-              model: 'claude-3-5-sonnet-20241022',
+              model: 'claude-sonnet-5-5',
               max_tokens: 20,
               messages: [{
                 role: 'user',
