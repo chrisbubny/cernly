@@ -1643,42 +1643,33 @@ export default function ReportClient({ isPro, userName, userAvatar }) {
                   fontSize: 'clamp(20px, 2.5vw, 28px)', letterSpacing: '-.05em',
                   color: '#151621', margin: '0 0 18px' }}>{domain}</h1>
 
-                {/* Prominent score cards */}
-                {(() => {
-                  const statuses = auditStatuses;
-                  const tiles = [
+                {/* Prominent score cards — NO IIFEs here; SWC rejects fragment-returning IIFEs
+                    inside another fragment. All logic uses auditStatuses from component scope. */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 10, marginBottom: 0 }}>
+                  {[
                     { label: 'Performance',   key: 'performance',   score: report.scores?.performance,   cat: 'Performance' },
                     { label: 'SEO',           key: 'seo',           score: report.scores?.seo,           cat: 'SEO' },
                     { label: 'Security',      key: 'security',      score: report.scores?.security,      cat: 'Security' },
                     { label: 'Accessibility', key: 'accessibility', score: report.scores?.accessibility, cat: 'Accessibility' },
-                    { label: 'UX',            key: 'ux',            score: uxScore,                      cat: 'Visual' },
-                  ];
-                  const auditStatusLabel = (st) => {
-                    if (!st) return { text: 'Not evaluated', color: '#b0b4c8' };
-                    if (st.status === 'completed') return null; // handled by score display
-                    if (st.status === 'blocked')   return { text: 'Blocked', color: '#efa642', icon: '⚠' };
-                    if (st.status === 'failed')    return { text: 'Check failed', color: '#ef6473', icon: '✕' };
-                    return { text: 'Not evaluated', color: '#b0b4c8' };
-                  };
-                  const isUnavailable = (key) => {
-                    const st = statuses[key];
-                    return !st || (st.status !== 'completed' && key !== 'ux');
-                  };
-                  return (<>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 10, marginBottom: 0 }}>
-                  {tiles.map(c => {
-                    const color = c.score == null ? '#83899c' : c.score >= 80 ? '#19b987' : c.score >= 60 ? '#efa642' : '#ef6473';
-                    const critCount = allIssues.filter(i => i.severity === 'critical' &&
-                      detailCategories.find(d => d.label === c.cat)?.match(i)).length;
-                    const st = statuses[c.key];
-                    const unavail = isUnavailable(c.key);
-                    const unavailLabel = auditStatusLabel(st);
+                    { label: 'UX',            key: 'ux',            score: uxScore,                      cat: 'Visual'  },
+                  ].map(c => {
+                    const st       = auditStatuses[c.key];
+                    const unavail  = c.key !== 'ux' && (!st || st.status !== 'completed');
+                    const badgeText  = !st ? 'Not evaluated'
+                                     : st.status === 'blocked'  ? 'Blocked'
+                                     : st.status === 'failed'   ? 'Check failed'
+                                     : null;
+                    const badgeColor = st?.status === 'blocked'  ? '#efa642'
+                                     : st?.status === 'failed'   ? '#ef6473'
+                                     : '#b0b4c8';
+                    const color    = c.score == null ? '#83899c' : c.score >= 80 ? '#19b987' : c.score >= 60 ? '#efa642' : '#ef6473';
+                    const critCount = allIssues.filter(i => i.severity === 'critical' && detailCategories.find(d => d.label === c.cat)?.match(i)).length;
                     return (
                       <button key={c.label}
-                        onClick={() => unavail && c.key !== 'ux' ? setTileModal(c.key) : goToFindings(c.cat)}
+                        onClick={() => unavail ? setTileModal(c.key) : goToFindings(c.cat)}
                         className="score-tile"
                         style={{ background: '#fff',
-                          border: unavail && c.key !== 'ux' ? '1px solid #f0d0a0' : '1px solid #e9eaf2',
+                          border: unavail ? '1px solid #f0d0a0' : '1px solid #e9eaf2',
                           borderRadius: 14, padding: '18px 14px 14px', textAlign: 'center', cursor: 'pointer',
                           fontFamily: 'inherit', boxShadow: '0 2px 8px #1b1d3205', position: 'relative' }}>
                         <div style={{ fontFamily: 'var(--font-manrope, Manrope, sans-serif)',
@@ -1686,10 +1677,8 @@ export default function ReportClient({ isPro, userName, userAvatar }) {
                           {c.score ?? '—'}
                         </div>
                         <div style={{ fontSize: 11, fontWeight: 700, color: '#83899c', marginBottom: 4 }}>{c.label}</div>
-                        {unavail && c.key !== 'ux' && unavailLabel
-                          ? <div style={{ fontSize: 10, color: unavailLabel.color, fontWeight: 700 }}>
-                              {unavailLabel.text} ↗
-                            </div>
+                        {unavail && badgeText
+                          ? <div style={{ fontSize: 10, color: badgeColor, fontWeight: 700 }}>{badgeText} ↗</div>
                           : critCount > 0
                             ? <div style={{ fontSize: 10, color: '#ef6473', fontWeight: 700 }}>{critCount} critical</div>
                             : c.score != null
@@ -1701,26 +1690,24 @@ export default function ReportClient({ isPro, userName, userAvatar }) {
                       </button>
                     );
                   })}
-                  </div>
-                  {/* Unavailable category explanation banner */}
-                  {Object.entries(statuses).some(([k, s]) => s.status !== 'completed' && k !== 'ux') && (
-                    <div style={{ background: '#fffbf0', border: '1px solid #f0e0b0', borderRadius: 10,
-                      padding: '10px 14px', marginTop: 10, display: 'flex', alignItems: 'flex-start', gap: 10 }}>
-                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#d97706" strokeWidth="2" strokeLinecap="round" style={{ flexShrink: 0, marginTop: 1 }}>
-                        <path d="M12 2L2 19h20L12 2zm0 7v5m0 3h.01"/>
-                      </svg>
-                      <div style={{ fontSize: 12, color: '#92400e', lineHeight: 1.5 }}>
-                        <strong>Some checks couldn't be completed.</strong>{' '}
-                        {Object.entries(statuses)
-                          .filter(([k, s]) => s.status !== 'completed' && k !== 'ux')
-                          .map(([k]) => k.charAt(0).toUpperCase() + k.slice(1))
-                          .join(' and ')}{' '}
-                        {Object.entries(statuses).filter(([k, s]) => s.status !== 'completed' && k !== 'ux').length === 1 ? 'result is' : 'results are'} unavailable for this scan. Click the tile for details.
-                      </div>
+                </div>
+                {/* Unavailable-category explanation banner */}
+                {Object.entries(auditStatuses).some(([k, s]) => s.status !== 'completed' && k !== 'ux') && (
+                  <div style={{ background: '#fffbf0', border: '1px solid #f0e0b0', borderRadius: 10,
+                    padding: '10px 14px', marginTop: 10, display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#d97706" strokeWidth="2" strokeLinecap="round" style={{ flexShrink: 0, marginTop: 1 }}>
+                      <path d="M12 2L2 19h20L12 2zm0 7v5m0 3h.01"/>
+                    </svg>
+                    <div style={{ fontSize: 12, color: '#92400e', lineHeight: 1.5 }}>
+                      <strong>Some checks couldn't be completed.</strong>{' '}
+                      {Object.entries(auditStatuses)
+                        .filter(([k, s]) => s.status !== 'completed' && k !== 'ux')
+                        .map(([k]) => k.charAt(0).toUpperCase() + k.slice(1))
+                        .join(' and ')}{' '}
+                      {Object.entries(auditStatuses).filter(([k, s]) => s.status !== 'completed' && k !== 'ux').length === 1 ? 'result is' : 'results are'} unavailable for this scan. Click the tile for details.
                     </div>
-                  )}
-                  </>);
-                })()}
+                  </div>
+                )}
                 {/* Tile detail modal — must be a sibling of the score-tile IIFE, not nested inside
                     its fragment return, to avoid the Next.js SWC "Expected closing JSX tag for <>"
                     parse error. Uses auditStatuses from component scope instead of closed-over statuses. */}
