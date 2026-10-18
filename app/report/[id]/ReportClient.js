@@ -526,51 +526,56 @@ function UxCard({ uxScore, uxInsights, uxAnnotations, visionStatus, siteType, ur
             <div style={{ fontSize: 11, fontWeight: 800, color: '#83899c',
               letterSpacing: '.07em', marginBottom: 10 }}>VISUAL ANALYSIS — click a pin to see the finding</div>
           )}
+          {/* Scrollable full-page screenshot with pins */}
           <div style={{ position: 'relative', borderRadius: 13, overflow: 'hidden',
-            border: '1px solid #e9eaf2', background: '#f4f5fb', aspectRatio: '16 / 10' }}>
-            <img
-              src={screenshotUrl || `https://api.microlink.io/?url=${encodeURIComponent(url)}&screenshot=true&embed=screenshot.url`}
-              alt={`Screenshot of ${url}`}
-              style={{ width: '100%', height: '100%', objectFit: 'cover', objectPosition: 'top', display: 'block' }}
-              onError={e => { e.target.style.display = 'none'; }}
-            />
-            {annotations.map((ann, i) => {
-              const c = sevColor(ann.severity);
-              const isActive = activePin === i;
-              return (
-                <button key={i} onClick={() => setActivePin(isActive ? null : i)}
-                  style={{ position: 'absolute', left: `${ann.x * 100}%`, top: `${ann.y * 100}%`,
-                    transform: 'translate(-50%, -50%)', width: 26, height: 26, borderRadius: '50%',
-                    background: isActive ? c : '#fff', border: `2.5px solid ${c}`,
-                    color: isActive ? '#fff' : c, fontSize: 11, fontWeight: 800,
-                    display: 'grid', placeItems: 'center', cursor: 'pointer',
-                    boxShadow: `0 2px 10px ${c}55`, zIndex: isActive ? 10 : 5,
-                    transition: 'all .15s ease', padding: 0, lineHeight: 1 }}
-                  title={ann.label}>{i + 1}</button>
-              );
-            })}
-            {activePin !== null && annotations[activePin] && (() => {
-              const ann = annotations[activePin];
-              const c   = sevColor(ann.severity);
-              const fromLeft = ann.x > 0.55;
-              return (
-                <div style={{ position: 'absolute',
-                  left:  fromLeft ? 'auto' : `calc(${ann.x * 100}% + 16px)`,
-                  right: fromLeft ? `calc(${(1 - ann.x) * 100}% + 16px)` : 'auto',
-                  top:   `${Math.min(ann.y * 100, 70)}%`, width: 220,
-                  background: '#fff', borderRadius: 11, padding: '12px 14px',
-                  boxShadow: '0 4px 24px #0003', border: `1.5px solid ${c}33`,
-                  zIndex: 20, pointerEvents: 'none' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
-                    <div style={{ width: 7, height: 7, borderRadius: '50%', background: c, flexShrink: 0 }} />
-                    <div style={{ fontSize: 10, fontWeight: 800, color: c, letterSpacing: '.06em' }}>{sevLabel(ann.severity)}</div>
-                    <div style={{ fontSize: 9, color: '#83899c', marginLeft: 'auto' }}>{ann.area}</div>
+            border: '1px solid #e9eaf2', background: '#f4f5fb',
+            maxHeight: 520, overflowY: 'auto', overflowX: 'hidden' }}>
+            {/* Inner wrapper sized to the natural image so pin % coords are correct */}
+            <div style={{ position: 'relative', width: '100%' }}>
+              <img
+                src={screenshotUrl || `https://api.microlink.io/?url=${encodeURIComponent(url)}&screenshot=true&screenshot.fullPage=true&embed=screenshot.url`}
+                alt={`Screenshot of ${url}`}
+                style={{ width: '100%', height: 'auto', display: 'block' }}
+                onError={e => { e.target.style.display = 'none'; }}
+              />
+              {annotations.map((ann, i) => {
+                const c = sevColor(ann.severity);
+                const isActive = activePin === i;
+                return (
+                  <button key={i} onClick={() => setActivePin(isActive ? null : i)}
+                    style={{ position: 'absolute', left: `${ann.x * 100}%`, top: `${ann.y * 100}%`,
+                      transform: 'translate(-50%, -50%)', width: 26, height: 26, borderRadius: '50%',
+                      background: isActive ? c : '#fff', border: `2.5px solid ${c}`,
+                      color: isActive ? '#fff' : c, fontSize: 11, fontWeight: 800,
+                      display: 'grid', placeItems: 'center', cursor: 'pointer',
+                      boxShadow: `0 2px 10px ${c}55`, zIndex: isActive ? 10 : 5,
+                      transition: 'all .15s ease', padding: 0, lineHeight: 1 }}
+                    title={ann.label}>{i + 1}</button>
+                );
+              })}
+              {activePin !== null && annotations[activePin] && (() => {
+                const ann = annotations[activePin];
+                const c   = sevColor(ann.severity);
+                const fromLeft = ann.x > 0.55;
+                return (
+                  <div style={{ position: 'absolute',
+                    left:  fromLeft ? 'auto' : `calc(${ann.x * 100}% + 16px)`,
+                    right: fromLeft ? `calc(${(1 - ann.x) * 100}% + 16px)` : 'auto',
+                    top:   `${ann.y * 100}%`, width: 220,
+                    background: '#fff', borderRadius: 11, padding: '12px 14px',
+                    boxShadow: '0 4px 24px #0003', border: `1.5px solid ${c}33`,
+                    zIndex: 20, pointerEvents: 'none' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
+                      <div style={{ width: 7, height: 7, borderRadius: '50%', background: c, flexShrink: 0 }} />
+                      <div style={{ fontSize: 10, fontWeight: 800, color: c, letterSpacing: '.06em' }}>{sevLabel(ann.severity)}</div>
+                      <div style={{ fontSize: 9, color: '#83899c', marginLeft: 'auto' }}>{ann.area}</div>
+                    </div>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: '#151621', marginBottom: 5, lineHeight: 1.4 }}>{ann.label}</div>
+                    <div style={{ fontSize: 11, color: '#4b5168', lineHeight: 1.6 }}>{ann.detail}</div>
                   </div>
-                  <div style={{ fontSize: 12, fontWeight: 700, color: '#151621', marginBottom: 5, lineHeight: 1.4 }}>{ann.label}</div>
-                  <div style={{ fontSize: 11, color: '#4b5168', lineHeight: 1.6 }}>{ann.detail}</div>
-                </div>
-              );
-            })()}
+                );
+              })()}
+            </div>
           </div>
         </div>
       )}
