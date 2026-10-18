@@ -118,19 +118,30 @@ function FindingRow({ issue }) {
 }
 
 /* ─── Category section ─── */
-function CategorySection({ label, accent, issues }) {
+function CategorySection({ label, accent, issues, auditStatus }) {
   const [collapsed, setCollapsed] = useState(false);
   const crit = issues.filter(i => i.severity === 'critical').length;
   const warn = issues.filter(i => i.severity === 'warning').length;
   const good = issues.filter(i => i.severity === 'good').length;
-  const metaLine = [
-    crit > 0 && `${crit} critical`,
-    warn > 0 && `${warn} warning${warn > 1 ? 's' : ''}`,
-    good > 0 && `${good} passed`,
-  ].filter(Boolean).join(' · ') || `${issues.length} items`;
+
+  // Determine if this category's check was blocked/failed
+  const checkBlocked  = auditStatus?.status === 'blocked';
+  const checkFailed   = auditStatus?.status === 'failed';
+  const checkUnavail  = !auditStatus || auditStatus.status === 'unavailable';
+  const notEvaluated  = checkBlocked || checkFailed || (checkUnavail && issues.length === 0 && !auditStatus?.status);
+
+  const metaLine = notEvaluated
+    ? (checkBlocked ? '⚠ Blocked' : checkFailed ? '✕ Check failed' : '— Not evaluated')
+    : [
+        crit > 0 && `${crit} critical`,
+        warn > 0 && `${warn} warning${warn > 1 ? 's' : ''}`,
+        good > 0 && `${good} passed`,
+      ].filter(Boolean).join(' · ') || `${issues.length} items`;
+
+  const metaColor = checkBlocked ? '#efa642' : checkFailed ? '#ef6473' : '#83899c';
 
   return (
-    <div style={{ border: '1px solid #e9eaf2', borderRadius: 14, overflow: 'hidden', marginBottom: 10 }}>
+    <div style={{ border: `1px solid ${notEvaluated ? '#f0e0c8' : '#e9eaf2'}`, borderRadius: 14, overflow: 'hidden', marginBottom: 10 }}>
       <button onClick={() => setCollapsed(c => !c)}
         style={{ width: '100%', background: collapsed ? '#fff' : '#fafaff', border: 0,
           padding: '13px 18px', display: 'flex', alignItems: 'center', gap: 11,
@@ -138,16 +149,30 @@ function CategorySection({ label, accent, issues }) {
         <div style={{ width: 9, height: 9, borderRadius: '50%', background: accent, flexShrink: 0 }} />
         <span style={{ fontFamily: 'var(--font-manrope, Manrope, sans-serif)',
           fontWeight: 800, fontSize: 13, color: '#151621', flex: 1 }}>{label}</span>
-        <span style={{ fontSize: 11, color: '#83899c', marginRight: 8 }}>{metaLine}</span>
+        <span style={{ fontSize: 11, color: metaColor, fontWeight: notEvaluated ? 700 : 400, marginRight: 8 }}>{metaLine}</span>
         <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="#b0b4c8" strokeWidth={2.5} strokeLinecap="round">
           <path d={collapsed ? 'm6 9 6 6 6-6' : 'm18 15-6-6-6 6'}/>
         </svg>
       </button>
       {!collapsed && (
         <div>
-          {issues.length === 0
-            ? <p style={{ fontSize: 13, color: '#83899c', padding: '13px 18px', margin: 0 }}>All checks passed.</p>
-            : issues.map((issue, i) => <FindingRow key={i} issue={issue} />)
+          {notEvaluated && issues.length === 0
+            ? <div style={{ padding: '12px 18px 14px', display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={checkFailed ? '#ef6473' : '#d97706'} strokeWidth="2" strokeLinecap="round" style={{ flexShrink: 0, marginTop: 1 }}>
+                  <path d={checkFailed ? 'M18 6 6 18M6 6l12 12' : 'M12 2L2 19h20L12 2zm0 7v5m0 3h.01'}/>
+                </svg>
+                <p style={{ fontSize: 13, color: '#4b5168', margin: 0, lineHeight: 1.55 }}>
+                  {checkBlocked
+                    ? <>This check was blocked — the page couldn&apos;t be fetched. The site may be blocking automated crawlers. <span style={{ color: '#83899c' }}>{auditStatus?.error?.message || ''}</span></>
+                    : checkFailed
+                      ? <>This check failed to run. <span style={{ color: '#83899c' }}>{auditStatus?.error?.message || 'An error occurred during analysis.'}</span></>
+                      : 'This check was not included in the scan.'
+                  }
+                </p>
+              </div>
+            : issues.length === 0
+              ? <p style={{ fontSize: 13, color: '#83899c', padding: '13px 18px', margin: 0 }}>All checks passed.</p>
+              : issues.map((issue, i) => <FindingRow key={i} issue={issue} />)
           }
         </div>
       )}
@@ -1119,11 +1144,13 @@ export default function ReportClient({ isPro, userName, userAvatar }) {
 
   const effectiveDiscoveries = report?.aiInsights || fallbackDiscoveries;
 
+  const auditStatuses = report?.scores?.auditStatuses || {};
+
   const detailCategories = [
-    { label: 'Performance',   accent: '#7948f6', match: i => i.area?.toLowerCase().includes('perf') || i.area?.toLowerCase().includes('best') },
-    { label: 'SEO',           accent: '#3687fa', match: i => i.area?.toLowerCase().includes('seo')  || i.source === 'seo' },
-    { label: 'Security',      accent: '#19b987', match: i => i.area?.toLowerCase().includes('sec')  || i.source === 'ssl' },
-    { label: 'Accessibility', accent: '#efa642', match: i => i.area?.toLowerCase().includes('access') || i.source === 'a11y' },
+    { label: 'Performance',   accent: '#7948f6', auditKey: 'performance', match: i => i.area?.toLowerCase().includes('perf') || i.area?.toLowerCase().includes('best') },
+    { label: 'SEO',           accent: '#3687fa', auditKey: 'seo',         match: i => i.area?.toLowerCase().includes('seo')  || i.source === 'seo' },
+    { label: 'Security',      accent: '#19b987', auditKey: 'security',    match: i => i.area?.toLowerCase().includes('sec')  || i.source === 'ssl' },
+    { label: 'Accessibility', accent: '#efa642', auditKey: 'accessibility', match: i => i.area?.toLowerCase().includes('access') || i.source === 'a11y' },
   ];
 
   // Navigate to Findings tab filtered to a category
@@ -1332,9 +1359,10 @@ export default function ReportClient({ isPro, userName, userAvatar }) {
         {/* Technical categories */}
         {active !== 'Visual' && detailCategories
           .filter(c => active === 'All' || c.label === active)
-          .map(({ label, accent, match }) => (
+          .map(({ label, accent, auditKey, match }) => (
             <CategorySection key={label} label={label} accent={accent}
-              issues={allIssues.filter(match)} />
+              issues={allIssues.filter(match)}
+              auditStatus={auditStatuses[auditKey]} />
           ))
         }
       </div>
@@ -1617,7 +1645,7 @@ export default function ReportClient({ isPro, userName, userAvatar }) {
 
                 {/* Prominent score cards */}
                 {(() => {
-                  const statuses = report.scores?.auditStatuses || {};
+                  const statuses = auditStatuses;
                   const tiles = [
                     { label: 'Performance',   key: 'performance',   score: report.scores?.performance,   cat: 'Performance' },
                     { label: 'SEO',           key: 'seo',           score: report.scores?.seo,           cat: 'SEO' },
