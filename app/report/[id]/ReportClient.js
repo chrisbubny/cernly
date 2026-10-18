@@ -213,6 +213,7 @@ const EVIDENCE_SOURCE = {
 
 function FixCard({ issue, n, impact, onAskCernly, onVerify }) {
   const [status, setStatus] = useState('open');
+  const [expanded, setExpanded] = useState(false);
   const [guideOpen, setGuideOpen] = useState(false);
   const cleanDesc = (str) => str?.replace(/\[([^\]]+)\]\([^)]+\)/g, '$1') || '';
   const st = FIX_STATUSES[status] || FIX_STATUSES.open;
@@ -221,112 +222,116 @@ function FixCard({ issue, n, impact, onAskCernly, onVerify }) {
   const catColor = { Performance: '#7948f6', SEO: '#3687fa', Security: '#19b987', Accessibility: '#efa642' };
   const cat = issue.area?.replace(/best.practices?/i, 'Performance') || 'Performance';
   const accent = catColor[cat] || '#7948f6';
+  const sevDotColor = { critical: '#ef6473', warning: '#efa642', info: '#b0b4c8', good: '#19b987' };
+  const sevDot = sevDotColor[issue.severity] || sevDotColor.info;
 
   return (
     <div style={{ background: '#fff', border: '1px solid #e9eaf2', borderRadius: 16,
-      marginBottom: 12, overflow: 'hidden', boxShadow: '0 2px 10px #1b1d3208' }}>
+      marginBottom: 8, overflow: 'hidden', boxShadow: '0 1px 6px #1b1d3206' }}>
 
-      {/* Card header */}
-      <div style={{ padding: '16px 18px 14px' }}>
-        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, marginBottom: 14 }}>
-          {/* Icon */}
-          <div style={{ width: 34, height: 34, borderRadius: 10, background: accent + '18',
-            display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginTop: 1 }}>
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke={accent} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
-            </svg>
+      {/* Compact summary row — always visible */}
+      <button onClick={() => setExpanded(e => !e)}
+        style={{ width: '100%', background: 'none', border: 'none', textAlign: 'left',
+          padding: '13px 16px', display: 'flex', alignItems: 'center', gap: 10,
+          cursor: 'pointer', fontFamily: 'inherit' }}>
+        {/* Severity dot */}
+        <div style={{ width: 8, height: 8, borderRadius: '50%', background: sevDot, flexShrink: 0 }} />
+        {/* Title */}
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 13, fontWeight: 600, color: '#151621', lineHeight: 1.4,
+            whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+            {issue.message}
           </div>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: 14, fontWeight: 700, color: '#151621',
-              fontFamily: 'var(--font-manrope, Manrope, sans-serif)', lineHeight: 1.35, marginBottom: 5 }}>
-              {issue.message}
-            </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-              <span style={{ fontSize: 11, color: '#83899c', fontWeight: 600 }}>{cat}</span>
-              <span style={{ color: '#d4d6e0', fontSize: 11 }}>·</span>
-              <span style={{ fontSize: 11, color: '#83899c' }}>Detected this scan</span>
-            </div>
-          </div>
+        </div>
+        {/* Meta chips */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+          <span style={{ fontSize: 10, color: '#83899c', fontWeight: 600 }}>{cat}</span>
+          <span style={{ fontSize: 10, background: st.bg, color: st.color,
+            borderRadius: 6, padding: '2px 8px', fontWeight: 700 }}>{st.label}</span>
           <ImpactBadge level={impact} />
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#b0b4c8" strokeWidth="2.5" strokeLinecap="round">
+            <path d={expanded ? 'm18 15-6-6-6 6' : 'm6 9 6 6 6-6'}/>
+          </svg>
         </div>
+      </button>
 
-        {/* Meta row */}
-        <div style={{ display: 'flex', gap: 24, marginBottom: 14 }}>
-          <div>
-            <div style={{ fontSize: 10, fontWeight: 800, color: '#b0b4c8', letterSpacing: '.07em', marginBottom: 3 }}>PRIORITY</div>
-            <div style={{ fontSize: 13, fontWeight: 700, color: '#151621', textTransform: 'capitalize' }}>{impact}</div>
-          </div>
-          <div>
-            <div style={{ fontSize: 10, fontWeight: 800, color: '#b0b4c8', letterSpacing: '.07em', marginBottom: 3 }}>STATUS</div>
-            <button onClick={() => {
-              const cycle = { open: 'in_progress', in_progress: 'verify', verify: 'open', fixed: 'open', still_open: 'open', dismissed: 'open' };
-              setStatus(s => cycle[s] || 'open');
-            }} style={{ border: 0, background: st.bg, color: st.color, borderRadius: 7,
-              padding: '3px 10px', fontSize: 11, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
-              {st.label}
-            </button>
-          </div>
-          <div>
-            <div style={{ fontSize: 10, fontWeight: 800, color: '#b0b4c8', letterSpacing: '.07em', marginBottom: 3 }}>EVIDENCE</div>
-            <div style={{ fontSize: 13, fontWeight: 600, color: '#4b5168' }}>{evidence}</div>
-          </div>
-        </div>
+      {/* Expanded detail */}
+      {expanded && (
+        <div style={{ borderTop: '1px solid #f0f1f8' }}>
+          <div style={{ padding: '14px 16px 16px' }}>
+            {/* Meta row */}
+            <div style={{ display: 'flex', gap: 20, marginBottom: 14 }}>
+              <div>
+                <div style={{ fontSize: 10, fontWeight: 800, color: '#b0b4c8', letterSpacing: '.07em', marginBottom: 3 }}>STATUS</div>
+                <button onClick={(e) => {
+                  e.stopPropagation();
+                  const cycle = { open: 'in_progress', in_progress: 'verify', verify: 'open', fixed: 'open', still_open: 'open', dismissed: 'open' };
+                  setStatus(s => cycle[s] || 'open');
+                }} style={{ border: 0, background: st.bg, color: st.color, borderRadius: 7,
+                  padding: '3px 10px', fontSize: 11, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
+                  {st.label}
+                </button>
+              </div>
+              <div>
+                <div style={{ fontSize: 10, fontWeight: 800, color: '#b0b4c8', letterSpacing: '.07em', marginBottom: 3 }}>EVIDENCE</div>
+                <div style={{ fontSize: 13, fontWeight: 600, color: '#4b5168' }}>{evidence}</div>
+              </div>
+            </div>
 
-        {/* Why it matters */}
-        {(issue.description || issue.detail) && (
-          <div style={{ background: '#f8f9fd', borderRadius: 10, padding: '12px 14px', marginBottom: 14 }}>
-            <div style={{ fontSize: 10, fontWeight: 800, color: '#83899c',
-              letterSpacing: '.07em', marginBottom: 6 }}>WHY IT MATTERS</div>
-            <p style={{ fontSize: 13, color: '#4b5168', lineHeight: 1.75, margin: 0 }}>
-              {cleanDesc(issue.description || issue.detail)}
-            </p>
-          </div>
-        )}
+            {/* Why it matters */}
+            {(issue.description || issue.detail) && (
+              <div style={{ background: '#f8f9fd', borderRadius: 10, padding: '11px 13px', marginBottom: 12 }}>
+                <div style={{ fontSize: 10, fontWeight: 800, color: '#83899c',
+                  letterSpacing: '.07em', marginBottom: 5 }}>WHY IT MATTERS</div>
+                <p style={{ fontSize: 13, color: '#4b5168', lineHeight: 1.7, margin: 0 }}>
+                  {cleanDesc(issue.description || issue.detail)}
+                </p>
+              </div>
+            )}
 
-        {/* Action buttons */}
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-          <button onClick={() => setGuideOpen(g => !g)}
-            style={{ display: 'flex', alignItems: 'center', gap: 6, border: '1.5px solid #e9eaf2',
-              background: '#fff', color: '#151621', borderRadius: 9, padding: '8px 14px',
-              fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
-            {guideOpen ? 'Hide fix guide' : 'View fix guide'}
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
-              <path d={guideOpen ? 'm18 15-6-6-6 6' : 'm5 12h14m-7-7 7 7-7 7'}/>
-            </svg>
-          </button>
-          <button onClick={() => onAskCernly(issue)}
-            style={{ display: 'flex', alignItems: 'center', gap: 6, border: '1.5px solid #ede9ff',
-              background: '#f7f4ff', color: '#7948f6', borderRadius: 9, padding: '8px 14px',
-              fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
-            <span style={{ fontSize: 13 }}>✦</span> Ask Cernly
-          </button>
-          <button onClick={() => onVerify(issue)}
-            style={{ display: 'flex', alignItems: 'center', gap: 6, border: '1.5px solid #e9eaf2',
-              background: status === 'verify' ? '#f1edff' : '#fff',
-              color: status === 'verify' ? '#7948f6' : '#4b5168',
-              borderRadius: 9, padding: '8px 14px',
-              fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
-              <path d="M21 12a9 9 0 1 1-9-9M9 12l2 2 4-4"/>
-            </svg>
-            Verify fix
-          </button>
-        </div>
-      </div>
-
-      {/* Fix guide panel */}
-      {guideOpen && (
-        <div style={{ borderTop: '1px solid #f0f1f8', padding: '14px 18px', background: '#fafbff' }}>
-          <div style={{ fontSize: 10, fontWeight: 800, color: '#7948f6',
-            letterSpacing: '.07em', marginBottom: 10 }}>FIX GUIDE</div>
-          <ol style={{ margin: 0, padding: '0 0 0 18px', display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {getFixSteps(issue).map((step, i) => (
-              <li key={i} style={{ fontSize: 13, color: '#4b5168', lineHeight: 1.65 }}>{step}</li>
-            ))}
-          </ol>
-          <div style={{ marginTop: 12, fontSize: 11, color: '#b0b4c8', fontStyle: 'italic' }}>
-            Steps are based on the detected issue. Run Verify fix after making changes to confirm.
+            {/* Action buttons */}
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              <button onClick={() => setGuideOpen(g => !g)}
+                style={{ display: 'flex', alignItems: 'center', gap: 6, border: '1.5px solid #e9eaf2',
+                  background: '#fff', color: '#151621', borderRadius: 9, padding: '7px 13px',
+                  fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
+                {guideOpen ? 'Hide fix guide' : 'View fix guide'}
+              </button>
+              <button onClick={() => onAskCernly(issue)}
+                style={{ display: 'flex', alignItems: 'center', gap: 6, border: '1.5px solid #ede9ff',
+                  background: '#f7f4ff', color: '#7948f6', borderRadius: 9, padding: '7px 13px',
+                  fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
+                <span style={{ fontSize: 13 }}>✦</span> Ask Cernly
+              </button>
+              <button onClick={() => onVerify(issue)}
+                style={{ display: 'flex', alignItems: 'center', gap: 6, border: '1.5px solid #e9eaf2',
+                  background: status === 'verify' ? '#f1edff' : '#fff',
+                  color: status === 'verify' ? '#7948f6' : '#4b5168',
+                  borderRadius: 9, padding: '7px 13px',
+                  fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+                  <path d="M21 12a9 9 0 1 1-9-9M9 12l2 2 4-4"/>
+                </svg>
+                Verify fix
+              </button>
+            </div>
           </div>
+
+          {/* Fix guide panel */}
+          {guideOpen && (
+            <div style={{ borderTop: '1px solid #f0f1f8', padding: '13px 16px', background: '#fafbff' }}>
+              <div style={{ fontSize: 10, fontWeight: 800, color: '#7948f6',
+                letterSpacing: '.07em', marginBottom: 9 }}>FIX GUIDE</div>
+              <ol style={{ margin: 0, padding: '0 0 0 18px', display: 'flex', flexDirection: 'column', gap: 7 }}>
+                {getFixSteps(issue).map((step, i) => (
+                  <li key={i} style={{ fontSize: 13, color: '#4b5168', lineHeight: 1.65 }}>{step}</li>
+                ))}
+              </ol>
+              <div style={{ marginTop: 10, fontSize: 11, color: '#b0b4c8', fontStyle: 'italic' }}>
+                Steps are based on the detected issue. Run Verify fix after making changes to confirm.
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -955,6 +960,7 @@ export default function ReportClient({ isPro, userName, userAvatar }) {
   const [findingsFilter, setFindingsFilter] = useState(null); // null = All
   const [drawerOpen, setDrawerOpen]       = useState(false);
   const [drawerContext, setDrawerContext] = useState(null); // { title, category, detail }
+  const [tileModal, setTileModal]         = useState(null); // key of tile with unavailable audit
   const [rescanStatus, setRescanStatus]   = useState('idle'); // idle|scanning|error
   const [rescanStage, setRescanStage]     = useState(0);
 
@@ -1610,42 +1616,137 @@ export default function ReportClient({ isPro, userName, userAvatar }) {
                   color: '#151621', margin: '0 0 18px' }}>{domain}</h1>
 
                 {/* Prominent score cards */}
-                <div style={{ display: 'grid',
-                  gridTemplateColumns: 'repeat(5, 1fr)',
-                  gap: 10, marginBottom: 0 }}>
-                  {[
-                    { label: 'Performance',   score: report.scores?.performance,   cat: 'Performance' },
-                    { label: 'SEO',           score: report.scores?.seo,           cat: 'SEO' },
-                    { label: 'Security',      score: report.scores?.security,      cat: 'Security' },
-                    { label: 'Accessibility', score: report.scores?.accessibility, cat: 'Accessibility' },
-                    { label: 'UX',            score: uxScore,                      cat: 'Visual' },
-                  ].map(c => {
+                {(() => {
+                  const statuses = report.scores?.auditStatuses || {};
+                  const tiles = [
+                    { label: 'Performance',   key: 'performance',   score: report.scores?.performance,   cat: 'Performance' },
+                    { label: 'SEO',           key: 'seo',           score: report.scores?.seo,           cat: 'SEO' },
+                    { label: 'Security',      key: 'security',      score: report.scores?.security,      cat: 'Security' },
+                    { label: 'Accessibility', key: 'accessibility', score: report.scores?.accessibility, cat: 'Accessibility' },
+                    { label: 'UX',            key: 'ux',            score: uxScore,                      cat: 'Visual' },
+                  ];
+                  const auditStatusLabel = (st) => {
+                    if (!st) return { text: 'Not evaluated', color: '#b0b4c8' };
+                    if (st.status === 'completed') return null; // handled by score display
+                    if (st.status === 'blocked')   return { text: 'Blocked', color: '#efa642', icon: '⚠' };
+                    if (st.status === 'failed')    return { text: 'Check failed', color: '#ef6473', icon: '✕' };
+                    return { text: 'Not evaluated', color: '#b0b4c8' };
+                  };
+                  const isUnavailable = (key) => {
+                    const st = statuses[key];
+                    return !st || (st.status !== 'completed' && key !== 'ux');
+                  };
+                  return (<>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 10, marginBottom: 0 }}>
+                  {tiles.map(c => {
                     const color = c.score == null ? '#83899c' : c.score >= 80 ? '#19b987' : c.score >= 60 ? '#efa642' : '#ef6473';
                     const critCount = allIssues.filter(i => i.severity === 'critical' &&
                       detailCategories.find(d => d.label === c.cat)?.match(i)).length;
+                    const st = statuses[c.key];
+                    const unavail = isUnavailable(c.key);
+                    const unavailLabel = auditStatusLabel(st);
                     return (
                       <button key={c.label}
-                        onClick={() => goToFindings(c.cat)}
+                        onClick={() => unavail && c.key !== 'ux' ? setTileModal(c.key) : goToFindings(c.cat)}
                         className="score-tile"
-                        style={{ background: '#fff', border: '1px solid #e9eaf2', borderRadius: 14,
-                          padding: '18px 14px 14px', textAlign: 'center', cursor: 'pointer',
-                          fontFamily: 'inherit', boxShadow: '0 2px 8px #1b1d3205' }}>
+                        style={{ background: '#fff',
+                          border: unavail && c.key !== 'ux' ? '1px solid #f0d0a0' : '1px solid #e9eaf2',
+                          borderRadius: 14, padding: '18px 14px 14px', textAlign: 'center', cursor: 'pointer',
+                          fontFamily: 'inherit', boxShadow: '0 2px 8px #1b1d3205', position: 'relative' }}>
                         <div style={{ fontFamily: 'var(--font-manrope, Manrope, sans-serif)',
                           fontWeight: 800, fontSize: 38, lineHeight: 1, color, marginBottom: 5 }}>
                           {c.score ?? '—'}
                         </div>
                         <div style={{ fontSize: 11, fontWeight: 700, color: '#83899c', marginBottom: 4 }}>{c.label}</div>
-                        {critCount > 0
-                          ? <div style={{ fontSize: 10, color: '#ef6473', fontWeight: 700 }}>{critCount} critical</div>
-                          : c.score != null
-                            ? <div style={{ fontSize: 10, color: '#19b987', fontWeight: 700 }}>
-                                {c.score >= 90 ? 'Excellent' : c.score >= 80 ? 'Good' : c.score >= 60 ? 'Fair' : 'Needs work'}
-                              </div>
-                            : <div style={{ fontSize: 10, color: '#b0b4c8', fontWeight: 600 }}>Not evaluated</div>
+                        {unavail && c.key !== 'ux' && unavailLabel
+                          ? <div style={{ fontSize: 10, color: unavailLabel.color, fontWeight: 700 }}>
+                              {unavailLabel.text} ↗
+                            </div>
+                          : critCount > 0
+                            ? <div style={{ fontSize: 10, color: '#ef6473', fontWeight: 700 }}>{critCount} critical</div>
+                            : c.score != null
+                              ? <div style={{ fontSize: 10, color: '#19b987', fontWeight: 700 }}>
+                                  {c.score >= 90 ? 'Excellent' : c.score >= 80 ? 'Good' : c.score >= 60 ? 'Fair' : 'Needs work'}
+                                </div>
+                              : <div style={{ fontSize: 10, color: '#b0b4c8', fontWeight: 600 }}>Not evaluated</div>
                         }
                       </button>
                     );
                   })}
+                  </div>
+                  {/* Unavailable category explanation banner */}
+                  {Object.entries(statuses).some(([k, s]) => s.status !== 'completed' && k !== 'ux') && (
+                    <div style={{ background: '#fffbf0', border: '1px solid #f0e0b0', borderRadius: 10,
+                      padding: '10px 14px', marginTop: 10, display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#d97706" strokeWidth="2" strokeLinecap="round" style={{ flexShrink: 0, marginTop: 1 }}>
+                        <path d="M12 2L2 19h20L12 2zm0 7v5m0 3h.01"/>
+                      </svg>
+                      <div style={{ fontSize: 12, color: '#92400e', lineHeight: 1.5 }}>
+                        <strong>Some checks couldn't be completed.</strong>{' '}
+                        {Object.entries(statuses)
+                          .filter(([k, s]) => s.status !== 'completed' && k !== 'ux')
+                          .map(([k]) => k.charAt(0).toUpperCase() + k.slice(1))
+                          .join(' and ')}{' '}
+                        {Object.entries(statuses).filter(([k, s]) => s.status !== 'completed' && k !== 'ux').length === 1 ? 'result is' : 'results are'} unavailable for this scan. Click the tile for details.
+                      </div>
+                    </div>
+                  )}
+                  {/* Tile detail modal */}
+                  {tileModal && (() => {
+                    const st = statuses[tileModal];
+                    const name = tileModal.charAt(0).toUpperCase() + tileModal.slice(1);
+                    const stateMessages = {
+                      blocked: { heading: 'Blocked by website', body: st?.error?.message || 'The page could not be fetched. The site may be blocking automated requests or behind authentication.', action: 'Retry check' },
+                      failed:  { heading: 'Check failed', body: st?.error?.message || 'An error occurred while running this check.', action: 'Retry check' },
+                      unavailable: { heading: 'Not available', body: 'No result was returned for this check.', action: 'Retry check' },
+                    };
+                    const msg = stateMessages[st?.status] || { heading: 'Not evaluated', body: 'This check was not run as part of this scan.', action: null };
+                    return (
+                      <div onClick={() => setTileModal(null)}
+                        style={{ position: 'fixed', inset: 0, background: '#00000040', zIndex: 200,
+                          display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <div onClick={e => e.stopPropagation()}
+                          style={{ background: '#fff', borderRadius: 16, padding: '24px',
+                            maxWidth: 380, width: '90%', boxShadow: '0 20px 60px #00000030' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+                            <div style={{ fontFamily: 'var(--font-manrope, Manrope, sans-serif)', fontWeight: 800, fontSize: 16, color: '#151621' }}>
+                              {name} — {msg.heading}
+                            </div>
+                            <button onClick={() => setTileModal(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#83899c', fontSize: 18, padding: '0 4px' }}>✕</button>
+                          </div>
+                          <p style={{ fontSize: 13, color: '#4b5168', lineHeight: 1.65, margin: '0 0 16px' }}>{msg.body}</p>
+                          {st?.error?.code && (
+                            <div style={{ background: '#f4f5fb', borderRadius: 8, padding: '8px 12px', marginBottom: 14 }}>
+                              <div style={{ fontSize: 10, color: '#83899c', fontWeight: 700, fontFamily: 'monospace' }}>
+                                Error code: {st.error.code}
+                              </div>
+                            </div>
+                          )}
+                          {st?.attemptedAt && (
+                            <p style={{ fontSize: 11, color: '#b0b4c8', margin: '0 0 14px' }}>
+                              Attempted: {new Date(st.attemptedAt).toLocaleString()}
+                            </p>
+                          )}
+                          <div style={{ display: 'flex', gap: 8 }}>
+                            {st?.error?.retryable && msg.action && (
+                              <button onClick={() => setTileModal(null)}
+                                style={{ flex: 1, background: '#7948f6', color: '#fff', border: 'none', borderRadius: 10,
+                                  padding: '10px', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
+                                {msg.action}
+                              </button>
+                            )}
+                            <button onClick={() => setTileModal(null)}
+                              style={{ flex: 1, background: '#f4f5fb', color: '#4b5168', border: 'none', borderRadius: 10,
+                                padding: '10px', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>
+                              Close
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })()}
+                  </>);
+                })()}
                 </div>
 
                 {/* Tabs */}
