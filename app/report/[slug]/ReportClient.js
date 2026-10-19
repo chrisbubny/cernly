@@ -1827,18 +1827,30 @@ export default function ReportClient({ isPro, userName, userAvatar }) {
                     </button>
                   )
               )}
-              <button onClick={handleRescan} disabled={rescanStatus === 'scanning'}
-                style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 13px',
-                  background: rescanStatus === 'scanning' ? '#3d3f52' : '#151621', color: '#fff',
-                  border: 0, borderRadius: 9, fontWeight: 700, fontSize: 12,
-                  cursor: rescanStatus === 'scanning' ? 'not-allowed' : 'pointer', fontFamily: 'inherit',
-                  opacity: rescanStatus === 'scanning' ? .7 : 1 }}>
-                <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round"
-                  style={rescanStatus === 'scanning' ? { animation: 'spin .8s linear infinite' } : {}}>
-                  <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/>
-                </svg>
-                {rescanStatus === 'scanning' ? 'Scanning…' : 'Re-scan'}
-              </button>
+              {rescanStatus === 'scanning' ? (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 13px',
+                  background: '#1a1c2e', borderRadius: 9, maxWidth: 220 }}>
+                  <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="#7948f6" strokeWidth={2} strokeLinecap="round"
+                    style={{ animation: 'spin .8s linear infinite', flexShrink: 0 }}>
+                    <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/>
+                  </svg>
+                  <span style={{ fontSize: 11, color: '#c5c8e0', fontWeight: 600, whiteSpace: 'nowrap',
+                    overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    {RESCAN_STAGES[rescanStage]}
+                  </span>
+                </div>
+              ) : (
+                <button onClick={handleRescan}
+                  style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 13px',
+                    background: rescanStatus === 'error' ? '#ef6473' : '#151621', color: '#fff',
+                    border: 0, borderRadius: 9, fontWeight: 700, fontSize: 12,
+                    cursor: 'pointer', fontFamily: 'inherit' }}>
+                  <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round">
+                    <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/>
+                  </svg>
+                  {rescanStatus === 'error' ? 'Scan failed — retry' : 'Re-scan'}
+                </button>
+              )}
             </div>
           </header>
 

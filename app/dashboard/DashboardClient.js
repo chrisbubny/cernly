@@ -897,7 +897,7 @@ export default function DashboardClient({ reports: initialReports = [], isPro, u
                     <h1 style={{ fontFamily: 'var(--font-manrope, Manrope, sans-serif)',
                       fontSize: 'clamp(29px,3.3vw,41px)', letterSpacing: '-.045em',
                       fontWeight: 800, margin: '9px 0' }}>My websites</h1>
-                    <p style={{ color: '#83899c', fontSize: 13, margin: 0 }}>All the sites you&apos;re keeping an eye on.</p>
+                    <p style={{ color: '#83899c', fontSize: 13, margin: 0 }}>Click any row to see that site&apos;s full scan history.</p>
                   </div>
                 </div>
                 <div style={{ background: '#fff', border: '1px solid #e9eaf2', borderRadius: 17, overflow: 'hidden' }}>
@@ -949,7 +949,10 @@ export default function DashboardClient({ reports: initialReports = [], isPro, u
                                   </span>
                                 </td>
                                 <td style={{ padding: '12px 14px', borderBottom: '1px solid #e9eaf2' }}>
-                                  <span style={{ color: '#9398a8', fontSize: 11 }}>View history →</span>
+                                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4,
+                                    color: '#7650e9', fontSize: 11, fontWeight: 700 }}>
+                                    View history →
+                                  </span>
                                 </td>
                               </tr>
                             );
