@@ -118,28 +118,45 @@ const SCAN_STAGES = [
   { label: 'Finalizing report…',      pct: 96 },
 ];
 
-/* ─── Fix queue view ─── */
-const ALL_TASKS = [
-  { num: '01', title: 'Reduce forced reflows',        domain: 'spirecomm.com', impact: 'high',   effort: 'Moderate effort', fix: 'image'    },
-  { num: '02', title: 'Compress hero image',           domain: 'spirecomm.com', impact: 'high',   effort: '~10 min',         fix: 'image'    },
-  { num: '03', title: 'Add missing meta descriptions', domain: 'spirecomm.com', impact: 'high',   effort: '~20 min',         fix: 'meta'     },
-  { num: '04', title: 'Add aria-labels to buttons',    domain: 'spirecomm.com', impact: 'medium', effort: '~5 min',          fix: 'aria'     },
-  { num: '05', title: 'Improve font loading',          domain: 'spirecomm.com', impact: 'medium', effort: '~15 min',         fix: 'fonts'    },
-  { num: '06', title: 'Review heading hierarchy',      domain: 'spirecomm.com', impact: 'medium', effort: '~10 min',         fix: 'headings' },
-  { num: '07', title: 'Enable text compression',       domain: 'spirecomm.com', impact: 'medium', effort: '~5 min',          fix: 'image'    },
-];
+/* ─── Priority → impact mapping for Fix Queue filters ─── */
+function recImpact(priority) {
+  if (priority === 'critical' || priority === 'high') return 'high';
+  if (priority === 'medium') return 'medium';
+  return 'low';
+}
 
-function FixQueueView({ reports, onOpenGuide }) {
+function effortLabel(effort) {
+  if (effort === 'low')    return 'Low effort';
+  if (effort === 'medium') return 'Medium effort';
+  if (effort === 'high')   return 'High effort';
+  return null;
+}
+
+function FixQueueView({ recommendations = [], onOpenGuide }) {
   const [filter, setFilter] = useState('all');
   const tabs = [
     { id: 'all',    label: 'All findings' },
-    { id: 'high',   label: 'High impact'  },
-    { id: 'medium', label: 'Medium impact'},
+    { id: 'high',   label: 'High priority'  },
+    { id: 'medium', label: 'Medium priority'},
   ];
-  const visible = ALL_TASKS.filter(t => filter === 'all' || t.impact === filter);
+
+  const tasks = recommendations.map((rec, i) => ({
+    num:        String(i + 1).padStart(2, '0'),
+    recId:      rec.id,
+    title:      rec.title,
+    domain:     rec.reportUrl ? (() => { try { return new URL(rec.reportUrl).hostname; } catch { return rec.reportUrl; } })() : '—',
+    impact:     recImpact(rec.priority),
+    priority:   rec.priority,
+    effort:     effortLabel(rec.effort),
+    category:   rec.category,
+    reportSlug: rec.reportSlug || null,
+  }));
+
+  const visible = tasks.filter(t => filter === 'all' || t.impact === filter);
   const impactColors = {
     high:   { bg: '#fff4e5', color: '#d97706' },
     medium: { bg: '#f1edff', color: '#7948f6' },
+    low:    { bg: '#f4f5fb', color: '#83899c' },
   };
 
   return (
@@ -154,14 +171,6 @@ function FixQueueView({ reports, onOpenGuide }) {
             Prioritized fixes from your scans — highest impact first.
           </p>
         </div>
-        <button style={{ border: '1px solid #e9eaf2', background: '#fff', borderRadius: 10,
-          padding: '9px 16px', fontSize: 12, fontWeight: 700, cursor: 'pointer',
-          color: '#444', display: 'flex', alignItems: 'center', gap: 7, fontFamily: 'inherit' }}>
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
-          </svg>
-          Export tasks
-        </button>
       </div>
 
       {/* Filter tabs */}
@@ -185,7 +194,7 @@ function FixQueueView({ reports, onOpenGuide }) {
         {visible.map((t, i) => {
           const ic = impactColors[t.impact] || impactColors.medium;
           return (
-            <div key={t.num} style={{ display: 'flex', gap: 14, alignItems: 'center',
+            <div key={t.recId || t.num} style={{ display: 'flex', gap: 14, alignItems: 'center',
               padding: '16px 20px', borderBottom: i < visible.length - 1 ? '1px solid #f0f1f5' : 'none' }}>
               <span style={{ width: 28, height: 28, display: 'grid', placeItems: 'center',
                 borderRadius: 9, background: '#f0ebff', color: '#7948f6',
@@ -193,27 +202,42 @@ function FixQueueView({ reports, onOpenGuide }) {
               <div style={{ flex: 1, minWidth: 0 }}>
                 <strong style={{ fontSize: 13, display: 'block', color: '#151621' }}>{t.title}</strong>
                 <p style={{ fontSize: 11, color: '#8a90a1', margin: '4px 0 0',
-                  display: 'flex', alignItems: 'center', gap: 4 }}>
+                  display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap' }}>
                   <span>{t.domain}</span>
                   <span style={{ opacity: .4 }}>·</span>
-                  <span style={{ color: ic.color, fontWeight: 700, textTransform: 'capitalize' }}>{t.impact} impact</span>
+                  <span style={{ color: ic.color, fontWeight: 700, textTransform: 'capitalize' }}>{t.priority} priority</span>
                   <span style={{ opacity: .4 }}>·</span>
-                  <span>{t.effort}</span>
+                  <span>{t.category}</span>
+                  {t.effort && <><span style={{ opacity: .4 }}>·</span><span>{t.effort}</span></>}
                 </p>
               </div>
-              <button onClick={() => onOpenGuide(t.fix)}
-                style={{ border: '1px solid #e9eaf2', background: '#fff', color: '#7651e4',
-                  fontSize: 11, fontWeight: 800, padding: '7px 12px', borderRadius: 8,
-                  cursor: 'pointer', flexShrink: 0, fontFamily: 'inherit',
-                  whiteSpace: 'nowrap' }}>
-                View guide
-              </button>
+              {t.reportSlug
+                ? <Link href={`/report/${t.reportSlug}`}
+                    style={{ border: '1px solid #e9eaf2', background: '#fff', color: '#7651e4',
+                      fontSize: 11, fontWeight: 800, padding: '7px 12px', borderRadius: 8,
+                      textDecoration: 'none', flexShrink: 0, whiteSpace: 'nowrap' }}>
+                    View report
+                  </Link>
+                : <button onClick={() => onOpenGuide(t.category?.toLowerCase())}
+                    style={{ border: '1px solid #e9eaf2', background: '#fff', color: '#7651e4',
+                      fontSize: 11, fontWeight: 800, padding: '7px 12px', borderRadius: 8,
+                      cursor: 'pointer', flexShrink: 0, fontFamily: 'inherit',
+                      whiteSpace: 'nowrap' }}>
+                    View guide
+                  </button>
+              }
             </div>
           );
         })}
-        {visible.length === 0 && (
+        {tasks.length === 0 && (
+          <div style={{ padding: '40px 20px', textAlign: 'center', color: '#83899c', fontSize: 13 }}>
+            <p style={{ margin: '0 0 8px', fontWeight: 700, color: '#3b3f52' }}>No recommendations yet</p>
+            <p style={{ margin: 0 }}>Run a scan to get personalized improvement suggestions.</p>
+          </div>
+        )}
+        {tasks.length > 0 && visible.length === 0 && (
           <div style={{ padding: '32px 20px', textAlign: 'center', color: '#83899c', fontSize: 13 }}>
-            No {filter} impact tasks found.
+            No {filter} priority items found.
           </div>
         )}
       </div>
@@ -234,10 +258,19 @@ export default function DashboardClient({ reports: initialReports = [], isPro, u
   const [toast, setToast] = useState({ msg: '', show: false });
   const [modal, setModal] = useState(null); // null | 'pro' | 'image' | 'meta' | 'fonts' | ...
   const [localReports, setLocalReports] = useState(initialReports);
+  const [recommendations, setRecommendations] = useState([]);
   const [deletingId, setDeletingId] = useState(null); // id currently showing confirm
   const [selectedDomain, setSelectedDomain] = useState(null); // null | hostname string — for per-domain drill-down
   const router = useRouter();
   const { signOut } = useClerk();
+
+  // Fetch user's recommendations for Cernly's Take and Fix Queue
+  useEffect(() => {
+    fetch('/api/recommendations')
+      .then(r => r.ok ? r.json() : { recommendations: [] })
+      .then(data => setRecommendations(data.recommendations || []))
+      .catch(() => {});
+  }, [localReports]); // re-fetch after any scan completes (localReports changes)
 
   // Handle ?rescan=<url> query param — pre-fill URL and switch to scan form
   useEffect(() => {
@@ -721,30 +754,42 @@ export default function DashboardClient({ reports: initialReports = [], isPro, u
                     </div>
                     <div style={{ background: '#fff', border: '1px solid #e9eaf2', borderRadius: 17,
                       boxShadow: '0 9px 25px #22233e05', padding: 22 }}>
-                      {[
-                        { num: '01', title: 'Compress hero image', sub: 'Performance · ~10 min', sev: 'critical', fix: 'image' },
-                        { num: '02', title: 'Add missing meta descriptions', sub: 'SEO · ~20 min', sev: 'high', fix: 'meta' },
-                        { num: '03', title: 'Improve font loading', sub: 'Performance · ~15 min', sev: 'medium', fix: 'fonts' },
-                      ].map(t => (
-                        <div key={t.num} style={{ display: 'flex', gap: 12, alignItems: 'flex-start',
-                          padding: '14px 0', borderBottom: '1px solid #f0f1f5' }}
-                          className="task-row-item">
-                          <span style={{ width: 26, height: 26, display: 'grid', placeItems: 'center',
-                            borderRadius: 8, background: '#f0ebff', color: '#7953df',
-                            fontWeight: 800, fontSize: 11, flexShrink: 0 }}>{t.num}</span>
-                          <div style={{ flex: 1, minWidth: 0 }}>
-                            <strong style={{ fontSize: 12, display: 'block' }}>{t.title}</strong>
-                            <p style={{ fontSize: 11, color: '#8a90a1', margin: '5px 0 0' }}>{t.sub}</p>
+                      {recommendations.slice(0, 3).map((rec, i) => {
+                        const domain = rec.reportUrl ? (() => { try { return new URL(rec.reportUrl).hostname; } catch { return rec.reportUrl; } })() : '—';
+                        const sev = (rec.priority === 'critical' || rec.priority === 'high') ? rec.priority : 'medium';
+                        return (
+                          <div key={rec.id || i} style={{ display: 'flex', gap: 12, alignItems: 'flex-start',
+                            padding: '14px 0', borderBottom: '1px solid #f0f1f5' }}
+                            className="task-row-item">
+                            <span style={{ width: 26, height: 26, display: 'grid', placeItems: 'center',
+                              borderRadius: 8, background: '#f0ebff', color: '#7953df',
+                              fontWeight: 800, fontSize: 11, flexShrink: 0 }}>
+                              {String(i + 1).padStart(2, '0')}
+                            </span>
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <strong style={{ fontSize: 12, display: 'block' }}>{rec.title}</strong>
+                              <p style={{ fontSize: 11, color: '#8a90a1', margin: '5px 0 0' }}>
+                                {domain} · {rec.category}
+                              </p>
+                            </div>
+                            <SevBadge level={sev} />
+                            {rec.reportSlug
+                              ? <Link href={`/report/${rec.reportSlug}`}
+                                  style={{ border: 0, background: '#f4f1ff', color: '#7651e4',
+                                    fontSize: 10, fontWeight: 800, padding: '7px 9px', borderRadius: 7,
+                                    flexShrink: 0, alignSelf: 'center', textDecoration: 'none',
+                                    whiteSpace: 'nowrap' }}>
+                                  View →
+                                </Link>
+                              : null}
                           </div>
-                          <SevBadge level={t.sev} />
-                          <button onClick={() => setModal(t.fix)}
-                            style={{ border: 0, background: '#f4f1ff', color: '#7651e4',
-                              fontSize: 10, fontWeight: 800, padding: '7px 9px', borderRadius: 7,
-                              cursor: 'pointer', flexShrink: 0, alignSelf: 'center', fontFamily: 'inherit' }}>
-                            Fix guide →
-                          </button>
+                        );
+                      })}
+                      {recommendations.length === 0 && (
+                        <div style={{ padding: '20px 0', textAlign: 'center', color: '#83899c', fontSize: 12 }}>
+                          Run a scan to see recommended fixes here.
                         </div>
-                      ))}
+                      )}
                       <div style={{ height: 14 }} />
                     </div>
                   </div>
@@ -752,72 +797,102 @@ export default function DashboardClient({ reports: initialReports = [], isPro, u
                   {/* ── Right column ── */}
                   <aside style={{ display: 'grid', alignContent: 'start', gap: 19 }}>
 
-                    {/* Advisor card */}
-                    <div style={{ background: 'linear-gradient(145deg,#f6f1ff,#eef6ff 90%)',
-                      border: '1px solid #e8e0ff', borderRadius: 17, padding: 22 }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 9,
-                        color: '#6f4de1', fontWeight: 800, fontSize: 11 }}>
-                        <span style={{ width: 28, height: 28, borderRadius: 9, background: '#e9ddff',
-                          display: 'grid', placeItems: 'center' }}>
-                          <Icons.Spark />
-                        </span>
-                        CERNLY&apos;S TAKE
-                      </div>
-                      <h3 style={{ fontFamily: 'var(--font-manrope, Manrope, sans-serif)',
-                        fontSize: 19, lineHeight: 1.3, letterSpacing: '-.04em',
-                        fontWeight: 800, margin: '18px 0 10px' }}>
-                        {siteList.length > 0
-                          ? `Your biggest opportunity? Speed up ${siteList[0] ? (() => { try { return new URL(siteList[0].url).hostname; } catch { return 'your homepage'; } })() : 'your homepage'}.`
-                          : 'Run your first scan to get personalized advice.'}
-                      </h3>
-                      <p style={{ fontSize: 12, lineHeight: 1.7, color: '#73768c', margin: 0 }}>
-                        {siteList.length > 0
-                          ? 'Security and accessibility look strong. But slow rendering may be frustrating visitors, especially on mobile.'
-                          : 'Enter a URL above and Cernly will analyze your site across performance, SEO, security, and accessibility.'}
-                      </p>
-                      {siteList.length > 0 && (
-                        <>
-                          <div style={{ background: 'rgba(255,255,255,.72)', border: '1px solid #e4daff',
-                            borderRadius: 10, padding: '12px 14px', margin: '14px 0 0' }}>
-                            <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: '.07em',
-                              textTransform: 'uppercase', color: '#9898b0', marginBottom: 6 }}>
-                              Recommended fix
-                            </div>
-                            <p style={{ fontSize: 12, lineHeight: 1.6, color: '#5a5a78', margin: 0 }}>
-                              Compress your hero image and convert to WebP. This single change typically cuts mobile load time by 2–3 seconds.
-                            </p>
+                    {/* Advisor card — Cernly's Take */}
+                    {(() => {
+                      const topRec = recommendations[0] || null;
+                      const topDomain = topRec?.reportUrl
+                        ? (() => { try { return new URL(topRec.reportUrl).hostname; } catch { return topRec.reportUrl; } })()
+                        : null;
+                      const firstAction = topRec?.actions?.[0] || null;
+                      const priorityTagColors = {
+                        critical: { bg: '#fff0f2', border: '#ffd6da', color: '#c0394a' },
+                        high:     { bg: '#fff4e9', border: '#ffead6', color: '#b05d39' },
+                        medium:   { bg: '#f1edff', border: '#e4daff', color: '#7948f6' },
+                        low:      { bg: '#f4f5fb', border: '#e4e6f0', color: '#83899c' },
+                      };
+                      const tagStyle = priorityTagColors[topRec?.priority] || priorityTagColors.medium;
+                      return (
+                        <div style={{ background: 'linear-gradient(145deg,#f6f1ff,#eef6ff 90%)',
+                          border: '1px solid #e8e0ff', borderRadius: 17, padding: 22 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 9,
+                            color: '#6f4de1', fontWeight: 800, fontSize: 11 }}>
+                            <span style={{ width: 28, height: 28, borderRadius: 9, background: '#e9ddff',
+                              display: 'grid', placeItems: 'center' }}>
+                              <Icons.Spark />
+                            </span>
+                            CERNLY&apos;S TAKE
                           </div>
-                          <div style={{ display: 'flex', gap: 8, margin: '17px 0', flexWrap: 'wrap' }}>
-                            {['High impact', 'Performance'].map(tag => (
-                              <span key={tag} style={{ fontSize: 10, fontWeight: 800, padding: '6px 8px',
-                                borderRadius: 6, background: '#fff4e9', border: '1px solid #ffead6', color: '#b05d39' }}>{tag}</span>
-                            ))}
-                          </div>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 5, margin: '14px 0 16px' }}>
-                            {[true, true, false, false, false].map((done, i) => (
-                              <div key={i} style={{ width: 7, height: 7, borderRadius: 100, flexShrink: 0,
-                                background: done ? '#19b987' : i === 2 ? '#7948f6' : '#dde0eb' }} />
-                            ))}
-                            <span style={{ fontSize: 11, color: '#83899c', marginLeft: 4 }}>Fix 3 of 7</span>
-                          </div>
-                          <div style={{ display: 'flex', gap: 8 }}>
-                            <button onClick={() => notify('Skipped — moving to next fix.')}
-                              style={{ flex: 1, background: 'white', color: '#343747', border: '1px solid #e9eaf2',
-                                borderRadius: 10, padding: '10px 12px', fontSize: 11, fontWeight: 800,
-                                cursor: 'pointer', fontFamily: 'inherit' }}>
-                              Skip
-                            </button>
-                            <button onClick={() => setModal('image')}
-                              style={{ flex: 1, display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                                gap: 6, color: 'white', background: 'linear-gradient(110deg,#8650fa,#3c8df6)',
-                                border: 0, borderRadius: 10, padding: '10px 12px', fontSize: 11,
-                                fontWeight: 800, cursor: 'pointer', fontFamily: 'inherit' }}>
-                              See fix first <Icons.Arrow />
-                            </button>
-                          </div>
-                        </>
-                      )}
-                    </div>
+                          <h3 style={{ fontFamily: 'var(--font-manrope, Manrope, sans-serif)',
+                            fontSize: 19, lineHeight: 1.3, letterSpacing: '-.04em',
+                            fontWeight: 800, margin: '18px 0 10px' }}>
+                            {topRec
+                              ? `Your biggest opportunity? ${topRec.title}${topDomain ? ` on ${topDomain}` : ''}.`
+                              : 'Run your first scan to get personalized advice.'}
+                          </h3>
+                          <p style={{ fontSize: 12, lineHeight: 1.7, color: '#73768c', margin: 0 }}>
+                            {topRec
+                              ? (topRec.explanation || topRec.why_it_matters || 'Addressing this will improve your site\'s overall health and user experience.')
+                              : 'Enter a URL above and Cernly will analyze your site across performance, SEO, security, and accessibility.'}
+                          </p>
+                          {topRec && (
+                            <>
+                              {firstAction && (
+                                <div style={{ background: 'rgba(255,255,255,.72)', border: '1px solid #e4daff',
+                                  borderRadius: 10, padding: '12px 14px', margin: '14px 0 0' }}>
+                                  <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: '.07em',
+                                    textTransform: 'uppercase', color: '#9898b0', marginBottom: 6 }}>
+                                    Recommended next step
+                                  </div>
+                                  <p style={{ fontSize: 12, lineHeight: 1.6, color: '#5a5a78', margin: 0 }}>
+                                    {firstAction.title && <strong>{firstAction.title}: </strong>}{firstAction.detail || firstAction.title}
+                                  </p>
+                                </div>
+                              )}
+                              <div style={{ display: 'flex', gap: 8, margin: '17px 0 16px', flexWrap: 'wrap' }}>
+                                <span style={{ fontSize: 10, fontWeight: 800, padding: '6px 8px',
+                                  borderRadius: 6, background: tagStyle.bg, border: `1px solid ${tagStyle.border}`, color: tagStyle.color,
+                                  textTransform: 'capitalize' }}>
+                                  {topRec.priority} priority
+                                </span>
+                                <span style={{ fontSize: 10, fontWeight: 800, padding: '6px 8px',
+                                  borderRadius: 6, background: '#eaf8f3', border: '1px solid #c7f0e2', color: '#1a8f6c' }}>
+                                  {topRec.category}
+                                </span>
+                                {topRec.effort && (
+                                  <span style={{ fontSize: 10, fontWeight: 800, padding: '6px 8px',
+                                    borderRadius: 6, background: '#f4f5fb', border: '1px solid #e4e6f0', color: '#83899c',
+                                    textTransform: 'capitalize' }}>
+                                    {topRec.effort} effort
+                                  </span>
+                                )}
+                              </div>
+                              {recommendations.length > 1 && (
+                                <p style={{ fontSize: 11, color: '#83899c', margin: '0 0 14px' }}>
+                                  {recommendations.length} open recommendation{recommendations.length !== 1 ? 's' : ''} across your sites
+                                </p>
+                              )}
+                              <div style={{ display: 'flex', gap: 8 }}>
+                                <button onClick={() => setView('tasks')}
+                                  style={{ flex: 1, background: 'white', color: '#343747', border: '1px solid #e9eaf2',
+                                    borderRadius: 10, padding: '10px 12px', fontSize: 11, fontWeight: 800,
+                                    cursor: 'pointer', fontFamily: 'inherit' }}>
+                                  See all fixes
+                                </button>
+                                {topRec.reportSlug && (
+                                  <Link href={`/report/${topRec.reportSlug}`}
+                                    style={{ flex: 1, display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                                      gap: 6, color: 'white', background: 'linear-gradient(110deg,#8650fa,#3c8df6)',
+                                      border: 0, borderRadius: 10, padding: '10px 12px', fontSize: 11,
+                                      fontWeight: 800, textDecoration: 'none' }}>
+                                    View report <Icons.Arrow />
+                                  </Link>
+                                )}
+                              </div>
+                            </>
+                          )}
+                        </div>
+                      );
+                    })()}
 
                     {/* Scan allowance */}
                     <div style={{ background: '#fff', border: '1px solid #e9eaf2', borderRadius: 17,
@@ -1158,7 +1233,7 @@ export default function DashboardClient({ reports: initialReports = [], isPro, u
 
             {/* ════════ FIX QUEUE ════════ */}
             {view === 'tasks' && (
-              <FixQueueView reports={localReports} onOpenGuide={setModal} />
+              <FixQueueView recommendations={recommendations} onOpenGuide={setModal} />
             )}
 
             {/* ════════ BILLING ════════ */}
