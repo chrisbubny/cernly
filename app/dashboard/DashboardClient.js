@@ -876,7 +876,7 @@ export default function DashboardClient({ reports: initialReports = [], isPro, u
                           </h3>
                           <p style={{ fontSize: 12, lineHeight: 1.7, color: '#73768c', margin: 0 }}>
                             {topRec
-                              ? (topRec.explanation || topRec.why_it_matters || 'Addressing this will improve your site\'s overall health and user experience.')
+                              ? (topRec.why_it_matters || topRec.what_we_found || topRec.explanation || 'Addressing this will improve your site\'s overall health and user experience.')
                               : 'Enter a URL above and Cernly will analyze your site across performance, SEO, security, and accessibility.'}
                           </p>
                           {topRec && (

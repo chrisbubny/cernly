@@ -410,13 +410,34 @@ function DiscoveryCard({ d, index }) {
               background: confBg, padding: '2px 7px', borderRadius: 5 }}>{d.confidence?.toUpperCase()} CONFIDENCE</span>
           </div>
           <div style={{ fontSize: 14, fontWeight: 700, color: '#151621', lineHeight: 1.4 }}>{d.title}</div>
-          <p style={{ fontSize: 13, color: '#4b5168', lineHeight: 1.7, margin: '5px 0 0' }}>{d.explanation}</p>
+          <p style={{ fontSize: 13, color: '#4b5168', lineHeight: 1.7, margin: '5px 0 0' }}>{d.what_we_found || d.explanation}</p>
         </div>
         <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="#b0b4c8"
           strokeWidth={2.5} strokeLinecap="round" style={{ flexShrink: 0, marginTop: 8 }}>
           <path d={open ? 'm18 15-6-6-6 6' : 'm6 9 6 6 6-6'}/>
         </svg>
       </button>
+      {open && Array.isArray(d.supporting_findings) && d.supporting_findings.length > 0 && (
+        <div style={{ borderTop: '1px solid #f0f1f8', padding: '4px 18px 12px' }}>
+          <div style={{ fontSize: 11, fontWeight: 800, color: '#83899c',
+            letterSpacing: '.07em', margin: '12px 0 10px' }}>DETECTED ISSUES</div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+            {d.supporting_findings.slice(0, 5).map((f, fi) => {
+              const sevColor = { critical: '#ef6473', warning: '#efa642', info: '#83899c' }[f.severity] || '#83899c';
+              const sevBg    = { critical: '#fff5f6', warning: '#fffbf0', info: '#f4f5fb' }[f.severity] || '#f4f5fb';
+              return (
+                <div key={fi} style={{ background: sevBg, borderRadius: 8, padding: '8px 12px',
+                  borderLeft: `3px solid ${sevColor}`, fontSize: 12 }}>
+                  <span style={{ color: '#151621', fontWeight: 600 }}>{f.message}</span>
+                  {f.displayValue && (
+                    <span style={{ color: sevColor, fontWeight: 700, marginLeft: 6 }}>— {f.displayValue}</span>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
       {open && Array.isArray(d.actions) && d.actions.length > 0 && (
         <div style={{ borderTop: '1px solid #f0f1f8', padding: '4px 18px 16px' }}>
           <div style={{ fontSize: 11, fontWeight: 800, color: '#83899c',
@@ -1370,9 +1391,9 @@ export default function ReportClient({ isPro, userName, userAvatar }) {
                 <p style={{ fontSize: 13, fontWeight: 700, color: '#3b3f56', margin: '0 0 5px', lineHeight: 1.4 }}>
                   {topRec.title}
                 </p>
-                {(topRec.why_it_matters || topRec.explanation) && (
+                {(topRec.why_it_matters || topRec.what_we_found || topRec.explanation) && (
                   <p style={{ fontSize: 12, color: '#5a5a78', margin: '0 0 8px', lineHeight: 1.6 }}>
-                    {topRec.why_it_matters || topRec.explanation}
+                    {topRec.why_it_matters || topRec.what_we_found || topRec.explanation}
                   </p>
                 )}
                 {firstAction && (
