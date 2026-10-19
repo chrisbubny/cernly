@@ -5,7 +5,7 @@ import { runSeoAudit } from '@/lib/analyzers/seo';
 import { runSslCheck } from '@/lib/analyzers/ssl';
 import { runA11yCheck } from '@/lib/analyzers/a11y';
 import { runAiSummary } from '@/lib/analyzers/ai';
-import { saveReport, saveRecommendations, ensureRecommendationsTable, getUserSubscription, getMonthlyScansCount, FREE_SCAN_LIMIT } from '@/lib/store';
+import { saveReport, saveRecommendations, ensureRecommendationsTable, getUserSubscription, getMonthlyScansCount, tryScanLock, FREE_SCAN_LIMIT } from '@/lib/store';
 import { normalizeScore, assignIssueFingerprintIds } from '@/lib/scoring';
 import { generateRecommendations } from '@/lib/recommendations';
 
@@ -60,6 +60,32 @@ export async function POST(request) {
     if (!isPro) scanLimit = FREE_SCAN_LIMIT;
   }
   // ── End scan limit pre-check ─────────────────────────────────────────────────
+
+  // ── Concurrent scan serialization (free-plan users only) ────────────────────
+  // Acquire a session-level advisory lock *before* running analyzers so that a
+  // second simultaneous request for this user fails fast (immediate 429) instead
+  // of wasting ~15 s of Lighthouse / SEO / AI resources it cannot save anyway.
+  //
+  // pg_advisory_try_lock is non-blocking: it returns false immediately if the
+  // lock is already held, rather than waiting. We release the lock explicitly
+  // before saveReport (which uses a separate transaction-level lock, different
+  // key namespace — no conflict) and the finally block handles error paths.
+  let scanLock = null;
+  if (scanLimit != null) {
+    scanLock = await tryScanLock(userId).catch(() => null);
+    if (!scanLock) {
+      return NextResponse.json(
+        {
+          error: 'scan_in_progress',
+          message: 'A scan is already running for your account. Please wait for it to complete before starting another.',
+        },
+        { status: 429 },
+      );
+    }
+  }
+  // ── End concurrent scan serialization ────────────────────────────────────────
+
+  try {
 
   // Run all checks in parallel (lighthouse is slowest at ~15s)
   const [lh, seo, ssl, a11y] = await Promise.allSettled([
@@ -150,6 +176,12 @@ export async function POST(request) {
     auditStatuses,
   ).catch(err => { console.error('[analyze] recommendations error:', err.message); return []; });
 
+  // Release scan-serialization lock before saveReport — the expensive analyzer
+  // work is done; saveReport handles its own atomic counting with a separate
+  // transaction-level advisory lock (key namespace 0, vs our namespace 1 above).
+  // Releasing early shortens how long the DB connection is held.
+  if (scanLock) { await scanLock.release().catch(() => {}); scanLock = null; }
+
   // Save report for potential purchase (attach userId so it appears in scan history).
   // scanLimit triggers an atomic advisory-lock check inside saveReport to prevent
   // two concurrent free-plan scans from both slipping through the pre-flight check.
@@ -218,4 +250,10 @@ export async function POST(request) {
     reportSlug: saved?.slug ?? null, // UUID — used in public URLs
     analyzedAt: new Date().toISOString(),
   });
+
+  } finally {
+    // Safety net: release the scan-serialization lock if an unhandled error
+    // fired before the explicit release above (e.g. analyzer crash, AI failure).
+    if (scanLock) await scanLock.release().catch(() => {});
+  }
 }

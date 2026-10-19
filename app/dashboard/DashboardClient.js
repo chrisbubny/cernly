@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useClerk } from '@clerk/nextjs';
+import { avgScore } from '@/lib/scoring';
 
 /* ─── SVG icon helpers ─── */
 const strokeAttrs = { fill: 'none', stroke: 'currentColor', strokeWidth: 1.8, strokeLinecap: 'round', strokeLinejoin: 'round' };
@@ -392,10 +393,7 @@ export default function DashboardClient({ reports: initialReports = [], isPro, u
     }
   }
 
-  const avgScore = (s) => {
-    const vals = [s?.performance, s?.seo, s?.security, s?.accessibility].filter(v => v != null);
-    return vals.length ? Math.round(vals.reduce((a, b) => a + b, 0) / vals.length) : null;
-  };
+  // avgScore imported from @/lib/scoring — single shared implementation
 
   const scoreHealth = (n) => n == null ? '—' : n >= 80 ? 'Looking healthy' : n >= 60 ? 'Needs attention' : 'Action required';
 
