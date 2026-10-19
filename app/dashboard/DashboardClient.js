@@ -235,6 +235,7 @@ export default function DashboardClient({ reports: initialReports = [], isPro, u
   const [modal, setModal] = useState(null); // null | 'pro' | 'image' | 'meta' | 'fonts' | ...
   const [localReports, setLocalReports] = useState(initialReports);
   const [deletingId, setDeletingId] = useState(null); // id currently showing confirm
+  const [selectedDomain, setSelectedDomain] = useState(null); // null | hostname string — for per-domain drill-down
   const router = useRouter();
   const { signOut } = useClerk();
 
@@ -418,7 +419,7 @@ export default function DashboardClient({ reports: initialReports = [], isPro, u
               { id: 'history',   label: 'Scan history',icon: <Icons.Clock /> },
               { id: 'tasks',     label: 'Fix queue',   icon: <Icons.Check />, count: localReports.length > 0 ? 7 : null },
             ].map(({ id, label, icon, count }) => (
-              <button key={id} onClick={() => { setView(id); setSidebarOpen(false); }}
+              <button key={id} onClick={() => { setView(id); setSidebarOpen(false); setSelectedDomain(null); }}
                 style={{
                   border: 0, background: view === id ? '#f1edff' : 'transparent',
                   color: view === id ? '#7547ef' : '#707688',
@@ -447,7 +448,7 @@ export default function DashboardClient({ reports: initialReports = [], isPro, u
               ...(isAdmin ? [{ id: 'admin', label: 'Admin', icon: <Icons.Shield /> }] : []),
               { id: 'settings', label: 'Settings',       icon: <Icons.Settings />},
             ].map(({ id, label, icon }) => (
-              <button key={id} onClick={() => { setView(id); setSidebarOpen(false); }}
+              <button key={id} onClick={() => { setView(id); setSidebarOpen(false); setSelectedDomain(null); }}
                 style={{
                   border: 0, background: view === id ? '#f1edff' : 'transparent',
                   color: view === id ? '#7547ef' : '#707688',
@@ -886,7 +887,7 @@ export default function DashboardClient({ reports: initialReports = [], isPro, u
             )}
 
             {/* ════════ WEBSITES ════════ */}
-            {view === 'websites' && (
+            {view === 'websites' && !selectedDomain && (
               <>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'end',
                   gap: 20, marginBottom: 24, flexWrap: 'wrap' }}>
@@ -915,7 +916,7 @@ export default function DashboardClient({ reports: initialReports = [], isPro, u
                       <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
                         <thead>
                           <tr>
-                            {['Website', 'Score', 'Last scanned', ''].map(h => (
+                            {['Website', 'Score', 'Last scanned', 'Scans', ''].map(h => (
                               <th key={h} style={{ textAlign: 'left', padding: '10px 14px',
                                 fontSize: 10, fontWeight: 800, letterSpacing: '.08em',
                                 textTransform: 'uppercase', color: '#9398a8',
@@ -928,8 +929,12 @@ export default function DashboardClient({ reports: initialReports = [], isPro, u
                             const domain = (() => { try { return new URL(r.url).hostname; } catch { return r.url; } })();
                             const score = avgScore(r.scores ?? {}) ?? '—';
                             const date = new Date(r.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+                            const scanCount = localReports.filter(s => { try { return new URL(s.url).hostname === domain; } catch { return false; } }).length;
                             return (
-                              <tr key={r.id}>
+                              <tr key={r.id} onClick={() => setSelectedDomain(domain)}
+                                style={{ cursor: 'pointer' }}
+                                onMouseEnter={e => e.currentTarget.style.background = '#f8f7ff'}
+                                onMouseLeave={e => e.currentTarget.style.background = ''}>
                                 <td style={{ padding: '12px 14px', borderBottom: '1px solid #e9eaf2',
                                   fontWeight: 700, color: '#151621' }}>{domain}</td>
                                 <td style={{ padding: '12px 14px', borderBottom: '1px solid #e9eaf2', color: '#83899c' }}>
@@ -937,12 +942,14 @@ export default function DashboardClient({ reports: initialReports = [], isPro, u
                                 </td>
                                 <td style={{ padding: '12px 14px', borderBottom: '1px solid #e9eaf2', color: '#83899c' }}>{date}</td>
                                 <td style={{ padding: '12px 14px', borderBottom: '1px solid #e9eaf2' }}>
-                                  <button onClick={() => router.push(`/report/${r.slug || r.id}`)}
-                                    style={{ background: '#f2efff', border: 0, color: '#7650e9',
-                                      padding: '8px 11px', borderRadius: 7, fontSize: 11,
-                                      fontWeight: 800, cursor: 'pointer', fontFamily: 'inherit' }}>
-                                    Open report
-                                  </button>
+                                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4,
+                                    background: '#f2efff', color: '#7650e9', borderRadius: 20,
+                                    padding: '3px 9px', fontSize: 11, fontWeight: 700 }}>
+                                    {scanCount}
+                                  </span>
+                                </td>
+                                <td style={{ padding: '12px 14px', borderBottom: '1px solid #e9eaf2' }}>
+                                  <span style={{ color: '#9398a8', fontSize: 11 }}>View history →</span>
                                 </td>
                               </tr>
                             );
@@ -954,6 +961,99 @@ export default function DashboardClient({ reports: initialReports = [], isPro, u
                 </div>
               </>
             )}
+
+            {/* ════════ PER-DOMAIN SCAN HISTORY DRILL-DOWN ════════ */}
+            {view === 'websites' && selectedDomain && (() => {
+              const domainScans = localReports
+                .filter(r => { try { return new URL(r.url).hostname === selectedDomain; } catch { return false; } })
+                .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+              return (
+                <>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'end',
+                    gap: 20, marginBottom: 24, flexWrap: 'wrap' }}>
+                    <div>
+                      <button onClick={() => setSelectedDomain(null)}
+                        style={{ background: 'none', border: 'none', color: '#7650e9', fontSize: 12,
+                          fontWeight: 700, cursor: 'pointer', padding: '0 0 6px', display: 'flex',
+                          alignItems: 'center', gap: 5, fontFamily: 'inherit' }}>
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M19 12H5M12 5l-7 7 7 7"/></svg>
+                        Back to all websites
+                      </button>
+                      <span style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '.16em',
+                        color: '#7652ee', fontWeight: 800, display: 'block' }}>SCAN HISTORY</span>
+                      <h1 style={{ fontFamily: 'var(--font-manrope, Manrope, sans-serif)',
+                        fontSize: 'clamp(24px,2.8vw,36px)', letterSpacing: '-.045em',
+                        fontWeight: 800, margin: '9px 0 4px', wordBreak: 'break-all' }}>{selectedDomain}</h1>
+                      <p style={{ color: '#83899c', fontSize: 13, margin: 0 }}>
+                        {domainScans.length} scan{domainScans.length !== 1 ? 's' : ''} — click any row to open that report.
+                      </p>
+                    </div>
+                  </div>
+                  <div style={{ background: '#fff', border: '1px solid #e9eaf2', borderRadius: 17, overflow: 'hidden' }}>
+                    {domainScans.length === 0 ? (
+                      <div style={{ padding: '48px 24px', textAlign: 'center', color: '#83899c', fontSize: 13 }}>
+                        No scans found for this domain.
+                      </div>
+                    ) : (
+                      <div style={{ overflowX: 'auto' }}>
+                        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+                          <thead>
+                            <tr>
+                              {['Date', 'Score', 'Performance', 'SEO', 'Security', 'Accessibility', ''].map(h => (
+                                <th key={h} style={{ textAlign: 'left', padding: '10px 14px',
+                                  fontSize: 10, fontWeight: 800, letterSpacing: '.08em',
+                                  textTransform: 'uppercase', color: '#9398a8',
+                                  borderBottom: '1px solid #e9eaf2' }}>{h}</th>
+                              ))}
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {domainScans.map((r, idx) => {
+                              const score = avgScore(r.scores ?? {}) ?? '—';
+                              const date = new Date(r.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+                              const sc = r.scores ?? {};
+                              const fmt = v => v != null ? v : '—';
+                              const isLatest = idx === 0;
+                              return (
+                                <tr key={r.id} onClick={() => router.push(`/report/${r.slug || r.id}`)}
+                                  style={{ cursor: 'pointer' }}
+                                  onMouseEnter={e => e.currentTarget.style.background = '#f8f7ff'}
+                                  onMouseLeave={e => e.currentTarget.style.background = ''}>
+                                  <td style={{ padding: '12px 14px', borderBottom: '1px solid #e9eaf2', color: '#151621', fontWeight: 600, whiteSpace: 'nowrap' }}>
+                                    {date}
+                                    {isLatest && (
+                                      <span style={{ marginLeft: 7, background: '#f2efff', color: '#7650e9',
+                                        fontSize: 9, fontWeight: 800, padding: '2px 6px', borderRadius: 20,
+                                        textTransform: 'uppercase', letterSpacing: '.05em' }}>Latest</span>
+                                    )}
+                                  </td>
+                                  <td style={{ padding: '12px 14px', borderBottom: '1px solid #e9eaf2', fontWeight: 700,
+                                    color: score >= 80 ? '#19b987' : score >= 60 ? '#efa642' : '#ef6473' }}>
+                                    {score !== '—' ? `${score}/100` : '—'}
+                                  </td>
+                                  <td style={{ padding: '12px 14px', borderBottom: '1px solid #e9eaf2', color: '#83899c' }}>{fmt(sc.performance)}</td>
+                                  <td style={{ padding: '12px 14px', borderBottom: '1px solid #e9eaf2', color: '#83899c' }}>{fmt(sc.seo)}</td>
+                                  <td style={{ padding: '12px 14px', borderBottom: '1px solid #e9eaf2', color: '#83899c' }}>{fmt(sc.security)}</td>
+                                  <td style={{ padding: '12px 14px', borderBottom: '1px solid #e9eaf2', color: '#83899c' }}>{fmt(sc.accessibility)}</td>
+                                  <td style={{ padding: '12px 14px', borderBottom: '1px solid #e9eaf2' }}>
+                                    <button onClick={e => { e.stopPropagation(); router.push(`/report/${r.slug || r.id}`); }}
+                                      style={{ background: '#f2efff', border: 0, color: '#7650e9',
+                                        padding: '7px 11px', borderRadius: 7, fontSize: 11,
+                                        fontWeight: 800, cursor: 'pointer', fontFamily: 'inherit' }}>
+                                      Open
+                                    </button>
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </div>
+                </>
+              );
+            })()}
 
             {/* ════════ HISTORY ════════ */}
             {view === 'history' && (
