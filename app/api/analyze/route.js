@@ -44,7 +44,11 @@ export async function POST(request) {
     const monthlyCount = countResult.status === 'fulfilled' ? countResult.value : 0;
     const isPro = !!subscription;
 
-    if (!isPro && monthlyCount >= FREE_SCAN_LIMIT) {
+    // BYPASS_SCAN_LIMIT=true in .env.local skips enforcement for local/staging dev.
+    // Never set this in production.
+    const bypassLimit = process.env.BYPASS_SCAN_LIMIT === 'true';
+
+    if (!isPro && !bypassLimit && monthlyCount >= FREE_SCAN_LIMIT) {
       return NextResponse.json(
         {
           error: 'scan_limit_reached',
@@ -57,7 +61,7 @@ export async function POST(request) {
     }
 
     // Non-Pro authenticated users get limit enforcement at save time too
-    if (!isPro) scanLimit = FREE_SCAN_LIMIT;
+    if (!isPro && !bypassLimit) scanLimit = FREE_SCAN_LIMIT;
   }
   // ── End scan limit pre-check ─────────────────────────────────────────────────
 
