@@ -1055,6 +1055,7 @@ function ScoreAuditModal({ tileKey, auditStatus: st, onClose }) {
    Main component
 ════════════════════════════════════════════════════════════════ */
 export default function ReportClient({ isPro, userName, userAvatar }) {
+  const router = useRouter();
   const { slug } = useParams();
   const id = slug; // kept for internal API calls that still use the slug as identifier
   const searchParams = useSearchParams();
