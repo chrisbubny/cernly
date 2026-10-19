@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { auth } from '@clerk/nextjs/server';
 import { getReport, getReportBySlug } from '@/lib/store';
 
 // GET /api/report?slug=xxx  (preferred — public UUID)
@@ -19,13 +20,17 @@ export async function GET(request) {
 
   if (!report) return NextResponse.json({ error: 'Report not found' }, { status: 404 });
 
-  // Report is accessible if paid, or if Stripe session just completed (session_id present)
-  const canAccess = report.paid || !!sessionId;
+  // Determine viewer identity
+  let viewerUserId = null;
+  try { const { userId } = await auth(); viewerUserId = userId || null; } catch {}
 
-  if (!canAccess) {
-    // TODO: gate content once features are finalized — for now return everything
-    return NextResponse.json({ ...report, paid: false });
+  const isOwner = !!(viewerUserId && report.userId && viewerUserId === report.userId);
+  const isStripeSession = !!sessionId;
+
+  // Access gate: owner, or report is marked public, or Stripe just completed
+  if (!isOwner && !report.isPublic && !isStripeSession) {
+    return NextResponse.json({ error: 'This report is private.' }, { status: 403 });
   }
 
-  return NextResponse.json({ ...report, paid: true });
+  return NextResponse.json({ ...report, isOwner });
 }
