@@ -5,7 +5,7 @@ import { runSeoAudit } from '@/lib/analyzers/seo';
 import { runSslCheck } from '@/lib/analyzers/ssl';
 import { runA11yCheck } from '@/lib/analyzers/a11y';
 import { runAiSummary } from '@/lib/analyzers/ai';
-import { saveReport, saveRecommendations, ensureRecommendationsTable } from '@/lib/store';
+import { saveReport, saveRecommendations, ensureRecommendationsTable, getUserSubscription, getMonthlyScansCount, FREE_SCAN_LIMIT } from '@/lib/store';
 import { normalizeScore, assignIssueFingerprintIds } from '@/lib/scoring';
 import { generateRecommendations } from '@/lib/recommendations';
 
@@ -24,6 +24,42 @@ export async function POST(request) {
   if (!url) return NextResponse.json({ error: 'URL is required' }, { status: 400 });
   if (!/^https?:\/\//i.test(url)) url = 'https://' + url;
   try { new URL(url); } catch { return NextResponse.json({ error: 'Invalid URL' }, { status: 400 }); }
+
+  // ── Scan limit enforcement (authenticated users only) ────────────────────────
+  // Free plan: FREE_SCAN_LIMIT scans per calendar month (UTC).
+  // Checked here (pre-flight) to fail fast before running analyzers (~15s).
+  // A second atomic check happens inside saveReport to handle concurrent requests
+  // where two tabs both pass this pre-check before either one saves.
+  //
+  // Failed/errored scans do NOT count — the limit only increments on a successful
+  // report save. Partially completed scans (some analyzers failed, report saved) DO count.
+  let scanLimit = null; // null = no limit (Pro, anonymous, or admin)
+
+  if (userId) {
+    const [subResult, countResult] = await Promise.allSettled([
+      getUserSubscription(userId),
+      getMonthlyScansCount(userId),
+    ]);
+    const subscription = subResult.status === 'fulfilled' ? subResult.value : null;
+    const monthlyCount = countResult.status === 'fulfilled' ? countResult.value : 0;
+    const isPro = !!subscription;
+
+    if (!isPro && monthlyCount >= FREE_SCAN_LIMIT) {
+      return NextResponse.json(
+        {
+          error: 'scan_limit_reached',
+          message: `Free plan includes ${FREE_SCAN_LIMIT} scans per month. Upgrade to Pro for unlimited scans.`,
+          used: monthlyCount,
+          limit: FREE_SCAN_LIMIT,
+        },
+        { status: 429 }
+      );
+    }
+
+    // Non-Pro authenticated users get limit enforcement at save time too
+    if (!isPro) scanLimit = FREE_SCAN_LIMIT;
+  }
+  // ── End scan limit pre-check ─────────────────────────────────────────────────
 
   // Run all checks in parallel (lighthouse is slowest at ~15s)
   const [lh, seo, ssl, a11y] = await Promise.allSettled([
@@ -114,7 +150,9 @@ export async function POST(request) {
     auditStatuses,
   ).catch(err => { console.error('[analyze] recommendations error:', err.message); return []; });
 
-  // Save report for potential purchase (attach userId so it appears in scan history)
+  // Save report for potential purchase (attach userId so it appears in scan history).
+  // scanLimit triggers an atomic advisory-lock check inside saveReport to prevent
+  // two concurrent free-plan scans from both slipping through the pre-flight check.
   const saved = await saveReport({
     url,
     scores,
@@ -131,7 +169,30 @@ export async function POST(request) {
     sslData,
     a11yData,
     userId,
-  }).catch(() => null);
+    scanLimit,
+  }).catch(err => { console.error('[analyze] saveReport error:', err.message); return null; });
+
+  // Handle concurrent race: a second simultaneous scan slipped through the pre-check
+  // but lost the advisory lock to the first one. Return results (user waited ~15s),
+  // but without a saved report so this scan doesn't count against future months.
+  if (!saved && scanLimit != null) {
+    return NextResponse.json(
+      {
+        error: 'scan_limit_reached',
+        message: `Your monthly scan limit was reached by a simultaneous request. Your analysis is shown below but wasn't saved.`,
+        used: FREE_SCAN_LIMIT,
+        limit: FREE_SCAN_LIMIT,
+        // Include analysis so the user isn't left with nothing after waiting
+        url, scores, auditStatuses, aiSummary,
+        siteType: siteType || null, uxInsights: uxInsights || null,
+        aiInsights: aiInsights || null, sectionSummaries: sectionSummaries || null,
+        issues, recommendations: recommendations || [],
+        reportId: null, reportSlug: null,
+        analyzedAt: new Date().toISOString(),
+      },
+      { status: 429 }
+    );
+  }
 
   // Persist recommendations if the report was saved successfully
   if (saved?.id && recommendations.length) {

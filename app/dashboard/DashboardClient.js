@@ -291,6 +291,15 @@ export default function DashboardClient({ reports: initialReports = [], isPro, u
   const router = useRouter();
   const { signOut } = useClerk();
 
+  // Monthly scan count derived from localReports — stays accurate after new scans
+  // without a separate API call. Calendar month uses UTC to match server-side counting.
+  const monthlyScansUsed = (() => {
+    const now = new Date();
+    const firstOfMonth = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+    return localReports.filter(r => new Date(r.created_at) >= firstOfMonth).length;
+  })();
+  const FREE_LIMIT = 3;
+
   // Fetch user's recommendations for Cernly's Take and Fix Queue
   useEffect(() => {
     fetch('/api/recommendations')
@@ -964,12 +973,21 @@ export default function DashboardClient({ reports: initialReports = [], isPro, u
                         {isPro ? 'Pro plan — unlimited scans' : 'Free preview usage this month'}
                       </p>
                       <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, margin: '20px 0 10px' }}>
-                        <span>Scans used</span>
-                        <b style={{ color: '#4c4c60' }}>{localReports.length} {!isPro && '/ 3'}</b>
+                        <span>Scans used this month</span>
+                        <b style={{ color: !isPro && monthlyScansUsed >= FREE_LIMIT ? '#e05252' : '#4c4c60' }}>
+                          {monthlyScansUsed} {!isPro && `/ ${FREE_LIMIT}`}
+                        </b>
                       </div>
                       <div style={{ height: 7, background: '#f0eff6', borderRadius: 20, overflow: 'hidden' }}>
-                        <div style={{ height: '100%', width: isPro ? '40%' : `${Math.min(100, (localReports.length / 3) * 100)}%`,
-                          background: 'linear-gradient(90deg,#8650fa,#4d8dfa)', borderRadius: 20 }} />
+                        <div style={{
+                          height: '100%',
+                          width: isPro ? '40%' : `${Math.min(100, (monthlyScansUsed / FREE_LIMIT) * 100)}%`,
+                          background: !isPro && monthlyScansUsed >= FREE_LIMIT
+                            ? 'linear-gradient(90deg,#e05252,#fa6565)'
+                            : 'linear-gradient(90deg,#8650fa,#4d8dfa)',
+                          borderRadius: 20,
+                          transition: 'width 0.4s ease',
+                        }} />
                       </div>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center',
                         marginTop: 17, color: '#9b9faf', fontSize: 10 }}>
