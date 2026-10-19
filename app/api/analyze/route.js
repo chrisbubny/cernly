@@ -6,6 +6,7 @@ import { runSslCheck } from '@/lib/analyzers/ssl';
 import { runA11yCheck } from '@/lib/analyzers/a11y';
 import { runAiSummary } from '@/lib/analyzers/ai';
 import { saveReport } from '@/lib/store';
+import { normalizeScore, assignIssueFingerprintIds } from '@/lib/scoring';
 
 // POST /api/analyze
 // Body: { url: string }
@@ -65,17 +66,21 @@ export async function POST(request) {
     accessibility: classifyResult(a11y, v => v.score ?? lhData?.accessibility ?? null),
   };
 
-  // Compute scores (0-100)
+  // Compute scores — normalize to finite integers in [0,100] or null.
+  // auditStatuses is stored separately; scores contains only numeric values.
   const scores = {
-    performance:   auditStatuses.performance.score,
-    seo:           auditStatuses.seo.score,
-    security:      auditStatuses.security.score,
-    accessibility: auditStatuses.accessibility.score,
+    performance:   normalizeScore(auditStatuses.performance.score),
+    seo:           normalizeScore(auditStatuses.seo.score),
+    security:      normalizeScore(auditStatuses.security.score),
+    accessibility: normalizeScore(auditStatuses.accessibility.score),
+    // auditStatuses is intentionally NOT included here — it is stored in the
+    // scores column as a separate key for backward compat but exposed as
+    // report.auditStatuses by mapRow. Keeping it here avoids a schema migration.
     auditStatuses,
   };
 
-  // Collect issues from all sources
-  const issues = [
+  // Collect issues from all sources, sort by severity, assign stable fingerprint IDs
+  const rawIssues = [
     ...(lhData?.issues  || []),
     ...(seoData?.issues || []),
     ...(sslData?.issues || []),
@@ -84,15 +89,18 @@ export async function POST(request) {
     const order = { critical: 0, warning: 1, info: 2, good: 3 };
     return (order[a.severity] ?? 2) - (order[b.severity] ?? 2);
   });
+  const issues = assignIssueFingerprintIds(rawIssues);
 
   // AI summary (vision runs separately via /api/vision after the report is saved)
-  const aiResult = await runAiSummary({ url, scores, issues }).catch(() => null);
+  // Pass auditStatuses and raw analyzer data so the AI gets structured evidence
+  // and safe score formatting via buildScoreLines.
+  const aiResult = await runAiSummary({ url, scores, auditStatuses, issues, lhData, seoData, sslData, a11yData }).catch(() => null);
 
   const { aiSummary, siteType, uxScore, uxInsights, aiInsights, sectionSummaries } =
     aiResult || { aiSummary: null, siteType: null, uxScore: null, uxInsights: null, aiInsights: null, sectionSummaries: null };
 
-  // Merge UX score into scores
-  if (uxScore !== null && uxScore !== undefined) scores.ux = uxScore;
+  // Merge UX score into scores (normalized)
+  if (uxScore !== null && uxScore !== undefined) scores.ux = normalizeScore(uxScore);
 
   // Save report for potential purchase (attach userId so it appears in scan history)
   const saved = await saveReport({

@@ -1240,7 +1240,9 @@ export default function ReportClient({ isPro, userName, userAvatar }) {
 
   const effectiveDiscoveries = report?.aiInsights || fallbackDiscoveries;
 
-  const auditStatuses = report?.scores?.auditStatuses || {};
+  // auditStatuses is extracted from the scores JSONB by mapRow at read time
+  // and surfaced as report.auditStatuses (top-level field, not nested in scores).
+  const auditStatuses = report?.auditStatuses || {};
 
   const sectionSummaries = report?.sectionSummaries || null;
 

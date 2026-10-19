@@ -1,8 +1,9 @@
 import { NextResponse } from 'next/server';
 import { getReport } from '@/lib/store';
+import { buildScoreLines } from '@/lib/scoring';
 
 // POST /api/ask
-// Body: { question, reportId, messages? }
+// Body: { question, reportId, messages?, findingFingerprintId? }
 // Returns: { answer }
 export async function POST(request) {
   const apiKey = process.env.ANTHROPIC_API_KEY;
@@ -13,7 +14,7 @@ export async function POST(request) {
   let body = {};
   try { body = await request.json(); } catch {}
 
-  const { question, reportId, messages = [] } = body;
+  const { question, reportId, messages = [], findingFingerprintId } = body;
   if (!question?.trim()) {
     return NextResponse.json({ error: 'question required' }, { status: 400 });
   }
@@ -25,19 +26,34 @@ export async function POST(request) {
       const report = await getReport(reportId);
       if (report) {
         const domain = (() => { try { return new URL(report.url).hostname; } catch { return report.url; } })();
-        const scores = report.scores || {};
-        const issues = (report.issues || []).slice(0, 20);
+        // buildScoreLines uses normalizeScores — safe against auditStatuses contamination
+        const scoreLines = buildScoreLines(report.scores || {}, report.auditStatuses || {});
 
-        const scoreLines = Object.entries(scores)
-          .filter(([, v]) => v != null)
-          .map(([k, v]) => `${k}: ${v}/100`)
-          .join(', ');
+        const allIssues = report.issues || [];
 
-        const issueLines = issues
+        // If caller passes a fingerprintId, surface that specific finding first
+        // so the AI has full context for targeted questions.
+        const focusIssue = findingFingerprintId
+          ? allIssues.find(i => i.fingerprintId === findingFingerprintId)
+          : null;
+
+        const issueLines = allIssues
           .filter(i => i.severity === 'critical' || i.severity === 'warning')
           .slice(0, 10)
-          .map(i => `[${i.severity.toUpperCase()}] ${i.area}: ${i.message}${i.description ? ' — ' + i.description.slice(0, 120) : ''}`)
+          .map(i => {
+            const id = i.fingerprintId ? ` [id:${i.fingerprintId}]` : '';
+            return `[${i.severity.toUpperCase()}]${id} ${i.area}: ${i.message}${i.description ? ' — ' + i.description.slice(0, 120) : ''}`;
+          })
           .join('\n');
+
+        const focusBlock = focusIssue
+          ? `\nFOCUS FINDING [${focusIssue.fingerprintId}]:
+Area: ${focusIssue.area}
+Message: ${focusIssue.message}
+${focusIssue.description ? 'Description: ' + focusIssue.description : ''}
+${focusIssue.fix ? 'Recommended fix: ' + focusIssue.fix : ''}
+`
+          : '';
 
         reportContext = `
 SITE CONTEXT:
@@ -45,7 +61,7 @@ Domain: ${domain}
 Scores: ${scoreLines}
 Key issues:
 ${issueLines || 'None found'}
-${report.aiSummary ? `\nAI Summary: ${report.aiSummary}` : ''}
+${focusBlock}${report.aiSummary ? `\nAI Summary: ${report.aiSummary}` : ''}
 `;
       }
     } catch {}
