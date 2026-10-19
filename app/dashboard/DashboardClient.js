@@ -132,6 +132,32 @@ function effortLabel(effort) {
   return null;
 }
 
+/* Portfolio-aware ordering: surfaces the top-priority rec from each unique
+   domain before showing a second rec from any site. Preserves priority order
+   within each domain group. No DB changes required — pure client-side sort. */
+function interleaveByDomain(recs) {
+  if (!recs?.length) return [];
+  const groups = {};
+  const domainOrder = [];
+  for (const rec of recs) {
+    let d = '—';
+    try { d = new URL(rec.reportUrl || '').hostname.replace(/^www\./, ''); } catch {}
+    if (!groups[d]) { groups[d] = []; domainOrder.push(d); }
+    groups[d].push(rec);
+  }
+  const result = [];
+  let round = 0;
+  while (result.length < recs.length) {
+    let any = false;
+    for (const d of domainOrder) {
+      if (groups[d][round] !== undefined) { result.push(groups[d][round]); any = true; }
+    }
+    if (!any) break;
+    round++;
+  }
+  return result;
+}
+
 function FixQueueView({ recommendations = [], onOpenGuide }) {
   const [filter, setFilter] = useState('all');
   const tabs = [
@@ -261,6 +287,7 @@ export default function DashboardClient({ reports: initialReports = [], isPro, u
   const [recommendations, setRecommendations] = useState([]);
   const [deletingId, setDeletingId] = useState(null); // id currently showing confirm
   const [selectedDomain, setSelectedDomain] = useState(null); // null | hostname string — for per-domain drill-down
+  const [takeIdx, setTakeIdx] = useState(0); // which opportunity is showing in Cernly's Take card
   const router = useRouter();
   const { signOut } = useClerk();
 
@@ -271,6 +298,9 @@ export default function DashboardClient({ reports: initialReports = [], isPro, u
       .then(data => setRecommendations(data.recommendations || []))
       .catch(() => {});
   }, [localReports]); // re-fetch after any scan completes (localReports changes)
+
+  // Reset Take card navigation whenever the recommendation list refreshes
+  useEffect(() => { setTakeIdx(0); }, [recommendations]);
 
   // Handle ?rescan=<url> query param — pre-fill URL and switch to scan form
   useEffect(() => {
@@ -334,6 +364,8 @@ export default function DashboardClient({ reports: initialReports = [], isPro, u
     } catch {}
   });
   const siteList = Object.values(latestByDomain);
+  // Domain-interleaved recommendations: one rec per site before any site gets a second slot
+  const orderedRecs = interleaveByDomain(recommendations);
 
   /* ── Delete a report ── */
   async function handleDeleteReport(id) {
@@ -799,7 +831,7 @@ export default function DashboardClient({ reports: initialReports = [], isPro, u
 
                     {/* Advisor card — Cernly's Take */}
                     {(() => {
-                      const topRec = recommendations[0] || null;
+                      const topRec = orderedRecs[takeIdx] || null;
                       const topDomain = topRec?.reportUrl
                         ? (() => { try { return new URL(topRec.reportUrl).hostname; } catch { return topRec.reportUrl; } })()
                         : null;
@@ -811,6 +843,7 @@ export default function DashboardClient({ reports: initialReports = [], isPro, u
                         low:      { bg: '#f4f5fb', border: '#e4e6f0', color: '#83899c' },
                       };
                       const tagStyle = priorityTagColors[topRec?.priority] || priorityTagColors.medium;
+                      const total = orderedRecs.length;
                       return (
                         <div style={{ background: 'linear-gradient(145deg,#f6f1ff,#eef6ff 90%)',
                           border: '1px solid #e8e0ff', borderRadius: 17, padding: 22 }}>
@@ -821,6 +854,11 @@ export default function DashboardClient({ reports: initialReports = [], isPro, u
                               <Icons.Spark />
                             </span>
                             CERNLY&apos;S TAKE
+                            {total > 1 && (
+                              <span style={{ marginLeft: 'auto', fontSize: 10, color: '#9898b0', fontWeight: 600 }}>
+                                {takeIdx + 1} of {total}
+                              </span>
+                            )}
                           </div>
                           <h3 style={{ fontFamily: 'var(--font-manrope, Manrope, sans-serif)',
                             fontSize: 19, lineHeight: 1.3, letterSpacing: '-.04em',
@@ -866,11 +904,6 @@ export default function DashboardClient({ reports: initialReports = [], isPro, u
                                   </span>
                                 )}
                               </div>
-                              {recommendations.length > 1 && (
-                                <p style={{ fontSize: 11, color: '#83899c', margin: '0 0 14px' }}>
-                                  {recommendations.length} open recommendation{recommendations.length !== 1 ? 's' : ''} across your sites
-                                </p>
-                              )}
                               <div style={{ display: 'flex', gap: 8 }}>
                                 <button onClick={() => setView('tasks')}
                                   style={{ flex: 1, background: 'white', color: '#343747', border: '1px solid #e9eaf2',
@@ -888,6 +921,32 @@ export default function DashboardClient({ reports: initialReports = [], isPro, u
                                   </Link>
                                 )}
                               </div>
+                              {total > 1 && (
+                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                                  marginTop: 16, paddingTop: 14, borderTop: '1px solid #e8e0ff' }}>
+                                  <button onClick={() => setTakeIdx(i => Math.max(0, i - 1))}
+                                    disabled={takeIdx === 0}
+                                    style={{ border: 0, background: 'none',
+                                      color: takeIdx === 0 ? '#c4b9f0' : '#7948f6',
+                                      fontSize: 11, fontWeight: 800,
+                                      cursor: takeIdx === 0 ? 'default' : 'pointer',
+                                      fontFamily: 'inherit', padding: '4px 0' }}>
+                                    ← Previous
+                                  </button>
+                                  <span style={{ fontSize: 10, color: '#9898b0', fontWeight: 600 }}>
+                                    {takeIdx + 1} / {total}
+                                  </span>
+                                  <button onClick={() => setTakeIdx(i => Math.min(total - 1, i + 1))}
+                                    disabled={takeIdx >= total - 1}
+                                    style={{ border: 0, background: 'none',
+                                      color: takeIdx >= total - 1 ? '#c4b9f0' : '#7948f6',
+                                      fontSize: 11, fontWeight: 800,
+                                      cursor: takeIdx >= total - 1 ? 'default' : 'pointer',
+                                      fontFamily: 'inherit', padding: '4px 0' }}>
+                                    Next →
+                                  </button>
+                                </div>
+                              )}
                             </>
                           )}
                         </div>

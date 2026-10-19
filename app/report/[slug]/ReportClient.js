@@ -1281,83 +1281,176 @@ export default function ReportClient({ isPro, userName, userAvatar }) {
   /* ── Tab content ── */
   const renderOverview = () => (
     <div>
-      {/* Cernly AI Advisor panel */}
-      <div style={{ background: 'linear-gradient(145deg,#f7f4ff,#eef6ff 90%)',
-        border: '1px solid #e5deff', borderRadius: 16, padding: '16px 18px', marginBottom: 22 }}>
+      {/* Cernly's Take — structured interpretation of this specific scan */}
+      {(() => {
+        const recs = report.recommendations || [];
+        const topRec = recs[0] || null;
+        const scores = report.scores || {};
 
-        {/* Header row */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginBottom: 10 }}>
-          <div style={{ width: 30, height: 30, borderRadius: 9,
-            background: 'linear-gradient(135deg,#8a46f8,#3687fa)',
-            display: 'grid', placeItems: 'center', flexShrink: 0 }}>
-            <span style={{ color: '#fff', fontSize: 13, lineHeight: 1 }}>✦</span>
-          </div>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontFamily: 'var(--font-manrope, Manrope, sans-serif)',
-              fontWeight: 800, fontSize: 13, color: '#151621' }}>Cernly AI Advisor</div>
-            <div style={{ fontSize: 11, color: '#83899c' }}>AI-generated · based on audit data</div>
-          </div>
-          <button onClick={() => { setDrawerContext(null); setDrawerOpen(true); }}
-            style={{ border: '1.5px solid #c9bcf7', background: '#fff', color: '#7948f6',
-              borderRadius: 8, padding: '5px 12px', fontSize: 11, fontWeight: 700,
-              cursor: 'pointer', fontFamily: 'inherit', display: 'flex', alignItems: 'center',
-              gap: 5, whiteSpace: 'nowrap', flexShrink: 0 }}>
-            <span style={{ fontSize: 12 }}>✦</span> Ask Cernly
-          </button>
-        </div>
+        // Evidence-based strengths: only categories with an actual measured score ≥ 80.
+        // Never infer strength from absence of recommendations.
+        const catChecks = [
+          { key: 'performance',   label: 'Performance',   score: scores.performance },
+          { key: 'seo',           label: 'SEO',           score: scores.seo },
+          { key: 'security',      label: 'Security',      score: scores.security },
+          { key: 'accessibility', label: 'Accessibility', score: scores.accessibility },
+        ].filter(c => typeof c.score === 'number' && c.score >= 80);
+        const strength = catChecks[0] || null;
 
-        {/* Brief */}
-        {report.aiSummary && (
-          <p style={{ fontSize: 13, lineHeight: 1.75, color: '#2e3148', margin: '0 0 12px' }}>
-            {report.aiSummary}
-          </p>
-        )}
+        const firstAction = topRec?.actions?.[0] || null;
 
-        {/* Suggested chips + input row */}
-        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
-          {['Why is my site slow?', 'Which fixes matter most?', 'Explain my SEO issues', 'What can I fix myself?'].map(q => (
-            <button key={q}
-              onClick={() => { setAdvisorInput(''); setDrawerContext({ _initialMessage: q }); setDrawerOpen(true); }}
-              style={{ background: 'rgba(255,255,255,.8)', border: '1px solid #ddd6f9',
-                borderRadius: 20, padding: '4px 11px', fontSize: 11, fontWeight: 600,
-                color: '#5b4b8a', cursor: 'pointer', fontFamily: 'inherit', lineHeight: 1.4 }}>
-              {q}
-            </button>
-          ))}
-        </div>
+        // Suggested questions tailored to what we actually found
+        const suggestedQs = topRec
+          ? [
+              `How do I fix "${(topRec.title || '').slice(0, 40)}${topRec.title?.length > 40 ? '…' : ''}"?`,
+              'What should I prioritize first?',
+              'How long will these fixes take?',
+              'What else needs attention?',
+            ]
+          : ['What should I fix first?', 'How do I improve my LCP score?', 'What SEO issues hurt me most?', 'How do I fix my security headers?'];
 
-        {/* Inline input */}
-        <div style={{ background: '#fff', borderRadius: 10, border: '1px solid #ddd6f9',
-          display: 'flex', alignItems: 'center', padding: '7px 7px 7px 12px', gap: 7 }}>
-          <input
-            value={advisorInput}
-            onChange={e => setAdvisorInput(e.target.value)}
-            placeholder="Ask anything about this report…"
-            onKeyDown={e => {
-              if (e.key === 'Enter' && advisorInput.trim()) {
+        return (
+          <div style={{ background: 'linear-gradient(145deg,#f7f4ff,#eef6ff 90%)',
+            border: '1px solid #e5deff', borderRadius: 16, padding: '16px 18px', marginBottom: 22 }}>
+
+            {/* Header row */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginBottom: 14 }}>
+              <div style={{ width: 30, height: 30, borderRadius: 9,
+                background: 'linear-gradient(135deg,#8a46f8,#3687fa)',
+                display: 'grid', placeItems: 'center', flexShrink: 0 }}>
+                <span style={{ color: '#fff', fontSize: 13, lineHeight: 1 }}>✦</span>
+              </div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontFamily: 'var(--font-manrope, Manrope, sans-serif)',
+                  fontWeight: 800, fontSize: 13, color: '#151621' }}>Cernly&apos;s Take</div>
+                <div style={{ fontSize: 11, color: '#83899c' }}>AI-generated · based on this scan</div>
+              </div>
+              <button onClick={() => { setDrawerContext(null); setDrawerOpen(true); }}
+                style={{ border: '1.5px solid #c9bcf7', background: '#fff', color: '#7948f6',
+                  borderRadius: 8, padding: '5px 12px', fontSize: 11, fontWeight: 700,
+                  cursor: 'pointer', fontFamily: 'inherit', display: 'flex', alignItems: 'center',
+                  gap: 5, whiteSpace: 'nowrap', flexShrink: 0 }}>
+                <span style={{ fontSize: 12 }}>✦</span> Ask Cernly
+              </button>
+            </div>
+
+            {/* Evidence-based strength highlight (only when a category genuinely scores well) */}
+            {strength && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 12,
+                background: '#edf9f4', border: '1px solid #c2ead8', borderRadius: 9,
+                padding: '8px 12px' }}>
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#19b987" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="m5 12 4 4 10-10"/>
+                </svg>
+                <span style={{ fontSize: 12, color: '#0f7356', fontWeight: 600 }}>
+                  {strength.label} looks solid — scored {strength.score}/100 on this scan.
+                </span>
+              </div>
+            )}
+
+            {/* AI summary — the core interpretation of this report */}
+            {report.aiSummary ? (
+              <p style={{ fontSize: 13, lineHeight: 1.75, color: '#2e3148', margin: '0 0 14px' }}>
+                {report.aiSummary}
+              </p>
+            ) : !topRec && (
+              <p style={{ fontSize: 13, lineHeight: 1.75, color: '#83899c', margin: '0 0 14px' }}>
+                Analysis is not available for this report.
+              </p>
+            )}
+
+            {/* Top recommendation — conversational, not a checklist item */}
+            {topRec && (
+              <div style={{ background: 'rgba(255,255,255,.72)', border: '1px solid #e4daff',
+                borderRadius: 10, padding: '12px 14px', marginBottom: 14 }}>
+                <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: '.07em',
+                  textTransform: 'uppercase', color: '#9898b0', marginBottom: 7 }}>
+                  Where to focus first
+                </div>
+                <p style={{ fontSize: 13, fontWeight: 700, color: '#3b3f56', margin: '0 0 5px', lineHeight: 1.4 }}>
+                  {topRec.title}
+                </p>
+                {(topRec.why_it_matters || topRec.explanation) && (
+                  <p style={{ fontSize: 12, color: '#5a5a78', margin: '0 0 8px', lineHeight: 1.6 }}>
+                    {topRec.why_it_matters || topRec.explanation}
+                  </p>
+                )}
+                {firstAction && (
+                  <p style={{ fontSize: 12, color: '#5a5a78', margin: 0, lineHeight: 1.6 }}>
+                    <strong>First step: </strong>
+                    {firstAction.title && firstAction.detail
+                      ? `${firstAction.title} — ${firstAction.detail}`
+                      : (firstAction.title || firstAction.detail || String(firstAction))}
+                  </p>
+                )}
+              </div>
+            )}
+
+            {/* Contextual action buttons */}
+            <div style={{ display: 'flex', gap: 7, flexWrap: 'wrap', marginBottom: 12 }}>
+              {topRec && (
+                <button onClick={() => setActiveTab('action')}
+                  style={{ background: 'rgba(255,255,255,.8)', border: '1px solid #ddd6f9',
+                    borderRadius: 8, padding: '6px 12px', fontSize: 11, fontWeight: 700,
+                    color: '#5b4b8a', cursor: 'pointer', fontFamily: 'inherit' }}>
+                  See action plan →
+                </button>
+              )}
+              <button onClick={() => handleRescan()}
+                style={{ background: 'rgba(255,255,255,.8)', border: '1px solid #ddd6f9',
+                  borderRadius: 8, padding: '6px 12px', fontSize: 11, fontWeight: 700,
+                  color: '#5b4b8a', cursor: 'pointer', fontFamily: 'inherit' }}>
+                Rescan to verify
+              </button>
+            </div>
+
+            {/* Suggested chips + inline ask input (unchanged) */}
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
+              {suggestedQs.map(q => (
+                <button key={q}
+                  onClick={() => { setAdvisorInput(''); setDrawerContext({ _initialMessage: q }); setDrawerOpen(true); }}
+                  style={{ background: 'rgba(255,255,255,.8)', border: '1px solid #ddd6f9',
+                    borderRadius: 20, padding: '4px 11px', fontSize: 11, fontWeight: 600,
+                    color: '#5b4b8a', cursor: 'pointer', fontFamily: 'inherit', lineHeight: 1.4 }}>
+                  {q}
+                </button>
+              ))}
+            </div>
+
+            {/* Inline input */}
+            <div style={{ background: '#fff', borderRadius: 10, border: '1px solid #ddd6f9',
+              display: 'flex', alignItems: 'center', padding: '7px 7px 7px 12px', gap: 7 }}>
+              <input
+                value={advisorInput}
+                onChange={e => setAdvisorInput(e.target.value)}
+                placeholder="Ask anything about this report…"
+                onKeyDown={e => {
+                  if (e.key === 'Enter' && advisorInput.trim()) {
+                    const q = advisorInput.trim();
+                    setAdvisorInput('');
+                    setDrawerContext({ _initialMessage: q });
+                    setDrawerOpen(true);
+                  }
+                }}
+                style={{ flex: 1, background: 'none', border: 0, outline: 0,
+                  fontSize: 12, color: '#151621', fontFamily: 'inherit', minWidth: 0 }}
+              />
+              <button onClick={() => {
+                if (!advisorInput.trim()) { setDrawerContext(null); setDrawerOpen(true); return; }
                 const q = advisorInput.trim();
                 setAdvisorInput('');
                 setDrawerContext({ _initialMessage: q });
                 setDrawerOpen(true);
-              }
-            }}
-            style={{ flex: 1, background: 'none', border: 0, outline: 0,
-              fontSize: 12, color: '#151621', fontFamily: 'inherit', minWidth: 0 }}
-          />
-          <button onClick={() => {
-            if (!advisorInput.trim()) { setDrawerContext(null); setDrawerOpen(true); return; }
-            const q = advisorInput.trim();
-            setAdvisorInput('');
-            setDrawerContext({ _initialMessage: q });
-            setDrawerOpen(true);
-          }}
-            style={{ border: 0, background: '#7948f6', color: '#fff', borderRadius: 7,
-              width: 26, height: 26, display: 'grid', placeItems: 'center',
-              cursor: 'pointer', flexShrink: 0 }}>
-            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
-          </button>
-        </div>
-      </div>
+              }}
+                style={{ border: 0, background: '#7948f6', color: '#fff', borderRadius: 7,
+                  width: 26, height: 26, display: 'grid', placeItems: 'center',
+                  cursor: 'pointer', flexShrink: 0 }}>
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+              </button>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Top discoveries — show first 3 */}
       {Array.isArray(effectiveDiscoveries) && effectiveDiscoveries.length > 0 && (
