@@ -1068,6 +1068,7 @@ export default function ReportClient({ isPro, userName, userAvatar }) {
   const [rescanStatus, setRescanStatus]   = useState('idle'); // idle|scanning|error
   const [rescanStage, setRescanStage]     = useState(0);
   const [shareToggling, setShareToggling] = useState(false); // in-flight for share toggle
+  const [shareOpen, setShareOpen]         = useState(false); // share popover open
 
   const RESCAN_STAGES = [
     'Checking performance…', 'Auditing SEO signals…', 'Testing security…',
@@ -1659,78 +1660,107 @@ export default function ReportClient({ isPro, userName, userAvatar }) {
                   Ask Cernly
                 </button>
               )}
-              {/* Share / Make public — owners see a toggle; others see nothing */}
+              {/* Share popover — owners only */}
               {report?.isOwner && (
-                report?.isPublic ? (
-                  // Already public — show "Public · copy link" state
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                    <button
-                      onClick={() => {
-                        navigator.clipboard?.writeText(window.location.href)
-                          .then(() => { setCopied(true); setTimeout(() => setCopied(false), 2000); })
-                          .catch(() => {});
-                      }}
-                      style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 11px',
-                        background: copied ? '#edf9f4' : '#edf9f4', color: copied ? '#16a34a' : '#16a34a',
-                        border: 0, borderRadius: '9px 0 0 9px', fontWeight: 700, fontSize: 12,
-                        cursor: 'pointer', fontFamily: 'inherit' }}>
-                      <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg>
-                      {copied ? 'Copied!' : 'Public — copy link'}
-                    </button>
-                    <button
-                      disabled={shareToggling}
-                      onClick={async () => {
-                        setShareToggling(true);
-                        try {
-                          const res = await fetch(`/api/reports/${report.id}`, {
-                            method: 'PATCH',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ isPublic: false }),
-                          });
-                          const d = await res.json();
-                          if (d.success) setReport(r => ({ ...r, isPublic: false }));
-                        } finally { setShareToggling(false); }
-                      }}
-                      title="Make private"
-                      style={{ display: 'flex', alignItems: 'center', padding: '7px 9px',
-                        background: '#d1fae5', color: '#059669',
-                        border: 0, borderLeft: '1px solid #a7f3d0', borderRadius: '0 9px 9px 0',
-                        fontWeight: 700, fontSize: 11, cursor: 'pointer', fontFamily: 'inherit' }}>
-                      ✕
-                    </button>
-                  </div>
-                ) : (
-                  // Private — show "Make public" button
+                <div style={{ position: 'relative' }}>
                   <button
-                    disabled={shareToggling}
-                    onClick={async () => {
-                      setShareToggling(true);
-                      try {
-                        const res = await fetch(`/api/reports/${report.id}`, {
-                          method: 'PATCH',
-                          headers: { 'Content-Type': 'application/json' },
-                          body: JSON.stringify({ isPublic: true }),
-                        });
-                        const d = await res.json();
-                        if (d.success) {
-                          setReport(r => ({ ...r, isPublic: true }));
-                          // Auto-copy the link once made public
-                          navigator.clipboard?.writeText(window.location.href)
-                            .then(() => { setCopied(true); setTimeout(() => setCopied(false), 2500); })
-                            .catch(() => {});
-                        }
-                      } finally { setShareToggling(false); }
-                    }}
+                    onClick={() => setShareOpen(o => !o)}
                     style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 13px',
-                      background: '#f1edff', color: '#7948f6',
+                      background: report?.isPublic ? '#edf9f4' : '#f4f5fb',
+                      color: report?.isPublic ? '#19b987' : '#4b5168',
                       border: 0, borderRadius: 9, fontWeight: 700, fontSize: 12,
-                      cursor: shareToggling ? 'wait' : 'pointer', fontFamily: 'inherit',
-                      opacity: shareToggling ? 0.6 : 1 }}>
+                      cursor: 'pointer', fontFamily: 'inherit' }}>
                     <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg>
-                    {shareToggling ? 'Saving…' : 'Make public'}
+                    {report?.isPublic ? 'Shared' : 'Share'}
                   </button>
-                )
+
+                  {shareOpen && (
+                    <>
+                      {/* click-away backdrop */}
+                      <div onClick={() => setShareOpen(false)}
+                        style={{ position: 'fixed', inset: 0, zIndex: 89 }} />
+                      <div style={{ position: 'absolute', top: 'calc(100% + 8px)', right: 0,
+                        background: '#fff', border: '1px solid #e9eaf2', borderRadius: 14,
+                        boxShadow: '0 8px 32px #1b1d3220', zIndex: 90, width: 280, padding: '16px' }}>
+
+                        <div style={{ fontFamily: 'var(--font-manrope, Manrope, sans-serif)',
+                          fontWeight: 800, fontSize: 13, color: '#151621', marginBottom: 4 }}>Share report</div>
+                        <p style={{ fontSize: 12, color: '#83899c', margin: '0 0 14px', lineHeight: 1.5 }}>
+                          {report?.isPublic
+                            ? 'Anyone with the link can view this report.'
+                            : 'Make this report public so anyone with the link can view it.'}
+                        </p>
+
+                        {/* Visibility toggle row */}
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                          background: '#f8f9fd', borderRadius: 10, padding: '10px 13px', marginBottom: 14 }}>
+                          <div>
+                            <div style={{ fontSize: 12, fontWeight: 700, color: '#151621' }}>
+                              {report?.isPublic ? 'Public' : 'Private'}
+                            </div>
+                            <div style={{ fontSize: 11, color: '#83899c', marginTop: 1 }}>
+                              {report?.isPublic ? 'Link sharing on' : 'Only you can see this'}
+                            </div>
+                          </div>
+                          {/* Toggle switch */}
+                          <button
+                            disabled={shareToggling}
+                            onClick={async () => {
+                              setShareToggling(true);
+                              try {
+                                const next = !report?.isPublic;
+                                const res = await fetch(`/api/reports/${report.id}`, {
+                                  method: 'PATCH',
+                                  headers: { 'Content-Type': 'application/json' },
+                                  body: JSON.stringify({ isPublic: next }),
+                                });
+                                const d = await res.json();
+                                if (d.success) setReport(r => ({ ...r, isPublic: next }));
+                              } finally { setShareToggling(false); }
+                            }}
+                            style={{ width: 40, height: 22, borderRadius: 11, border: 0, padding: 0,
+                              background: report?.isPublic ? '#19b987' : '#d8dae8',
+                              cursor: shareToggling ? 'wait' : 'pointer',
+                              position: 'relative', transition: 'background .2s', flexShrink: 0 }}>
+                            <div style={{ position: 'absolute', top: 3,
+                              left: report?.isPublic ? 21 : 3,
+                              width: 16, height: 16, borderRadius: '50%', background: '#fff',
+                              boxShadow: '0 1px 4px #0002', transition: 'left .18s ease' }} />
+                          </button>
+                        </div>
+
+                        {/* Copy link row — only shown when public */}
+                        {report?.isPublic && (
+                          <button
+                            onClick={() => {
+                              navigator.clipboard?.writeText(window.location.href)
+                                .then(() => { setCopied(true); setTimeout(() => setCopied(false), 2500); })
+                                .catch(() => {});
+                            }}
+                            style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 8,
+                              background: copied ? '#edf9f4' : '#f4f5fb', border: '1px solid #e9eaf2',
+                              borderRadius: 9, padding: '9px 12px', cursor: 'pointer',
+                              fontFamily: 'inherit', transition: 'background .15s' }}>
+                            <svg width={13} height={13} viewBox="0 0 24 24" fill="none"
+                              stroke={copied ? '#19b987' : '#83899c'} strokeWidth={2} strokeLinecap="round">
+                              {copied
+                                ? <path d="M20 6 9 17l-5-5"/>
+                                : <><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></>
+                              }
+                            </svg>
+                            <span style={{ fontSize: 12, fontWeight: 700,
+                              color: copied ? '#19b987' : '#4b5168', flex: 1, textAlign: 'left',
+                              overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                              {copied ? 'Link copied!' : window.location.href}
+                            </span>
+                          </button>
+                        )}
+                      </div>
+                    </>
+                  )}
+                </div>
               )}
+
               {/* Download PDF — paid reports get direct download; free reports show purchase CTA */}
               {report && (
                 report.paid || sessionId
