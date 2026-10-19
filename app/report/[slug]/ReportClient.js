@@ -118,7 +118,7 @@ function FindingRow({ issue }) {
 }
 
 /* ─── Category section ─── */
-function CategorySection({ label, accent, issues, auditStatus }) {
+function CategorySection({ label, accent, issues, auditStatus, sectionSummary }) {
   const [collapsed, setCollapsed] = useState(false);
   const crit = issues.filter(i => i.severity === 'critical').length;
   const warn = issues.filter(i => i.severity === 'warning').length;
@@ -172,7 +172,22 @@ function CategorySection({ label, accent, issues, auditStatus }) {
               </div>
             : issues.length === 0
               ? <p style={{ fontSize: 13, color: '#83899c', padding: '13px 18px', margin: 0 }}>All checks passed.</p>
-              : issues.map((issue, i) => <FindingRow key={i} issue={issue} />)
+              : <>
+                  {sectionSummary && (
+                    <div style={{ margin: '0 14px 2px', padding: '10px 14px',
+                      background: `${accent}0d`, borderRadius: 9,
+                      borderLeft: `3px solid ${accent}`, marginBottom: 8, marginTop: 10 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={accent} strokeWidth="2.5" strokeLinecap="round">
+                          <path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm0 6v4m0 4h.01"/>
+                        </svg>
+                        <span style={{ fontSize: 10, fontWeight: 800, color: accent, letterSpacing: '.05em', textTransform: 'uppercase' }}>AI insight</span>
+                      </div>
+                      <p style={{ fontSize: 12.5, color: '#3d4259', lineHeight: 1.6, margin: 0 }}>{sectionSummary}</p>
+                    </div>
+                  )}
+                  {issues.map((issue, i) => <FindingRow key={i} issue={issue} />)}
+                </>
           }
         </div>
       )}
@@ -1212,11 +1227,13 @@ export default function ReportClient({ isPro, userName, userAvatar }) {
 
   const auditStatuses = report?.scores?.auditStatuses || {};
 
+  const sectionSummaries = report?.sectionSummaries || null;
+
   const detailCategories = [
-    { label: 'Performance',   accent: '#7948f6', auditKey: 'performance', match: i => i.area?.toLowerCase().includes('perf') || i.area?.toLowerCase().includes('best') },
-    { label: 'SEO',           accent: '#3687fa', auditKey: 'seo',         match: i => i.area?.toLowerCase().includes('seo')  || i.source === 'seo' },
-    { label: 'Security',      accent: '#19b987', auditKey: 'security',    match: i => i.area?.toLowerCase().includes('sec')  || i.source === 'ssl' },
-    { label: 'Accessibility', accent: '#efa642', auditKey: 'accessibility', match: i => i.area?.toLowerCase().includes('access') || i.source === 'a11y' },
+    { label: 'Performance',   accent: '#7948f6', auditKey: 'performance',   summaryKey: 'performance',   match: i => i.area?.toLowerCase().includes('perf') || i.area?.toLowerCase().includes('best') },
+    { label: 'SEO',           accent: '#3687fa', auditKey: 'seo',           summaryKey: 'seo',           match: i => i.area?.toLowerCase().includes('seo')  || i.source === 'seo' },
+    { label: 'Security',      accent: '#19b987', auditKey: 'security',      summaryKey: 'security',      match: i => i.area?.toLowerCase().includes('sec')  || i.source === 'ssl' },
+    { label: 'Accessibility', accent: '#efa642', auditKey: 'accessibility', summaryKey: 'accessibility', match: i => i.area?.toLowerCase().includes('access') || i.source === 'a11y' },
   ];
 
   // Navigate to Findings tab filtered to a category
@@ -1425,10 +1442,11 @@ export default function ReportClient({ isPro, userName, userAvatar }) {
         {/* Technical categories */}
         {active !== 'Visual' && detailCategories
           .filter(c => active === 'All' || c.label === active)
-          .map(({ label, accent, auditKey, match }) => (
+          .map(({ label, accent, auditKey, summaryKey, match }) => (
             <CategorySection key={label} label={label} accent={accent}
               issues={allIssues.filter(match)}
-              auditStatus={auditStatuses[auditKey]} />
+              auditStatus={auditStatuses[auditKey]}
+              sectionSummary={sectionSummaries?.[summaryKey] || null} />
           ))
         }
       </div>

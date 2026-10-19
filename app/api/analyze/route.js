@@ -88,8 +88,8 @@ export async function POST(request) {
   // AI summary (vision runs separately via /api/vision after the report is saved)
   const aiResult = await runAiSummary({ url, scores, issues }).catch(() => null);
 
-  const { aiSummary, siteType, uxScore, uxInsights, aiInsights } =
-    aiResult || { aiSummary: null, siteType: null, uxScore: null, uxInsights: null, aiInsights: null };
+  const { aiSummary, siteType, uxScore, uxInsights, aiInsights, sectionSummaries } =
+    aiResult || { aiSummary: null, siteType: null, uxScore: null, uxInsights: null, aiInsights: null, sectionSummaries: null };
 
   // Merge UX score into scores
   if (uxScore !== null && uxScore !== undefined) scores.ux = uxScore;
@@ -105,6 +105,7 @@ export async function POST(request) {
     uxInsights,
     uxAnnotations: null,
     aiInsights,
+    sectionSummaries,
     lhData,
     seoData,
     sslData,
@@ -120,7 +121,8 @@ export async function POST(request) {
     siteType:      siteType      || null,
     uxInsights:    uxInsights    || null,
     uxAnnotations: null,
-    aiInsights:    aiInsights    || null,
+    aiInsights:       aiInsights       || null,
+    sectionSummaries: sectionSummaries || null,
     issues,
     reportId: saved?.id   ?? null,  // integer — kept for internal API use
     reportSlug: saved?.slug ?? null, // UUID — used in public URLs
