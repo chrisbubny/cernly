@@ -1306,19 +1306,9 @@ export default function ReportClient({ isPro, userName, userAvatar }) {
       {(() => {
         const recs = report.recommendations || [];
         const topRec = recs[0] || null;
-        const scores = report.scores || {};
-
-        // Evidence-based strengths: only categories with an actual measured score ≥ 80.
-        // Never infer strength from absence of recommendations.
-        const catChecks = [
-          { key: 'performance',   label: 'Performance',   score: scores.performance },
-          { key: 'seo',           label: 'SEO',           score: scores.seo },
-          { key: 'security',      label: 'Security',      score: scores.security },
-          { key: 'accessibility', label: 'Accessibility', score: scores.accessibility },
-        ].filter(c => typeof c.score === 'number' && c.score >= 80);
-        const strength = catChecks[0] || null;
-
-        const firstAction = topRec?.actions?.[0] || null;
+        const assessment = report.assessment || null;
+        const assessmentStatus = report.assessmentStatus || null;
+        const hasAssessment = assessmentStatus === 'completed' && assessment;
 
         // Suggested questions tailored to what we actually found
         const suggestedQs = topRec
@@ -1329,6 +1319,57 @@ export default function ReportClient({ isPro, userName, userAvatar }) {
               'What else needs attention?',
             ]
           : ['What should I fix first?', 'How do I improve my LCP score?', 'What SEO issues hurt me most?', 'How do I fix my security headers?'];
+
+        // Top opportunity from assessment, linked to the actual saved recommendation
+        const topOpportunity = hasAssessment ? assessment.top_opportunity : null;
+        const linkedRec = topOpportunity?.recommendation_fingerprints?.length
+          ? recs.find(r => topOpportunity.recommendation_fingerprints.includes(r.fingerprintId)) || topRec
+          : topRec;
+        const displayRec = hasAssessment ? linkedRec : topRec;
+        const firstAction = displayRec?.actions?.[0] || null;
+
+        // Only show limitations when non-trivial
+        const limitations = hasAssessment && assessment.coverage?.limitations
+          && !assessment.coverage.limitations.match(/^no significant/i)
+          ? assessment.coverage.limitations : null;
+
+        // Low-confidence note
+        const confidenceNote = hasAssessment && assessment.confidence?.level === 'low'
+          ? assessment.confidence?.explanation : null;
+
+        // CTA buttons (shared between assessment and fallback paths)
+        const renderCTAs = (showActionPlan) => (
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 16 }}>
+            {showActionPlan && (
+              <button onClick={() => setActiveTab('action')}
+                style={{ display: 'inline-flex', alignItems: 'center', gap: 7,
+                  background: 'linear-gradient(135deg,#8a46f8,#3687fa)', color: '#fff',
+                  border: 0, borderRadius: 9, padding: '9px 16px', fontSize: 12,
+                  fontWeight: 800, cursor: 'pointer', fontFamily: 'inherit',
+                  boxShadow: '0 4px 14px #7948f630' }}>
+                See action plan
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                  strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M5 12h14M12 5l7 7-7 7"/>
+                </svg>
+              </button>
+            )}
+            <button onClick={() => handleRescan()}
+              style={{ display: 'inline-flex', alignItems: 'center', gap: 7,
+                background: 'transparent', color: '#7948f6',
+                border: '1.5px solid #c9bcf7', borderRadius: 9, padding: '8px 14px',
+                fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/>
+                <path d="M21 3v5h-5"/>
+                <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/>
+                <path d="M8 16H3v5"/>
+              </svg>
+              Rescan to verify
+            </button>
+          </div>
+        );
 
         return (
           <div style={{ background: 'linear-gradient(145deg,#f7f4ff,#eef6ff 90%)',
@@ -1355,126 +1396,248 @@ export default function ReportClient({ isPro, userName, userAvatar }) {
               </button>
             </div>
 
-            {/* Evidence-based strength highlight (only when a category genuinely scores well) */}
-            {strength && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 12,
-                background: '#edf9f4', border: '1px solid #c2ead8', borderRadius: 9,
-                padding: '8px 12px' }}>
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#19b987" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="m5 12 4 4 10-10"/>
-                </svg>
-                <span style={{ fontSize: 12, color: '#0f7356', fontWeight: 600 }}>
-                  {strength.label} looks solid — scored {strength.score}/100 on this scan.
-                </span>
-              </div>
-            )}
+            {/* ── COMPLETED ASSESSMENT ── */}
+            {hasAssessment ? (
+              <>
+                {/* Headline */}
+                <h3 style={{ fontFamily: 'var(--font-manrope, Manrope, sans-serif)',
+                  fontSize: 18, lineHeight: 1.3, letterSpacing: '-.04em',
+                  fontWeight: 800, color: '#151621', margin: '0 0 10px' }}>
+                  {assessment.headline}
+                </h3>
 
-            {/* AI summary — the core interpretation of this report */}
-            {report.aiSummary ? (
-              <p style={{ fontSize: 13, lineHeight: 1.75, color: '#2e3148', margin: '0 0 14px' }}>
-                {report.aiSummary}
-              </p>
-            ) : !topRec && (
-              <p style={{ fontSize: 13, lineHeight: 1.75, color: '#83899c', margin: '0 0 14px' }}>
-                Analysis is not available for this report.
-              </p>
-            )}
-
-            {/* Top recommendation — conversational, not a checklist item */}
-            {topRec && (
-              <div style={{ background: 'rgba(255,255,255,.72)', border: '1px solid #e4daff',
-                borderRadius: 10, padding: '12px 14px', marginBottom: 14 }}>
-                <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: '.07em',
-                  textTransform: 'uppercase', color: '#9898b0', marginBottom: 7 }}>
-                  Where to focus first
-                </div>
-                <p style={{ fontSize: 13, fontWeight: 700, color: '#3b3f56', margin: '0 0 5px', lineHeight: 1.4 }}>
-                  {topRec.title}
+                {/* Summary */}
+                <p style={{ fontSize: 13, lineHeight: 1.75, color: '#2e3148', margin: '0 0 14px' }}>
+                  {assessment.summary}
                 </p>
-                {(topRec.why_it_matters || topRec.what_we_found || topRec.explanation) && (
-                  <p style={{ fontSize: 12, color: '#5a5a78', margin: '0 0 8px', lineHeight: 1.6 }}>
-                    {topRec.why_it_matters || topRec.what_we_found || topRec.explanation}
-                  </p>
+
+                {/* Strengths */}
+                {assessment.strengths?.length > 0 && (
+                  <div style={{ marginBottom: 10 }}>
+                    {assessment.strengths.slice(0, 2).map((s, i) => (
+                      <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'flex-start', padding: '5px 0' }}>
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none"
+                          stroke="#19b987" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
+                          style={{ flexShrink: 0, marginTop: 2 }}>
+                          <path d="m5 12 4 4 10-10"/>
+                        </svg>
+                        <span style={{ fontSize: 12, color: '#2e3148', lineHeight: 1.5 }}>
+                          <strong style={{ color: '#0f7356' }}>Working well:</strong> {s.finding}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
                 )}
-                {firstAction && (
-                  <p style={{ fontSize: 12, color: '#5a5a78', margin: 0, lineHeight: 1.6 }}>
-                    <strong>First step: </strong>
-                    {firstAction.title && firstAction.detail
-                      ? `${firstAction.title} — ${firstAction.detail}`
-                      : (firstAction.title || firstAction.detail || String(firstAction))}
-                  </p>
+
+                {/* Concerns */}
+                {assessment.concerns?.length > 0 && (
+                  <div style={{ marginBottom: 14 }}>
+                    {assessment.concerns.slice(0, 2).map((c, i) => (
+                      <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'flex-start', padding: '5px 0' }}>
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none"
+                          stroke="#efa642" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
+                          style={{ flexShrink: 0, marginTop: 2 }}>
+                          <circle cx="12" cy="12" r="9"/><path d="M12 8v4m0 4h.01"/>
+                        </svg>
+                        <span style={{ fontSize: 12, color: '#2e3148', lineHeight: 1.5 }}>
+                          <strong style={{ color: '#92400e' }}>Holding you back:</strong> {c.finding}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
                 )}
-              </div>
+
+                {/* Top opportunity */}
+                {topOpportunity ? (
+                  <div style={{ background: 'rgba(255,255,255,.72)', border: '1px solid #e4daff',
+                    borderRadius: 10, padding: '12px 14px', marginBottom: 14 }}>
+                    <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: '.07em',
+                      textTransform: 'uppercase', color: '#9898b0', marginBottom: 7 }}>
+                      Top opportunity
+                    </div>
+                    <p style={{ fontSize: 13, fontWeight: 700, color: '#3b3f56', margin: '0 0 6px', lineHeight: 1.4 }}>
+                      {topOpportunity.title}
+                    </p>
+                    <p style={{ fontSize: 12, color: '#5a5a78', margin: 0, lineHeight: 1.6 }}>
+                      {topOpportunity.rationale}
+                    </p>
+                  </div>
+                ) : recs.length === 0 ? (
+                  <div style={{ display: 'flex', gap: 7, alignItems: 'center',
+                    background: '#edf9f4', border: '1px solid #c2ead8', borderRadius: 9,
+                    padding: '10px 12px', marginBottom: 14 }}>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#19b987"
+                      strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="m5 12 4 4 10-10"/>
+                    </svg>
+                    <span style={{ fontSize: 12, color: '#0f7356', fontWeight: 600 }}>
+                      Your site is in good shape — no critical improvements identified.
+                    </span>
+                  </div>
+                ) : null}
+
+                {/* CTAs — prominent, immediately after top opportunity */}
+                {renderCTAs(topOpportunity != null || recs.length > 0)}
+
+                {/* Next steps */}
+                {assessment.next_steps?.length > 0 && (
+                  <div style={{ borderTop: '1px solid #e8e0ff', paddingTop: 12, marginBottom: 12 }}>
+                    <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: '.07em',
+                      textTransform: 'uppercase', color: '#9898b0', marginBottom: 8 }}>
+                      Recommended next steps
+                    </div>
+                    {assessment.next_steps.slice(0, 3).map((step, i) => (
+                      <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'flex-start', padding: '4px 0' }}>
+                        <span style={{ width: 18, height: 18, borderRadius: 6, background: '#ede8ff',
+                          color: '#7948f6', fontSize: 10, fontWeight: 800,
+                          display: 'grid', placeItems: 'center', flexShrink: 0, marginTop: 1 }}>
+                          {i + 1}
+                        </span>
+                        <span style={{ fontSize: 12, color: '#2e3148', lineHeight: 1.5 }}>{step}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Limitations / low-confidence note */}
+                {(limitations || confidenceNote) && (
+                  <div style={{ background: '#fffbf0', border: '1px solid #f0e0b0', borderRadius: 8,
+                    padding: '8px 12px', marginBottom: 10, fontSize: 11, color: '#92400e', lineHeight: 1.5 }}>
+                    <strong>Note:</strong> {limitations || confidenceNote}
+                  </div>
+                )}
+              </>
+            ) : (
+              <>
+                {/* ── FALLBACK — no assessment (failed / null / historical) ── */}
+
+                {/* Score-based strength highlight */}
+                {(() => {
+                  const scores = report.scores || {};
+                  const catChecks = [
+                    { key: 'performance', label: 'Performance', score: scores.performance },
+                    { key: 'seo', label: 'SEO', score: scores.seo },
+                    { key: 'security', label: 'Security', score: scores.security },
+                    { key: 'accessibility', label: 'Accessibility', score: scores.accessibility },
+                  ].filter(c => typeof c.score === 'number' && c.score >= 80);
+                  const strength = catChecks[0] || null;
+                  return strength ? (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 12,
+                      background: '#edf9f4', border: '1px solid #c2ead8', borderRadius: 9,
+                      padding: '8px 12px' }}>
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#19b987"
+                        strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="m5 12 4 4 10-10"/>
+                      </svg>
+                      <span style={{ fontSize: 12, color: '#0f7356', fontWeight: 600 }}>
+                        {strength.label} looks solid — scored {strength.score}/100 on this scan.
+                      </span>
+                    </div>
+                  ) : null;
+                })()}
+
+                {/* aiSummary or status message */}
+                {report.aiSummary ? (
+                  <p style={{ fontSize: 13, lineHeight: 1.75, color: '#2e3148', margin: '0 0 14px' }}>
+                    {report.aiSummary}
+                  </p>
+                ) : assessmentStatus === 'failed' ? (
+                  <p style={{ fontSize: 13, lineHeight: 1.75, color: '#83899c', margin: '0 0 14px' }}>
+                    Analysis failed for this scan. Rescan to generate a fresh assessment.
+                  </p>
+                ) : !topRec ? (
+                  <p style={{ fontSize: 13, lineHeight: 1.75, color: '#83899c', margin: '0 0 14px' }}>
+                    Analysis is not available for this report.
+                  </p>
+                ) : null}
+
+                {/* Top recommendation box */}
+                {topRec && (
+                  <div style={{ background: 'rgba(255,255,255,.72)', border: '1px solid #e4daff',
+                    borderRadius: 10, padding: '12px 14px', marginBottom: 14 }}>
+                    <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: '.07em',
+                      textTransform: 'uppercase', color: '#9898b0', marginBottom: 7 }}>
+                      Where to focus first
+                    </div>
+                    <p style={{ fontSize: 13, fontWeight: 700, color: '#3b3f56', margin: '0 0 5px', lineHeight: 1.4 }}>
+                      {topRec.title}
+                    </p>
+                    {(topRec.why_it_matters || topRec.what_we_found || topRec.explanation) && (
+                      <p style={{ fontSize: 12, color: '#5a5a78', margin: '0 0 8px', lineHeight: 1.6 }}>
+                        {topRec.why_it_matters || topRec.what_we_found || topRec.explanation}
+                      </p>
+                    )}
+                    {firstAction && (
+                      <p style={{ fontSize: 12, color: '#5a5a78', margin: 0, lineHeight: 1.6 }}>
+                        <strong>First step: </strong>
+                        {firstAction.title && firstAction.detail
+                          ? `${firstAction.title} — ${firstAction.detail}`
+                          : (firstAction.title || firstAction.detail || String(firstAction))}
+                      </p>
+                    )}
+                  </div>
+                )}
+
+                {/* CTAs */}
+                {renderCTAs(!!topRec)}
+              </>
             )}
 
-            {/* Contextual action buttons */}
-            <div style={{ display: 'flex', gap: 7, flexWrap: 'wrap', marginBottom: 12 }}>
-              {topRec && (
-                <button onClick={() => setActiveTab('action')}
-                  style={{ background: 'rgba(255,255,255,.8)', border: '1px solid #ddd6f9',
-                    borderRadius: 8, padding: '6px 12px', fontSize: 11, fontWeight: 700,
-                    color: '#5b4b8a', cursor: 'pointer', fontFamily: 'inherit' }}>
-                  See action plan →
-                </button>
-              )}
-              <button onClick={() => handleRescan()}
-                style={{ background: 'rgba(255,255,255,.8)', border: '1px solid #ddd6f9',
-                  borderRadius: 8, padding: '6px 12px', fontSize: 11, fontWeight: 700,
-                  color: '#5b4b8a', cursor: 'pointer', fontFamily: 'inherit' }}>
-                Rescan to verify
-              </button>
-            </div>
+            {/* Ask Cernly suggestions — always at bottom, visually separated from CTAs */}
+            <div style={{ borderTop: '1px solid #e8e0ff', paddingTop: 12 }}>
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
+                {suggestedQs.map(q => (
+                  <button key={q}
+                    onClick={() => { setAdvisorInput(''); setDrawerContext({ _initialMessage: q }); setDrawerOpen(true); }}
+                    style={{ background: 'rgba(255,255,255,.8)', border: '1px solid #ddd6f9',
+                      borderRadius: 20, padding: '4px 11px', fontSize: 11, fontWeight: 600,
+                      color: '#5b4b8a', cursor: 'pointer', fontFamily: 'inherit', lineHeight: 1.4 }}>
+                    {q}
+                  </button>
+                ))}
+              </div>
 
-            {/* Suggested chips + inline ask input (unchanged) */}
-            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
-              {suggestedQs.map(q => (
-                <button key={q}
-                  onClick={() => { setAdvisorInput(''); setDrawerContext({ _initialMessage: q }); setDrawerOpen(true); }}
-                  style={{ background: 'rgba(255,255,255,.8)', border: '1px solid #ddd6f9',
-                    borderRadius: 20, padding: '4px 11px', fontSize: 11, fontWeight: 600,
-                    color: '#5b4b8a', cursor: 'pointer', fontFamily: 'inherit', lineHeight: 1.4 }}>
-                  {q}
-                </button>
-              ))}
-            </div>
-
-            {/* Inline input */}
-            <div style={{ background: '#fff', borderRadius: 10, border: '1px solid #ddd6f9',
-              display: 'flex', alignItems: 'center', padding: '7px 7px 7px 12px', gap: 7 }}>
-              <input
-                value={advisorInput}
-                onChange={e => setAdvisorInput(e.target.value)}
-                placeholder="Ask anything about this report…"
-                onKeyDown={e => {
-                  if (e.key === 'Enter' && advisorInput.trim()) {
-                    const q = advisorInput.trim();
-                    setAdvisorInput('');
-                    setDrawerContext({ _initialMessage: q });
-                    setDrawerOpen(true);
-                  }
+              {/* Inline input */}
+              <div style={{ background: '#fff', borderRadius: 10, border: '1px solid #ddd6f9',
+                display: 'flex', alignItems: 'center', padding: '7px 7px 7px 12px', gap: 7 }}>
+                <input
+                  value={advisorInput}
+                  onChange={e => setAdvisorInput(e.target.value)}
+                  placeholder="Ask anything about this report…"
+                  onKeyDown={e => {
+                    if (e.key === 'Enter' && advisorInput.trim()) {
+                      const q = advisorInput.trim();
+                      setAdvisorInput('');
+                      setDrawerContext({ _initialMessage: q });
+                      setDrawerOpen(true);
+                    }
+                  }}
+                  style={{ flex: 1, background: 'none', border: 0, outline: 0,
+                    fontSize: 12, color: '#151621', fontFamily: 'inherit', minWidth: 0 }}
+                />
+                <button onClick={() => {
+                  if (!advisorInput.trim()) { setDrawerContext(null); setDrawerOpen(true); return; }
+                  const q = advisorInput.trim();
+                  setAdvisorInput('');
+                  setDrawerContext({ _initialMessage: q });
+                  setDrawerOpen(true);
                 }}
-                style={{ flex: 1, background: 'none', border: 0, outline: 0,
-                  fontSize: 12, color: '#151621', fontFamily: 'inherit', minWidth: 0 }}
-              />
-              <button onClick={() => {
-                if (!advisorInput.trim()) { setDrawerContext(null); setDrawerOpen(true); return; }
-                const q = advisorInput.trim();
-                setAdvisorInput('');
-                setDrawerContext({ _initialMessage: q });
-                setDrawerOpen(true);
-              }}
-                style={{ border: 0, background: '#7948f6', color: '#fff', borderRadius: 7,
-                  width: 26, height: 26, display: 'grid', placeItems: 'center',
-                  cursor: 'pointer', flexShrink: 0 }}>
-                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
-              </button>
+                  style={{ border: 0, background: '#7948f6', color: '#fff', borderRadius: 7,
+                    width: 26, height: 26, display: 'grid', placeItems: 'center',
+                    cursor: 'pointer', flexShrink: 0 }}>
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+                </button>
+              </div>
             </div>
           </div>
         );
       })()}
 
-      {/* Top discoveries — show first 3 */}
-      {Array.isArray(effectiveDiscoveries) && effectiveDiscoveries.length > 0 && (
+      {/* Top discoveries — show only when assessment doesn't already cover this territory.
+          When a completed assessment has strengths/concerns, those cover the same info. */}
+      {!(report.assessmentStatus === 'completed' && report.assessment &&
+          ((report.assessment.strengths?.length > 0) || (report.assessment.concerns?.length > 0))) &&
+        Array.isArray(effectiveDiscoveries) && effectiveDiscoveries.length > 0 && (
         <div style={{ marginBottom: 22 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 13 }}>
             <span style={{ fontFamily: 'var(--font-manrope, Manrope, sans-serif)',

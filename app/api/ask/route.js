@@ -55,21 +55,56 @@ ${focusIssue.fix ? 'Recommended fix: ' + focusIssue.fix : ''}
 `
           : '';
 
+        // Assessment context — structured website-level interpretation from Stage 2
+        let assessmentBlock = '';
+        if (report.assessmentStatus === 'completed' && report.assessment) {
+          const a = report.assessment;
+          const strengths = (a.strengths || []).slice(0, 3).map(s => `  - ${s.finding}${s.impact ? ` (${s.impact})` : ''}`).join('\n');
+          const concerns  = (a.concerns  || []).slice(0, 3).map(c => `  - ${c.finding}${c.impact ? ` (${c.impact})` : ''}`).join('\n');
+          const nextSteps = (a.next_steps || []).slice(0, 3).join('; ');
+          const auditRan  = (a.coverage?.audits_ran    || []).join(', ') || 'unknown';
+          const auditFail = (a.coverage?.audits_failed || []).join(', ');
+          assessmentBlock = `
+WEBSITE ASSESSMENT:
+Headline: ${a.headline}
+Summary: ${a.summary}
+${a.top_opportunity ? `Top Opportunity: ${a.top_opportunity.title} — ${a.top_opportunity.rationale}` : 'Top Opportunity: none identified'}
+What's working:
+${strengths || '  (none noted)'}
+What's holding it back:
+${concerns || '  (none noted)'}
+Recommended next steps: ${nextSteps || 'none'}
+Confidence: ${a.confidence?.level || 'unknown'} — ${a.confidence?.explanation || ''}
+Audit coverage: ran [${auditRan}]${auditFail ? `, failed [${auditFail}]` : ''}
+${a.coverage?.limitations && !a.coverage.limitations.match(/^no significant/i) ? `Limitations: ${a.coverage.limitations}` : ''}`;
+        }
+
+        // Top recommendations — gives the AI full context for targeted questions
+        let recsBlock = '';
+        const topRecs = (report.recommendations || []).slice(0, 6);
+        if (topRecs.length > 0) {
+          const recLines = topRecs.map((r, i) => {
+            const why = r.why_it_matters || r.what_we_found || r.explanation || '';
+            return `  ${i + 1}. [${r.priority || 'medium'}/${r.category || 'general'}] ${r.title}${why ? ': ' + why.slice(0, 120) : ''}`;
+          }).join('\n');
+          recsBlock = `\nKEY RECOMMENDATIONS (${topRecs.length} of ${(report.recommendations || []).length} total):\n${recLines}`;
+        }
+
         reportContext = `
 SITE CONTEXT:
 Domain: ${domain}
 Scores: ${scoreLines}
 Key issues:
 ${issueLines || 'None found'}
-${focusBlock}${report.aiSummary ? `\nAI Summary: ${report.aiSummary}` : ''}
+${focusBlock}${assessmentBlock}${recsBlock}${!assessmentBlock && report.aiSummary ? `\nAI Summary: ${report.aiSummary}` : ''}
 `;
       }
     } catch {}
   }
 
-  const systemPrompt = `You are Cernly AI, a helpful web performance and SEO assistant embedded in a website audit report. You have access to this site's audit data and help website owners understand their results and fix issues.
+  const systemPrompt = `You are Cernly AI, a helpful web performance and SEO assistant embedded in a website audit report. You have access to this site's structured assessment, recommendations, and audit data.
 
-Be concise, practical, and friendly. Use plain English. When explaining a fix, give specific actionable steps — not generic advice. Keep answers under 150 words unless the question needs more detail.${reportContext ? `\n${reportContext}` : ''}`;
+Be concise, practical, and friendly. Use plain English. When explaining a fix, give specific actionable steps — not generic advice. Keep answers under 150 words unless the question needs more detail. Refer to the site's actual findings and priorities rather than giving generic advice. When the assessment identifies a top opportunity, treat it as the established priority unless the user asks about something else specifically.${reportContext ? `\n${reportContext}` : ''}`;
 
   // Convert prior messages to Anthropic format
   const priorMessages = messages.slice(-6).map(m => ({
