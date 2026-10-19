@@ -121,13 +121,21 @@ export async function GET(request) {
     results.step5_e2e = { skipped: 'no API key' };
   } else {
     try {
-      // Re-fetch the Microlink screenshot URL for testUrl
+      // Re-fetch the Microlink screenshot URL for testUrl — use fullPage=true
+      const mlParams5 = new URLSearchParams({
+        url: testUrl,
+        'screenshot.fullPage': 'true',
+        'viewport.width':  '1280',
+        'viewport.height': '900',
+        'force': 'true',
+      });
       const mlRes2 = await fetch(
-        `https://api.microlink.io/?url=${encodeURIComponent(testUrl)}&screenshot=true`,
-        { signal: AbortSignal.timeout(12000) }
+        `https://api.microlink.io/?${mlParams5}`,
+        { signal: AbortSignal.timeout(20000) }
       );
       const mlData2 = mlRes2.ok ? await mlRes2.json() : null;
       const shotUrl = mlData2?.data?.screenshot?.url;
+      const shotH   = mlData2?.data?.screenshot?.height;
 
       if (!shotUrl) {
         results.step5_e2e = { skipped: 'no screenshot URL from Microlink' };
@@ -154,6 +162,7 @@ export async function GET(request) {
             sizeKb: kb,
             b64Length: b64.length,
             b64Sample: b64.slice(0, 40) + '…',
+            screenshotHeight: shotH ?? 'unknown',
           };
 
           // Send to Claude
