@@ -63,7 +63,7 @@ function SevDot({ sev }) {
 /* ─── Finding row — expandable ─── */
 function FindingRow({ issue }) {
   const [open, setOpen] = useState(false);
-  const hasDetail = !!(issue.description || issue.detail || issue.fix);
+  const hasDetail = !!(issue.fix); // description always visible; only expand for fix guide
   const sev = issue.severity;
   const sevStyle = {
     critical: { bg: '#fff0f2', color: '#ef6473', label: 'Critical' },
@@ -86,6 +86,12 @@ function FindingRow({ issue }) {
           {issue.displayValue && (
             <div style={{ fontSize: 11, color: '#83899c', marginTop: 2, fontFamily: 'monospace' }}>{issue.displayValue}</div>
           )}
+          {(issue.description || issue.detail) && (
+            <div style={{ fontSize: 12, color: '#6b7280', marginTop: 5, lineHeight: 1.6,
+              overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>
+              {cleanDesc(issue.description || issue.detail)}
+            </div>
+          )}
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 7, flexShrink: 0, marginTop: 1 }}>
           <span style={{ fontSize: 10, fontWeight: 800, padding: '3px 8px', borderRadius: 6,
@@ -99,18 +105,11 @@ function FindingRow({ issue }) {
       </button>
       {open && hasDetail && (
         <div style={{ padding: '4px 18px 16px 37px' }}>
-          {(issue.description || issue.detail) && (
-            <p style={{ fontSize: 13, color: '#4b5168', lineHeight: 1.75, margin: '0 0 10px' }}>
-              {cleanDesc(issue.description || issue.detail)}
-            </p>
-          )}
-          {issue.fix && (
-            <div style={{ background: '#f7f4ff', borderRadius: 10, padding: '11px 14px' }}>
-              <div style={{ fontSize: 10, fontWeight: 800, color: '#7948f6',
-                marginBottom: 5, textTransform: 'uppercase', letterSpacing: '.08em' }}>How to fix</div>
-              <p style={{ fontSize: 13, color: '#444', margin: 0, lineHeight: 1.65 }}>{cleanDesc(issue.fix)}</p>
-            </div>
-          )}
+          <div style={{ background: '#f7f4ff', borderRadius: 10, padding: '11px 14px' }}>
+            <div style={{ fontSize: 10, fontWeight: 800, color: '#7948f6',
+              marginBottom: 5, textTransform: 'uppercase', letterSpacing: '.08em' }}>How to fix</div>
+            <p style={{ fontSize: 13, color: '#444', margin: 0, lineHeight: 1.65 }}>{cleanDesc(issue.fix)}</p>
+          </div>
         </div>
       )}
     </div>
@@ -1076,10 +1075,46 @@ export default function ReportClient({ isPro, userName, userAvatar }) {
   const [shareOpen, setShareOpen]         = useState(false); // share popover open
   const [advisorInput, setAdvisorInput]   = useState('');   // overview AI advisor input
   const [scanHistory, setScanHistory]     = useState(null); // null=not loaded, []=loaded
+  const [rescanModal, setRescanModal]     = useState(null); // null | { stageIdx, stage, error }
+
+  const RESCAN_STAGES = [
+    'Fetching page…',
+    'Running performance analysis…',
+    'Auditing SEO signals…',
+    'Checking security headers…',
+    'Scanning accessibility…',
+    'Identifying site type & UX…',
+    'Writing AI insights…',
+  ];
 
   function handleRescan() {
     if (!report?.url) return;
-    router.push('/analyze?url=' + encodeURIComponent(report.url));
+    setRescanModal({ stageIdx: 0, stage: RESCAN_STAGES[0], error: null });
+    let step = 0;
+    const timer = setInterval(() => {
+      step = Math.min(step + 1, RESCAN_STAGES.length - 1);
+      setRescanModal(m => m && !m.error ? { ...m, stageIdx: step, stage: RESCAN_STAGES[step] } : m);
+    }, 2200);
+    fetch('/api/analyze', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url: report.url }),
+    })
+      .then(r => r.json())
+      .then(d => {
+        clearInterval(timer);
+        if (d.error) {
+          setRescanModal(m => m ? { ...m, error: d.error || 'Scan failed. Please try again.' } : m);
+        } else {
+          const newSlug = d.reportSlug || d.reportId;
+          setRescanModal(null);
+          router.push(`/report/${newSlug}`);
+        }
+      })
+      .catch(() => {
+        clearInterval(timer);
+        setRescanModal(m => m ? { ...m, error: 'Something went wrong. Please try again.' } : m);
+      });
   }
 
   const displayName = userName || 'User';
@@ -1466,10 +1501,10 @@ export default function ReportClient({ isPro, userName, userAvatar }) {
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
           <div>
             <div style={{ fontFamily: 'var(--font-manrope, Manrope, sans-serif)', fontWeight: 800, fontSize: 16, color: '#151621' }}>
-              Scan history
+              Progress
             </div>
             <div style={{ fontSize: 12, color: '#83899c', marginTop: 3 }}>
-              All scans for <strong>{domain}</strong>
+              Scan history for <strong>{domain}</strong>
             </div>
           </div>
           <button onClick={handleRescan}
@@ -1933,7 +1968,7 @@ export default function ReportClient({ isPro, userName, userAvatar }) {
                     { key: 'overview',  label: 'Overview',    icon: 'M3 3h7v7H3zm11 0h7v7h-7zM3 14h7v7H3zm11 0h7v7h-7z' },
                     { key: 'action',    label: 'Action plan', icon: 'm5 12 4 4 10-10' },
                     { key: 'findings',  label: 'Findings',    icon: 'M9 11l3 3L22 4' + 'M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11' },
-                    { key: 'progress',  label: 'History',     icon: 'M12 8v4l3 3m6-3a9 9 0 1 1-18 0 9 9 0 0 1 18 0z' },
+                    { key: 'progress',  label: 'Progress',    icon: 'M12 8v4l3 3m6-3a9 9 0 1 1-18 0 9 9 0 0 1 18 0z' },
                   ].map(t => {
                     const isActive = activeTab === t.key;
                     return (
@@ -1973,6 +2008,66 @@ export default function ReportClient({ isPro, userName, userAvatar }) {
           </div>
         </main>
       </div>
+
+      {/* ── Rescan modal overlay ── */}
+      {rescanModal && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 9999,
+          background: 'rgba(15,16,30,.6)', backdropFilter: 'blur(10px)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div style={{ background: '#fff', borderRadius: 24, padding: '44px 40px',
+            textAlign: 'center', maxWidth: 400, width: '90%',
+            boxShadow: '0 32px 80px #1b1d3235' }}>
+            {/* Icon */}
+            <div style={{ width: 72, height: 72, borderRadius: 22,
+              background: rescanModal.error
+                ? 'linear-gradient(135deg,#ef6473,#d94051)'
+                : 'linear-gradient(135deg,#8a46f8,#3389ff)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              margin: '0 auto 24px', boxShadow: rescanModal.error
+                ? '0 12px 32px #ef647340'
+                : '0 12px 32px #7948f640' }}>
+              {rescanModal.error ? (
+                <svg width={28} height={28} viewBox="0 0 24 24" fill="none"
+                  stroke="#fff" strokeWidth={2.2} strokeLinecap="round">
+                  <circle cx="12" cy="12" r="9"/><path d="M12 8v4m0 4h.01"/>
+                </svg>
+              ) : (
+                <svg width={28} height={28} viewBox="0 0 24 24" fill="none"
+                  stroke="#fff" strokeWidth={2.2} strokeLinecap="round">
+                  <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
+                </svg>
+              )}
+            </div>
+            {/* Title */}
+            <div style={{ fontFamily: 'var(--font-manrope,Manrope,sans-serif)',
+              fontWeight: 800, fontSize: 20, color: '#151621', marginBottom: 8 }}>
+              {rescanModal.error ? 'Scan failed' : 'Analyzing your website'}
+            </div>
+            {/* Stage / error */}
+            <div style={{ fontSize: 14, color: '#83899c', marginBottom: 28, minHeight: 22 }}>
+              {rescanModal.error || rescanModal.stage}
+            </div>
+            {/* Progress bar */}
+            {!rescanModal.error && (
+              <div style={{ background: '#f0f1f8', borderRadius: 100, height: 6,
+                overflow: 'hidden', marginBottom: 12 }}>
+                <div style={{ height: '100%', borderRadius: 100,
+                  background: 'linear-gradient(90deg,#8a46f8,#3389ff)',
+                  width: `${Math.round((rescanModal.stageIdx + 1) / RESCAN_STAGES.length * 100)}%`,
+                  transition: 'width .6s ease' }}/>
+              </div>
+            )}
+            {rescanModal.error && (
+              <button onClick={() => setRescanModal(null)}
+                style={{ padding: '10px 24px', background: '#f0f1f8', border: 0,
+                  borderRadius: 10, fontWeight: 700, fontSize: 13, cursor: 'pointer',
+                  fontFamily: 'inherit', color: '#151621' }}>
+                Close
+              </button>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

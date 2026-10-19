@@ -349,7 +349,15 @@ function AnalyzeContent() {
       .then(d => {
         clearInterval(timer);
         if (d.error) { setError(d.error); setPhase('error'); }
-        else { setData(d); setPhase('results'); }
+        else {
+          // Redirect to the full report page
+          const slug = d.reportSlug || d.reportId;
+          if (slug) {
+            window.location.href = `/report/${slug}`;
+          } else {
+            setData(d); setPhase('results');
+          }
+        }
       })
       .catch(() => {
         clearInterval(timer);
