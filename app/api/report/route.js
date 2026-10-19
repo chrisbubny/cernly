@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { auth } from '@clerk/nextjs/server';
-import { getReport, getReportBySlug } from '@/lib/store';
+import { getReport, getReportBySlug, getRecommendationsByReport } from '@/lib/store';
 
 // GET /api/report?slug=xxx  (preferred — public UUID)
 // GET /api/report?id=xxx    (legacy integer ID — kept for backward compat)
@@ -32,5 +32,8 @@ export async function GET(request) {
     return NextResponse.json({ error: 'This report is private.' }, { status: 403 });
   }
 
-  return NextResponse.json({ ...report, isOwner });
+  // Fetch persisted recommendations (best-effort — empty array on failure)
+  const recommendations = await getRecommendationsByReport(report.id).catch(() => []);
+
+  return NextResponse.json({ ...report, recommendations, isOwner });
 }

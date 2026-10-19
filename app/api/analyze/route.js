@@ -5,8 +5,9 @@ import { runSeoAudit } from '@/lib/analyzers/seo';
 import { runSslCheck } from '@/lib/analyzers/ssl';
 import { runA11yCheck } from '@/lib/analyzers/a11y';
 import { runAiSummary } from '@/lib/analyzers/ai';
-import { saveReport } from '@/lib/store';
+import { saveReport, saveRecommendations, ensureRecommendationsTable } from '@/lib/store';
 import { normalizeScore, assignIssueFingerprintIds } from '@/lib/scoring';
+import { generateRecommendations } from '@/lib/recommendations';
 
 // POST /api/analyze
 // Body: { url: string }
@@ -102,6 +103,17 @@ export async function POST(request) {
   // Merge UX score into scores (normalized)
   if (uxScore !== null && uxScore !== undefined) scores.ux = normalizeScore(uxScore);
 
+  // Generate structured recommendations from the fingerprinted issues.
+  // This runs after AI summary to avoid blocking the core report.
+  // Runs best-effort: failures do not prevent the report from being saved.
+  const recommendations = await generateRecommendations(
+    issues,
+    scores,
+    url,
+    { lhData, seoData, sslData, a11yData },
+    auditStatuses,
+  ).catch(err => { console.error('[analyze] recommendations error:', err.message); return []; });
+
   // Save report for potential purchase (attach userId so it appears in scan history)
   const saved = await saveReport({
     url,
@@ -121,6 +133,14 @@ export async function POST(request) {
     userId,
   }).catch(() => null);
 
+  // Persist recommendations if the report was saved successfully
+  if (saved?.id && recommendations.length) {
+    await ensureRecommendationsTable().catch(() => {});
+    await saveRecommendations(saved.id, userId, recommendations).catch(err => {
+      console.error('[analyze] saveRecommendations error:', err.message);
+    });
+  }
+
   return NextResponse.json({
     url,
     scores,
@@ -132,6 +152,7 @@ export async function POST(request) {
     aiInsights:       aiInsights       || null,
     sectionSummaries: sectionSummaries || null,
     issues,
+    recommendations: recommendations || [],
     reportId: saved?.id   ?? null,  // integer — kept for internal API use
     reportSlug: saved?.slug ?? null, // UUID — used in public URLs
     analyzedAt: new Date().toISOString(),
