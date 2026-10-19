@@ -274,8 +274,8 @@ export default function DashboardClient({ reports: initialReports = [], isPro, u
       });
       clearInterval(stageTimer);
       const data = await res.json();
-      if (data.reportId) {
-        router.push(`/report/${data.reportId}`);
+      if (data.reportSlug || data.reportId) {
+        router.push(`/report/${data.reportSlug || data.reportId}`);
       } else {
         notify(data.error || 'Scan failed. Please try again.');
         setScanning(false);
@@ -659,7 +659,7 @@ export default function DashboardClient({ reports: initialReports = [], isPro, u
                               style={{ background: '#fff', border: '1px solid #e9eaf2', borderRadius: 17,
                                 boxShadow: '0 9px 25px #22233e05', padding: 19, cursor: 'pointer',
                                 transition: 'border .2s,transform .2s' }}
-                              onClick={() => router.push(`/report/${r.id}`)}>
+                              onClick={() => router.push(`/report/${r.slug || r.id}`)}>
                               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start', gap: 10 }}>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: 11, minWidth: 0 }}>
                                   <div style={{ width: 38, height: 38, border: '1px solid #e9eaf2', borderRadius: 11,
@@ -693,7 +693,7 @@ export default function DashboardClient({ reports: initialReports = [], isPro, u
                                 paddingTop: 13, borderTop: '1px solid #f0f1f5',
                                 color: '#9296a5', fontSize: 10 }}>
                                 <span>Performance · SEO · Security · A11y</span>
-                                <button onClick={e => { e.stopPropagation(); router.push(`/report/${r.id}`); }}
+                                <button onClick={e => { e.stopPropagation(); router.push(`/report/${r.slug || r.id}`); }}
                                   style={{ border: 0, background: 'transparent', color: '#7551e4',
                                     fontWeight: 800, fontSize: 11, cursor: 'pointer', fontFamily: 'inherit' }}>
                                   View report →
@@ -937,7 +937,7 @@ export default function DashboardClient({ reports: initialReports = [], isPro, u
                                 </td>
                                 <td style={{ padding: '12px 14px', borderBottom: '1px solid #e9eaf2', color: '#83899c' }}>{date}</td>
                                 <td style={{ padding: '12px 14px', borderBottom: '1px solid #e9eaf2' }}>
-                                  <button onClick={() => router.push(`/report/${r.id}`)}
+                                  <button onClick={() => router.push(`/report/${r.slug || r.id}`)}
                                     style={{ background: '#f2efff', border: 0, color: '#7650e9',
                                       padding: '8px 11px', borderRadius: 7, fontSize: 11,
                                       fontWeight: 800, cursor: 'pointer', fontFamily: 'inherit' }}>
@@ -1010,7 +1010,7 @@ export default function DashboardClient({ reports: initialReports = [], isPro, u
                                 <td style={{ padding: '12px 14px', borderBottom: '1px solid #e9eaf2', color: '#83899c' }}>{score}</td>
                                 <td style={{ padding: '12px 14px', borderBottom: '1px solid #e9eaf2' }}>
                                   <div style={{ display: 'flex', gap: 7, alignItems: 'center' }}>
-                                    <button onClick={() => router.push(`/report/${r.id}`)}
+                                    <button onClick={() => router.push(`/report/${r.slug || r.id}`)}
                                       style={{ background: '#f2efff', border: 0, color: '#7650e9',
                                         padding: '8px 11px', borderRadius: 7, fontSize: 11,
                                         fontWeight: 800, cursor: 'pointer', fontFamily: 'inherit' }}>

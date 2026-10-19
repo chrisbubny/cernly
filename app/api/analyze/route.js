@@ -95,7 +95,7 @@ export async function POST(request) {
   if (uxScore !== null && uxScore !== undefined) scores.ux = uxScore;
 
   // Save report for potential purchase (attach userId so it appears in scan history)
-  const reportId = await saveReport({
+  const saved = await saveReport({
     url,
     scores,
     issues,
@@ -122,7 +122,8 @@ export async function POST(request) {
     uxAnnotations: null,
     aiInsights:    aiInsights    || null,
     issues,
-    reportId,
+    reportId: saved?.id   ?? null,  // integer — kept for internal API use
+    reportSlug: saved?.slug ?? null, // UUID — used in public URLs
     analyzedAt: new Date().toISOString(),
   });
 }

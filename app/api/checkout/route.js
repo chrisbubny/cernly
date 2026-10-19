@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import Stripe from 'stripe';
 import { auth } from '@clerk/nextjs/server';
+import { getReport, getReportBySlug } from '@/lib/store';
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
@@ -51,12 +52,23 @@ export async function GET(request) {
 
 // POST /api/checkout  — one-time report purchase
 // Body: { reportId, url? }
+// reportId may be a UUID slug or legacy integer — we resolve both
 export async function POST(request) {
   let body = {};
   try { body = await request.json(); } catch {}
 
-  const { reportId } = body;
-  if (!reportId) return NextResponse.json({ error: 'reportId required' }, { status: 400 });
+  const { reportId: reportRef } = body;
+  if (!reportRef) return NextResponse.json({ error: 'reportId required' }, { status: 400 });
+
+  // Resolve report to get integer id (for webhook) and slug (for success URL)
+  const isSlug = /[a-f0-9-]{36}/.test(String(reportRef)) && !(/^\d+$/.test(String(reportRef)));
+  const report = isSlug
+    ? await getReportBySlug(String(reportRef)).catch(() => null)
+    : await getReport(String(reportRef)).catch(() => null);
+
+  // Fall back gracefully — use whatever was passed if lookup fails
+  const intId   = report?.id   ?? reportRef;
+  const urlSlug = report?.slug ?? reportRef;
 
   const appUrl = getAppUrl(request);
 
@@ -75,10 +87,11 @@ export async function POST(request) {
       quantity: 1,
     }],
     mode: 'payment',
-    success_url: `${appUrl}/report/${reportId}?session_id={CHECKOUT_SESSION_ID}`,
+    success_url: `${appUrl}/report/${urlSlug}?session_id={CHECKOUT_SESSION_ID}`,
     cancel_url: `${appUrl}/analyze?url=${encodeURIComponent(body.url || '')}`,
     metadata: {
-      reportId: String(reportId),
+      reportId: String(intId), // integer ID for webhook → markReportPaid
+      reportSlug: String(urlSlug), // UUID slug for reference
     },
     allow_promotion_codes: true,
   });

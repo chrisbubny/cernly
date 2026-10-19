@@ -1,15 +1,22 @@
 import { NextResponse } from 'next/server';
-import { getReport } from '@/lib/store';
+import { getReport, getReportBySlug } from '@/lib/store';
 
-// GET /api/report?id=xxx&session_id=yyy
+// GET /api/report?slug=xxx  (preferred — public UUID)
+// GET /api/report?id=xxx    (legacy integer ID — kept for backward compat)
 export async function GET(request) {
   const { searchParams } = new URL(request.url);
-  const reportId  = searchParams.get('id');
+  const slug     = searchParams.get('slug');
+  const reportId = searchParams.get('id');
   const sessionId = searchParams.get('session_id'); // Stripe checkout session
 
-  if (!reportId) return NextResponse.json({ error: 'id required' }, { status: 400 });
+  if (!slug && !reportId) {
+    return NextResponse.json({ error: 'slug or id required' }, { status: 400 });
+  }
 
-  const report = await getReport(reportId);
+  const report = slug
+    ? await getReportBySlug(slug)
+    : await getReport(reportId);
+
   if (!report) return NextResponse.json({ error: 'Report not found' }, { status: 404 });
 
   // Report is accessible if paid, or if Stripe session just completed (session_id present)
@@ -20,8 +27,5 @@ export async function GET(request) {
     return NextResponse.json({ ...report, paid: false });
   }
 
-  return NextResponse.json({
-    ...report,
-    paid: true,
-  });
+  return NextResponse.json({ ...report, paid: true });
 }
