@@ -1648,6 +1648,49 @@ export default function ReportClient({ isPro, userName, userAvatar }) {
                 <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg>
                 {copied ? 'Copied!' : 'Share'}
               </button>
+              {/* Download PDF — paid reports get direct download; free reports show purchase CTA */}
+              {report && (
+                report.paid || sessionId
+                  ? (
+                    <a
+                      href={`/api/report/${id}/pdf${sessionId ? `?session_id=${sessionId}` : ''}`}
+                      download
+                      style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 13px',
+                        background: '#f0fdf4', color: '#16a34a',
+                        border: 0, borderRadius: 9, fontWeight: 700, fontSize: 12,
+                        cursor: 'pointer', fontFamily: 'inherit', textDecoration: 'none' }}>
+                      <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round">
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                        <polyline points="7 10 12 15 17 10"/>
+                        <line x1="12" y1="15" x2="12" y2="3"/>
+                      </svg>
+                      PDF Report
+                    </a>
+                  ) : (
+                    <button
+                      onClick={async () => {
+                        try {
+                          const res = await fetch('/api/checkout', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ reportId: id, url: report.url }),
+                          });
+                          const data = await res.json();
+                          if (data.url) window.location.href = data.url;
+                        } catch {}
+                      }}
+                      style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 13px',
+                        background: '#f4f5fb', color: '#83899c',
+                        border: 0, borderRadius: 9, fontWeight: 700, fontSize: 12,
+                        cursor: 'pointer', fontFamily: 'inherit' }}>
+                      <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round">
+                        <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+                        <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+                      </svg>
+                      PDF ($4.99)
+                    </button>
+                  )
+              )}
               <Link href={`/dashboard?rescan=${encodeURIComponent(report?.url || '')}`}
                 style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 13px',
                   background: '#151621', color: '#fff', borderRadius: 9,
