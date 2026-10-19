@@ -730,12 +730,18 @@ function UxCard({ uxScore, uxInsights, uxAnnotations, visionStatus, siteType, ur
 }
 
 /* ─── Ask Cernly drawer ─── */
-function AskCernlyDrawer({ reportId, domain, onClose, initialContext }) {
+function AskCernlyDrawer({ reportId, domain, onClose, initialContext, initialMessage }) {
   const openingMsg = initialContext
     ? `I'm looking at the **${initialContext.category || 'finding'}** issue: **${initialContext.title}**.\n\n${initialContext.detail ? initialContext.detail.replace(/\[([^\]]+)\]\([^)]+\)/g, '$1').slice(0, 200) : 'What would you like to know about this finding?'}`
     : `Hi! I've analyzed **${domain || 'this site'}** and I'm ready to help. Ask me what a finding means, how to fix it, or where to start.`;
 
   const [messages, setMessages] = useState([{ role: 'assistant', content: openingMsg }]);
+
+  // Auto-send initialMessage (from the overview input box) on mount
+  useEffect(() => {
+    if (initialMessage?.trim()) { send(initialMessage.trim()); }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const msgsRef = useRef(null);
@@ -1069,6 +1075,7 @@ export default function ReportClient({ isPro, userName, userAvatar }) {
   const [rescanStage, setRescanStage]     = useState(0);
   const [shareToggling, setShareToggling] = useState(false); // in-flight for share toggle
   const [shareOpen, setShareOpen]         = useState(false); // share popover open
+  const [advisorInput, setAdvisorInput]   = useState('');   // overview AI advisor input
 
   const RESCAN_STAGES = [
     'Checking performance…', 'Auditing SEO signals…', 'Testing security…',
@@ -1303,7 +1310,7 @@ export default function ReportClient({ isPro, userName, userAvatar }) {
         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
           {['Why is my site slow?', 'Which fixes matter most?', 'Explain my SEO issues', 'What can I fix myself?'].map(q => (
             <button key={q}
-              onClick={() => { setDrawerContext(null); setDrawerOpen(true); }}
+              onClick={() => { setAdvisorInput(''); setDrawerContext({ _initialMessage: q }); setDrawerOpen(true); }}
               style={{ background: 'rgba(255,255,255,.8)', border: '1px solid #ddd6f9',
                 borderRadius: 20, padding: '4px 11px', fontSize: 11, fontWeight: 600,
                 color: '#5b4b8a', cursor: 'pointer', fontFamily: 'inherit', lineHeight: 1.4 }}>
@@ -1316,12 +1323,27 @@ export default function ReportClient({ isPro, userName, userAvatar }) {
         <div style={{ background: '#fff', borderRadius: 10, border: '1px solid #ddd6f9',
           display: 'flex', alignItems: 'center', padding: '7px 7px 7px 12px', gap: 7 }}>
           <input
+            value={advisorInput}
+            onChange={e => setAdvisorInput(e.target.value)}
             placeholder="Ask anything about this report…"
-            onKeyDown={e => { if (e.key === 'Enter' && e.target.value.trim()) { setDrawerContext(null); setDrawerOpen(true); } }}
+            onKeyDown={e => {
+              if (e.key === 'Enter' && advisorInput.trim()) {
+                const q = advisorInput.trim();
+                setAdvisorInput('');
+                setDrawerContext({ _initialMessage: q });
+                setDrawerOpen(true);
+              }
+            }}
             style={{ flex: 1, background: 'none', border: 0, outline: 0,
               fontSize: 12, color: '#151621', fontFamily: 'inherit', minWidth: 0 }}
           />
-          <button onClick={() => { setDrawerContext(null); setDrawerOpen(true); }}
+          <button onClick={() => {
+            if (!advisorInput.trim()) { setDrawerContext(null); setDrawerOpen(true); return; }
+            const q = advisorInput.trim();
+            setAdvisorInput('');
+            setDrawerContext({ _initialMessage: q });
+            setDrawerOpen(true);
+          }}
             style={{ border: 0, background: '#7948f6', color: '#fff', borderRadius: 7,
               width: 26, height: 26, display: 'grid', placeItems: 'center',
               cursor: 'pointer', flexShrink: 0 }}>
@@ -1628,7 +1650,8 @@ export default function ReportClient({ isPro, userName, userAvatar }) {
       {/* Ask Cernly drawer — shown on demand */}
       {drawerOpen && report && (
         <AskCernlyDrawer reportId={id} domain={domain}
-          initialContext={drawerContext}
+          initialContext={drawerContext?._initialMessage ? null : drawerContext}
+          initialMessage={drawerContext?._initialMessage || null}
           onClose={() => { setDrawerOpen(false); setDrawerContext(null); }} />
       )}
 
@@ -1804,13 +1827,18 @@ export default function ReportClient({ isPro, userName, userAvatar }) {
                     </button>
                   )
               )}
-              <Link href={`/dashboard?rescan=${encodeURIComponent(report?.url || '')}`}
+              <button onClick={handleRescan} disabled={rescanStatus === 'scanning'}
                 style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 13px',
-                  background: '#151621', color: '#fff', borderRadius: 9,
-                  fontWeight: 700, fontSize: 12, textDecoration: 'none' }}>
-                <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
-                Re-scan
-              </Link>
+                  background: rescanStatus === 'scanning' ? '#3d3f52' : '#151621', color: '#fff',
+                  border: 0, borderRadius: 9, fontWeight: 700, fontSize: 12,
+                  cursor: rescanStatus === 'scanning' ? 'not-allowed' : 'pointer', fontFamily: 'inherit',
+                  opacity: rescanStatus === 'scanning' ? .7 : 1 }}>
+                <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round"
+                  style={rescanStatus === 'scanning' ? { animation: 'spin .8s linear infinite' } : {}}>
+                  <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/>
+                </svg>
+                {rescanStatus === 'scanning' ? 'Scanning…' : 'Re-scan'}
+              </button>
             </div>
           </header>
 
