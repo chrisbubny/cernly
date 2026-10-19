@@ -4,8 +4,8 @@ import { runLighthouse } from '@/lib/analyzers/lighthouse';
 import { runSeoAudit } from '@/lib/analyzers/seo';
 import { runSslCheck } from '@/lib/analyzers/ssl';
 import { runA11yCheck } from '@/lib/analyzers/a11y';
-import { runAiSummary } from '@/lib/analyzers/ai';
-import { saveReport, saveRecommendations, ensureRecommendationsTable, getUserSubscription, getMonthlyScansCount, tryScanLock, FREE_SCAN_LIMIT } from '@/lib/store';
+import { runAiSummary, runAssessment } from '@/lib/analyzers/ai';
+import { saveReport, saveRecommendations, ensureRecommendationsTable, ensureAssessmentColumns, updateReportAssessment, getUserSubscription, getMonthlyScansCount, tryScanLock, FREE_SCAN_LIMIT } from '@/lib/store';
 import { normalizeScore, assignIssueFingerprintIds } from '@/lib/scoring';
 import { generateRecommendations } from '@/lib/recommendations';
 
@@ -234,6 +234,37 @@ export async function POST(request) {
     });
   }
 
+  // ── Stage 2: structured assessment ──────────────────────────────────────────
+  // Runs AFTER saveRecommendations so top_opportunity fingerprints reference
+  // confirmed DB entries. Validated before saving. Adds ~4-6s to user-visible
+  // latency (total ~25-30s, within 60s serverless budget).
+  //
+  // assessment_status values:
+  //   'completed' — assessment generated and validated
+  //   'failed'    — AI call failed, timed out, or validation rejected the output
+  //   null        — not attempted (no saved report, no recommendations, or no API key)
+  let assessment = null;
+  let assessmentStatus = null;
+
+  if (saved?.id) {
+    await ensureAssessmentColumns().catch(() => {});
+    try {
+      assessment = await runAssessment({
+        url, recommendations, scores, auditStatuses, issues,
+        lhData, seoData, sslData, a11yData,
+      });
+      assessmentStatus = assessment ? 'completed' : 'failed';
+      await updateReportAssessment(saved.id, assessment, assessmentStatus).catch(err => {
+        console.error('[analyze] updateReportAssessment error:', err.message);
+      });
+    } catch (err) {
+      console.error('[analyze] runAssessment error:', err.message);
+      assessmentStatus = 'failed';
+      await updateReportAssessment(saved.id, null, 'failed').catch(() => {});
+    }
+  }
+  // ── End Stage 2 ──────────────────────────────────────────────────────────────
+
   return NextResponse.json({
     url,
     scores,
@@ -244,6 +275,8 @@ export async function POST(request) {
     uxAnnotations: null,
     aiInsights:       aiInsights       || null,
     sectionSummaries: sectionSummaries || null,
+    assessment:       assessment       || null,
+    assessmentStatus: assessmentStatus || null,
     issues,
     recommendations: recommendations || [],
     reportId: saved?.id   ?? null,  // integer — kept for internal API use
