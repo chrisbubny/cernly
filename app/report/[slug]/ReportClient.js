@@ -1071,45 +1071,14 @@ export default function ReportClient({ isPro, userName, userAvatar }) {
   const [drawerOpen, setDrawerOpen]       = useState(false);
   const [drawerContext, setDrawerContext] = useState(null); // { title, category, detail }
   const [tileModal, setTileModal]         = useState(null); // key of tile with unavailable audit
-  const [rescanStatus, setRescanStatus]   = useState('idle'); // idle|scanning|error
-  const [rescanStage, setRescanStage]     = useState(0);
   const [shareToggling, setShareToggling] = useState(false); // in-flight for share toggle
   const [shareOpen, setShareOpen]         = useState(false); // share popover open
   const [advisorInput, setAdvisorInput]   = useState('');   // overview AI advisor input
+  const [scanHistory, setScanHistory]     = useState(null); // null=not loaded, []=loaded
 
-  const RESCAN_STAGES = [
-    'Checking performance…', 'Auditing SEO signals…', 'Testing security…',
-    'Scanning accessibility…', 'Running AI analysis…', 'Finalizing report…',
-  ];
-
-  async function handleRescan() {
+  function handleRescan() {
     if (!report?.url) return;
-    setRescanStatus('scanning');
-    setRescanStage(0);
-    let idx = 0;
-    const timer = setInterval(() => {
-      idx = Math.min(idx + 1, RESCAN_STAGES.length - 1);
-      setRescanStage(idx);
-    }, 3200);
-    try {
-      const res = await fetch('/api/analyze', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url: report.url }),
-      });
-      clearInterval(timer);
-      const data = await res.json();
-      if (data.reportSlug) {
-        router.push(`/report/${data.reportSlug}`);
-      } else if (data.reportId) {
-        router.push(`/report/${data.reportId}`);
-      } else {
-        setRescanStatus('error');
-      }
-    } catch {
-      clearInterval(timer);
-      setRescanStatus('error');
-    }
+    router.push('/analyze?url=' + encodeURIComponent(report.url));
   }
 
   const displayName = userName || 'User';
@@ -1479,160 +1448,121 @@ export default function ReportClient({ isPro, userName, userAvatar }) {
   };
 
   const renderProgress = () => {
-    const metrics = [
-      { label: 'Overall scores', detail: 'Performance, SEO, Security, Accessibility, UX', icon: 'M3 20h18M6 16v-6m6 6V4m6 12v-9' },
-      { label: 'Core Web Vitals', detail: 'LCP, CLS, INP — as measured by Lighthouse', icon: 'M13 2L3 14h9l-1 8 10-12h-9l1-8z' },
-      { label: 'Resolved findings', detail: 'Issues fixed since your previous scan', icon: 'm5 12 4 4 10-10' },
-      { label: 'Regressions', detail: 'New issues that appeared after a change', icon: 'M12 9v4m0 4h.01M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z' },
-      { label: 'AI change summaries', detail: 'Plain-English explanation of what changed and why', icon: 'M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z' },
-    ];
+    // Load scan history on first render of this tab
+    if (scanHistory === null && domain) {
+      setScanHistory([]); // mark as loading
+      fetch(`/api/scan-history?domain=${encodeURIComponent(domain)}`)
+        .then(r => r.json())
+        .then(d => setScanHistory(Array.isArray(d.reports) ? d.reports : []))
+        .catch(() => setScanHistory([]));
+    }
+
+    const scoreColor = s => s == null ? '#b0b4c8' : s >= 80 ? '#19b987' : s >= 60 ? '#efa642' : '#ef6473';
+    const scoreLabel = s => s == null ? '—' : s;
     return (
       <div>
-        {/* Timeline preview */}
-        <div style={{ background: '#fff', border: '1px solid #e9eaf2', borderRadius: 17,
-          padding: '28px 28px 24px', marginBottom: 16 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20 }}>
-            <div style={{ width: 36, height: 36, borderRadius: 10, background: '#f0ebff',
-              display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#7948f6" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M3 20h18M6 16v-6m6 6V4m6 12v-9"/>
-              </svg>
+        {/* Header */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
+          <div>
+            <div style={{ fontFamily: 'var(--font-manrope, Manrope, sans-serif)', fontWeight: 800, fontSize: 16, color: '#151621' }}>
+              Scan history
             </div>
-            <div>
-              <div style={{ fontFamily: 'var(--font-manrope, Manrope, sans-serif)',
-                fontWeight: 800, fontSize: 15, color: '#151621' }}>Track your progress over time</div>
-              <div style={{ fontSize: 12, color: '#83899c', marginTop: 2 }}>Compare scans, spot regressions, and measure the impact of every fix</div>
+            <div style={{ fontSize: 12, color: '#83899c', marginTop: 3 }}>
+              All scans for <strong>{domain}</strong>
             </div>
           </div>
-
-          {/* Scan timeline illustration */}
-          <div style={{ background: '#f8f9fd', borderRadius: 12, padding: '18px 20px', marginBottom: 20, position: 'relative', overflow: 'hidden' }}>
-            <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
-              background: 'linear-gradient(135deg, #f0ebff22, transparent 60%)', pointerEvents: 'none' }} />
-            {/* Timeline row */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 0, marginBottom: 16, position: 'relative' }}>
-              {/* Scan A */}
-              <div style={{ textAlign: 'center', flex: 1 }}>
-                <div style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
-                  <div style={{ width: 32, height: 32, borderRadius: '50%', background: '#efa64222',
-                    border: '2px solid #efa642', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#efa642" strokeWidth="2.5" strokeLinecap="round">
-                      <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
-                    </svg>
-                  </div>
-                  <div style={{ fontSize: 11, fontWeight: 700, color: '#efa642' }}>Scan 1</div>
-                  <div style={{ fontSize: 10, color: '#b0b4c8' }}>Today</div>
-                </div>
-              </div>
-              {/* Connector */}
-              <div style={{ flex: 2, height: 2, background: 'linear-gradient(90deg, #efa642, #7948f6)',
-                borderRadius: 2, position: 'relative', top: -12 }}>
-                <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%,-50%)',
-                  background: '#f8f9fd', padding: '0 6px', fontSize: 10, color: '#83899c', fontWeight: 600, whiteSpace: 'nowrap' }}>
-                  after fixes →
-                </div>
-              </div>
-              {/* Scan B */}
-              <div style={{ textAlign: 'center', flex: 1 }}>
-                <div style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
-                  <div style={{ width: 32, height: 32, borderRadius: '50%', background: '#7948f622',
-                    border: '2px dashed #7948f6', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#7948f6" strokeWidth="2.5" strokeLinecap="round">
-                      <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
-                    </svg>
-                  </div>
-                  <div style={{ fontSize: 11, fontWeight: 700, color: '#7948f6' }}>Scan 2</div>
-                  <div style={{ fontSize: 10, color: '#b0b4c8' }}>After fixes</div>
-                </div>
-              </div>
-            </div>
-            {/* Sample diff */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-              {[
-                { label: 'Performance', before: 52, after: 71, color: '#efa642', afterColor: '#19b987' },
-                { label: 'SEO', before: 78, after: 91, color: '#efa642', afterColor: '#19b987' },
-              ].map(m => (
-                <div key={m.label} style={{ background: '#fff', borderRadius: 8, padding: '10px 12px',
-                  border: '1px solid #e9eaf2', display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <div style={{ fontSize: 11, color: '#83899c', fontWeight: 600, flex: 1 }}>{m.label}</div>
-                  <div style={{ fontSize: 13, fontWeight: 800, color: m.color }}>{m.before}</div>
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#b0b4c8" strokeWidth="2.5" strokeLinecap="round">
-                    <path d="M5 12h14m-7-7 7 7-7 7"/>
-                  </svg>
-                  <div style={{ fontSize: 13, fontWeight: 800, color: m.afterColor }}>{m.after}</div>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* What gets tracked */}
-          <div style={{ marginBottom: 22 }}>
-            <div style={{ fontSize: 11, fontWeight: 700, color: '#83899c', letterSpacing: '.06em',
-              textTransform: 'uppercase', marginBottom: 10 }}>What Cernly compares between scans</div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              {metrics.map(m => (
-                <div key={m.label} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <div style={{ width: 28, height: 28, borderRadius: 8, background: '#f0ebff',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#7948f6" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <path d={m.icon}/>
-                    </svg>
-                  </div>
-                  <div>
-                    <div style={{ fontSize: 13, fontWeight: 700, color: '#151621' }}>{m.label}</div>
-                    <div style={{ fontSize: 11, color: '#83899c' }}>{m.detail}</div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {!isPro ? (
-            <Link href="/dashboard?v=billing"
-              style={{ background: '#7948f6', color: '#fff', padding: '12px 22px',
-                borderRadius: 10, fontWeight: 700, fontSize: 13,
-                display: 'inline-flex', alignItems: 'center', gap: 8, textDecoration: 'none' }}>
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
-              </svg>
-              Unlock progress tracking with Pro
-            </Link>
-          ) : rescanStatus === 'scanning' ? (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <div style={{ width: 18, height: 18, borderRadius: '50%', border: '2.5px solid #7948f6',
-                  borderTopColor: 'transparent', animation: 'spin 0.8s linear infinite', flexShrink: 0 }} />
-                <div style={{ fontSize: 13, fontWeight: 600, color: '#151621' }}>
-                  {RESCAN_STAGES[rescanStage]}
-                </div>
-              </div>
-              <div style={{ height: 4, background: '#e9eaf2', borderRadius: 4, overflow: 'hidden' }}>
-                <div style={{ height: '100%', background: 'linear-gradient(90deg,#7948f6,#3687fa)',
-                  borderRadius: 4, width: `${18 + (rescanStage / (RESCAN_STAGES.length - 1)) * 78}%`,
-                  transition: 'width 0.6s ease' }} />
-              </div>
-              <div style={{ fontSize: 11, color: '#83899c' }}>New report will open when the scan completes</div>
-            </div>
-          ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              <button onClick={handleRescan}
-                style={{ background: '#7948f6', color: '#fff', padding: '12px 22px',
-                  borderRadius: 10, fontWeight: 700, fontSize: 13, border: 0, cursor: 'pointer',
-                  display: 'inline-flex', alignItems: 'center', gap: 8, fontFamily: 'inherit' }}>
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M21 12a9 9 0 1 1-6.219-8.56"/><path d="M15 8h6V2"/>
-                </svg>
-                Scan again
-              </button>
-              {rescanStatus === 'error' && (
-                <div style={{ fontSize: 12, color: '#ef6473' }}>Scan failed — please try again.</div>
-              )}
-              <div style={{ fontSize: 11, color: '#83899c' }}>
-                Rescans {report?.url} and opens a new report when complete.
-              </div>
-            </div>
-          )}
+          <button onClick={handleRescan}
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '10px 18px',
+              background: '#7948f6', color: '#fff', border: 0, borderRadius: 10,
+              fontWeight: 700, fontSize: 13, cursor: 'pointer', fontFamily: 'inherit' }}>
+            <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round">
+              <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/>
+            </svg>
+            Scan again
+          </button>
         </div>
+
+        {/* History list */}
+        {scanHistory === null || scanHistory.length === 0 && scanHistory !== null ? (
+          <div style={{ background: '#fff', border: '1px solid #e9eaf2', borderRadius: 14, padding: '32px 24px', textAlign: 'center' }}>
+            {scanHistory === null || (scanHistory.length === 0 && domain) ? (
+              scanHistory === null ? (
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, color: '#83899c' }}>
+                  <div style={{ width: 16, height: 16, border: '2px solid #e9eaf2', borderTopColor: '#7948f6',
+                    borderRadius: '50%', animation: 'spin .7s linear infinite' }} />
+                  <span style={{ fontSize: 13 }}>Loading history…</span>
+                </div>
+              ) : (
+                <>
+                  <div style={{ fontSize: 32, marginBottom: 10 }}>🔍</div>
+                  <div style={{ fontSize: 14, fontWeight: 700, color: '#151621', marginBottom: 6 }}>No previous scans found</div>
+                  <div style={{ fontSize: 13, color: '#83899c' }}>Scan this site again to start building history.</div>
+                </>
+              )
+            ) : null}
+          </div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {scanHistory.map((s, i) => {
+              const isCurrentReport = s.slug === slug || String(s.id) === String(id);
+              const date = new Date(s.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+              const time = new Date(s.createdAt).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+              const perf = s.scores?.performance ?? null;
+              const seo  = s.scores?.seo ?? null;
+              const sec  = s.scores?.security ?? null;
+              const a11y = s.scores?.accessibility ?? null;
+              return (
+                <Link key={s.slug || s.id} href={`/report/${s.slug || s.id}`}
+                  style={{ textDecoration: 'none', display: 'block' }}>
+                  <div style={{ background: isCurrentReport ? '#f4f0ff' : '#fff',
+                    border: `1px solid ${isCurrentReport ? '#c4aff8' : '#e9eaf2'}`,
+                    borderRadius: 13, padding: '14px 18px',
+                    display: 'flex', alignItems: 'center', gap: 14,
+                    transition: 'box-shadow .12s' }}>
+                    {/* Index badge */}
+                    <div style={{ width: 28, height: 28, borderRadius: '50%', flexShrink: 0,
+                      background: isCurrentReport ? '#7948f6' : '#f0f1f8',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <span style={{ fontSize: 11, fontWeight: 800, color: isCurrentReport ? '#fff' : '#83899c' }}>
+                        {scanHistory.length - i}
+                      </span>
+                    </div>
+                    {/* Date */}
+                    <div style={{ minWidth: 0, flex: 1 }}>
+                      <div style={{ fontSize: 13, fontWeight: 700, color: '#151621' }}>
+                        {date} <span style={{ fontWeight: 500, color: '#83899c' }}>at {time}</span>
+                        {isCurrentReport && (
+                          <span style={{ marginLeft: 8, fontSize: 10, fontWeight: 800, background: '#7948f6',
+                            color: '#fff', borderRadius: 20, padding: '2px 8px', verticalAlign: 'middle' }}>
+                            Current
+                          </span>
+                        )}
+                      </div>
+                      {s.aiSummary && (
+                        <div style={{ fontSize: 11, color: '#83899c', marginTop: 3, overflow: 'hidden',
+                          display: '-webkit-box', WebkitLineClamp: 1, WebkitBoxOrient: 'vertical' }}>
+                          {s.aiSummary}
+                        </div>
+                      )}
+                    </div>
+                    {/* Score chips */}
+                    <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+                      {[['Perf', perf], ['SEO', seo], ['Sec', sec], ['A11y', a11y]].map(([lbl, val]) => (
+                        <div key={lbl} style={{ textAlign: 'center', minWidth: 38 }}>
+                          <div style={{ fontSize: 13, fontWeight: 800, color: scoreColor(val) }}>{scoreLabel(val)}</div>
+                          <div style={{ fontSize: 9, color: '#b0b4c8', fontWeight: 600 }}>{lbl}</div>
+                        </div>
+                      ))}
+                    </div>
+                    <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="#b0b4c8" strokeWidth={2} strokeLinecap="round">
+                      <path d="M9 18l6-6-6-6"/>
+                    </svg>
+                  </div>
+                </Link>
+              );
+            })}
+          </div>
+        )}
       </div>
     );
   };
@@ -1827,30 +1757,16 @@ export default function ReportClient({ isPro, userName, userAvatar }) {
                     </button>
                   )
               )}
-              {rescanStatus === 'scanning' ? (
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 13px',
-                  background: '#1a1c2e', borderRadius: 9, maxWidth: 220 }}>
-                  <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="#7948f6" strokeWidth={2} strokeLinecap="round"
-                    style={{ animation: 'spin .8s linear infinite', flexShrink: 0 }}>
-                    <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/>
-                  </svg>
-                  <span style={{ fontSize: 11, color: '#c5c8e0', fontWeight: 600, whiteSpace: 'nowrap',
-                    overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                    {RESCAN_STAGES[rescanStage]}
-                  </span>
-                </div>
-              ) : (
-                <button onClick={handleRescan}
-                  style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 13px',
-                    background: rescanStatus === 'error' ? '#ef6473' : '#151621', color: '#fff',
-                    border: 0, borderRadius: 9, fontWeight: 700, fontSize: 12,
-                    cursor: 'pointer', fontFamily: 'inherit' }}>
-                  <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round">
-                    <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/>
-                  </svg>
-                  {rescanStatus === 'error' ? 'Scan failed — retry' : 'Re-scan'}
-                </button>
-              )}
+              <button onClick={handleRescan}
+                style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 13px',
+                  background: '#151621', color: '#fff',
+                  border: 0, borderRadius: 9, fontWeight: 700, fontSize: 12,
+                  cursor: 'pointer', fontFamily: 'inherit' }}>
+                <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round">
+                  <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/>
+                </svg>
+                Re-scan
+              </button>
             </div>
           </header>
 
@@ -2016,7 +1932,7 @@ export default function ReportClient({ isPro, userName, userAvatar }) {
                     { key: 'overview',  label: 'Overview',    icon: 'M3 3h7v7H3zm11 0h7v7h-7zM3 14h7v7H3zm11 0h7v7h-7z' },
                     { key: 'action',    label: 'Action plan', icon: 'm5 12 4 4 10-10' },
                     { key: 'findings',  label: 'Findings',    icon: 'M9 11l3 3L22 4' + 'M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11' },
-                    { key: 'progress',  label: 'Progress',    icon: 'M3 20h18M6 16v-6m6 6V4m6 12v-9' },
+                    { key: 'progress',  label: 'History',     icon: 'M12 8v4l3 3m6-3a9 9 0 1 1-18 0 9 9 0 0 1 18 0z' },
                   ].map(t => {
                     const isActive = activeTab === t.key;
                     return (
