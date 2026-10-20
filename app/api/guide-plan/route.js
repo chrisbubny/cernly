@@ -8,7 +8,8 @@ import {
 } from '@/lib/store';
 import { generateGuidancePlan, derivePlanFingerprint } from '@/lib/guidance';
 
-const VALID_PERSONAS = new Set(['owner', 'cms', 'developer']);
+// 'cms-admin' is the canonical value the frontend sends; 'cms' is a legacy alias
+const VALID_PERSONAS = new Set(['owner', 'cms-admin', 'cms', 'developer']);
 
 // POST /api/guide-plan
 // Body: { recFingerprint, reportId, persona? }
@@ -28,8 +29,11 @@ export async function POST(request) {
   try { body = await request.json(); } catch {}
 
   const { recFingerprint, reportId } = body;
-  // Normalise persona — default to 'owner'; reject unknowns
-  const persona = VALID_PERSONAS.has(body.persona) ? body.persona : 'owner';
+  // Normalise persona — 'cms' is a legacy alias for 'cms-admin'; default to 'owner'
+  const rawPersona = body.persona;
+  const persona = VALID_PERSONAS.has(rawPersona)
+    ? (rawPersona === 'cms' ? 'cms-admin' : rawPersona)
+    : 'owner';
 
   if (!recFingerprint || typeof recFingerprint !== 'string') {
     return NextResponse.json({ error: 'recFingerprint is required' }, { status: 400 });

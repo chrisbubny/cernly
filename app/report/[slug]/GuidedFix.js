@@ -978,10 +978,16 @@ export default function GuidedFix({
                       borderRadius:10, padding:'11px 14px', marginBottom:14, fontSize:12,
                       color:TEXT_SECONDARY, lineHeight:1.65 }}>
                       {plan.evidenceSummary}
-                      {plan.isStatic && (
+                      {plan.planSource === 'static' && (
                         <span style={{ display:'block', marginTop:6, fontSize:10,
                           color:TEXT_TERTIARY, fontWeight:600 }}>
                           Evidence-based guidance • AI personalisation unavailable
+                        </span>
+                      )}
+                      {plan.planSource === 'ai' && (
+                        <span style={{ display:'block', marginTop:6, fontSize:10,
+                          color:TEXT_TERTIARY, fontWeight:600 }}>
+                          AI-personalised guidance
                         </span>
                       )}
                     </div>
