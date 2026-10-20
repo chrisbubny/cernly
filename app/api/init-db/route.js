@@ -74,6 +74,27 @@ export async function GET(request) {
     await client.query(`CREATE INDEX IF NOT EXISTS idx_subs_user   ON subscriptions(user_id)`);
     await client.query(`CREATE INDEX IF NOT EXISTS idx_subs_stripe ON subscriptions(stripe_sub_id) WHERE stripe_sub_id IS NOT NULL`);
 
+    // Stage 5: work_items table for user workflow status
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS work_items (
+        id                SERIAL       PRIMARY KEY,
+        user_id           TEXT         NOT NULL,
+        rec_fingerprint   TEXT         NOT NULL,
+        scope_key         TEXT         NOT NULL,
+        user_status       TEXT         NOT NULL DEFAULT 'open'
+                          CHECK (user_status IN ('open','in_progress','verify','dismissed')),
+        verified_status   TEXT         CHECK (verified_status IN
+                            ('still_detected','likely_resolved','partially_resolved','unable_to_verify')),
+        verified_report_id INTEGER     REFERENCES reports(id) ON DELETE SET NULL,
+        verified_at       TIMESTAMPTZ,
+        created_at        TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+        updated_at        TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+        UNIQUE (user_id, rec_fingerprint, scope_key)
+      )
+    `);
+    await client.query(`CREATE INDEX IF NOT EXISTS work_items_user_idx  ON work_items (user_id)`);
+    await client.query(`CREATE INDEX IF NOT EXISTS work_items_scope_idx ON work_items (user_id, scope_key)`);
+
     client.release();
     await pool.end();
     return NextResponse.json({ ok: true, message: 'Schema initialized successfully', currentUser });

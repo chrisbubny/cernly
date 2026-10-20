@@ -195,45 +195,58 @@ function CategorySection({ label, accent, issues, auditStatus, sectionSummary })
   );
 }
 
-/* ─── Fix item accordion ─── */
-/* Generic fix steps derived from issue area */
-function getFixSteps(issue) {
-  const area = (issue.area || issue.source || '').toLowerCase();
-  if (area.includes('perf') || area.includes('lcp') || area.includes('cls')) return [
-    'Open Google PageSpeed Insights for your URL and review the Opportunities section.',
-    'Identify the largest image or render-blocking resource listed.',
-    'Compress images with WebP format and add `loading="lazy"` to below-fold images.',
-    'Defer non-critical JavaScript using `<script defer>` or dynamic imports.',
-    'Click Verify fix below to re-run Lighthouse and confirm the improvement.',
-  ];
-  if (area.includes('seo')) return [
-    'Open your page\'s HTML and locate the `<head>` section.',
-    'Ensure a unique `<title>` (50–60 chars) and `<meta name="description">` (120–160 chars) are present.',
-    'Check that your primary keyword appears in the first heading and first paragraph.',
-    'Validate your sitemap is submitted in Google Search Console.',
-    'Click Verify fix to re-run the SEO audit.',
-  ];
-  if (area.includes('sec') || area.includes('ssl')) return [
-    'Log into your hosting control panel and navigate to SSL/TLS settings.',
-    'Install or renew your SSL certificate — most hosts offer free Let\'s Encrypt certs.',
-    'Set up an HTTP → HTTPS redirect to ensure all traffic is secure.',
-    'Add security headers (CSP, X-Frame-Options, HSTS) via your server config or a plugin.',
-    'Click Verify fix to re-run the security checks.',
-  ];
-  if (area.includes('access') || area.includes('a11y')) return [
-    'Open your browser DevTools and run the Accessibility audit (Lighthouse).',
-    'Ensure all images have descriptive `alt` text; decorative images use `alt=""`.',
-    'Check that all interactive elements are keyboard-navigable with visible focus styles.',
-    'Verify color contrast ratios meet WCAG AA (4.5:1 for normal text).',
-    'Click Verify fix to re-run the accessibility audit.',
-  ];
-  return [
-    'Review the finding detail above to understand the specific issue.',
-    'Check the affected page or resource in your browser\'s DevTools.',
-    'Make the relevant code or configuration change in your site.',
-    'Test the fix locally before deploying.',
-    'Click Verify fix to confirm the issue is resolved.',
-  ];
+/* ─── Contextual guidance from recommendation data ─── */
+/**
+ * Build a fingerprint → recommendation lookup map from a report's recommendations array.
+ * Called once per render in the main component and passed down to FixCard.
+ */
+function buildRecMap(recommendations) {
+  const map = {};
+  if (!Array.isArray(recommendations)) return map;
+  for (const rec of recommendations) {
+    if (rec.fingerprint) map[rec.fingerprint] = rec;
+    // Also index by each finding_fingerprint prefix so individual findings resolve
+    if (Array.isArray(rec.finding_fingerprints)) {
+      for (const fp of rec.finding_fingerprints) {
+        if (!map[fp]) map[fp] = rec;
+      }
+    }
+  }
+  return map;
+}
+
+/**
+ * Return structured contextual guidance for a finding/issue using stored recommendation data.
+ * Falls back gracefully when rec data is absent — never returns generic five-step noise.
+ *
+ * Returns: { whatWeFound, whyItMatters, howToFix: string[], howToVerify, hasGuidance }
+ */
+function getContextualGuidance(issue, rec) {
+  const cleanMd = (s) => (s || '').replace(/\[([^\]]+)\]\([^)]+\)/g, '$1').trim();
+
+  // 1. What we found — prefer rec's what_we_found, fall back to issue description
+  const whatWeFound = cleanMd(rec?.what_we_found || rec?.explanation || issue.description || issue.detail || '');
+
+  // 2. Why it matters — from rec, fall back to issue detail
+  const whyItMatters = cleanMd(rec?.why_it_matters || issue.detail || '');
+
+  // 3. How to fix — use rec's actions[] if available; each action is a plain-text string
+  let howToFix = [];
+  if (Array.isArray(rec?.actions) && rec.actions.length > 0) {
+    howToFix = rec.actions.map(a => cleanMd(typeof a === 'string' ? a : (a.text || a.description || String(a))));
+  } else if (issue.fix) {
+    // Single fix hint from the finding itself
+    howToFix = [cleanMd(issue.fix)];
+  }
+  // Never fill with generic noise if guidance is truly absent
+  if (howToFix.length === 0) howToFix = null;
+
+  // 4. How to verify — from rec's verification_approach
+  const howToVerify = cleanMd(rec?.verification_approach || '');
+
+  const hasGuidance = !!(whatWeFound || whyItMatters || howToFix || howToVerify);
+
+  return { whatWeFound, whyItMatters, howToFix, howToVerify, hasGuidance };
 }
 
 /* Status config for fix lifecycle */
@@ -251,12 +264,40 @@ const EVIDENCE_SOURCE = {
   seo: 'SEO audit', ssl: 'SSL check', a11y: 'Accessibility audit',
 };
 
-function FixCard({ issue, n, impact, onAskCernly, onVerify }) {
-  const [status, setStatus] = useState('open');
+/**
+ * FixCard — single action-plan item with:
+ *   - status persisted to DB for authenticated users (optimistic update + visible error/retry on failure)
+ *   - contextual guidance from stored recommendation data
+ *   - functional Verify fix that triggers a rescan and server-side comparison
+ *   - Ask Cernly chips with finding-specific prompts
+ *
+ * Props:
+ *   issue       — the finding object
+ *   n           — display number
+ *   impact      — 'high' | 'medium' | 'low'
+ *   rec         — matched recommendation object (may be null)
+ *   workItem    — { userStatus, verifiedStatus, verifiedAt } from DB (may be null for anon users)
+ *   onStatusChange(issue, newStatus) — called when user changes status; handles persistence
+ *   onAskCernly(issue, suggestedQ)   — opens the Ask Cernly drawer
+ *   onVerify(issue)                  — triggers rescan + verification flow
+ */
+function FixCard({ issue, n, impact, rec, workItem, onStatusChange, onAskCernly, onVerify }) {
   const [expanded, setExpanded] = useState(false);
   const [guideOpen, setGuideOpen] = useState(false);
-  const cleanDesc = (str) => str?.replace(/\[([^\]]+)\]\([^)]+\)/g, '$1') || '';
-  const st = FIX_STATUSES[status] || FIX_STATUSES.open;
+
+  // Derive displayed status: prefer DB-persisted, fall back to local default
+  const persistedStatus = workItem?.userStatus || 'open';
+  const verifiedStatus  = workItem?.verifiedStatus || null;
+
+  // Map verified_status from server to display FIX_STATUS key
+  const effectiveStatusKey = (() => {
+    if (verifiedStatus === 'likely_resolved') return 'fixed';
+    if (verifiedStatus === 'still_detected')  return 'still_open';
+    if (verifiedStatus === 'partially_resolved') return 'still_open';
+    return persistedStatus; // user's own workflow status
+  })();
+
+  const st = FIX_STATUSES[effectiveStatusKey] || FIX_STATUSES.open;
   const evidenceKey = (issue.source || issue.area || '').toLowerCase();
   const evidence = EVIDENCE_SOURCE[evidenceKey] || (issue.source ? issue.source.toUpperCase() : 'Audit');
   const catColor = { Performance: '#7948f6', SEO: '#3687fa', Security: '#19b987', Accessibility: '#efa642' };
@@ -264,6 +305,25 @@ function FixCard({ issue, n, impact, onAskCernly, onVerify }) {
   const accent = catColor[cat] || '#7948f6';
   const sevDotColor = { critical: '#ef6473', warning: '#efa642', info: '#b0b4c8', good: '#19b987' };
   const sevDot = sevDotColor[issue.severity] || sevDotColor.info;
+
+  // Contextual guidance from recommendation
+  const guidance = getContextualGuidance(issue, rec);
+
+  // Ask Cernly contextual chips
+  const askChips = [
+    `Why is this happening?`,
+    `How do I fix "${(issue.message || '').slice(0, 35)}${(issue.message || '').length > 35 ? '…' : ''}"?`,
+    `How do I verify the change?`,
+    `Explain this in simpler terms`,
+  ];
+
+  function cycleStatus(e) {
+    e.stopPropagation();
+    // Cycle: open → in_progress → verify → open (skip over verified states — those come from server)
+    const cycle = { open: 'in_progress', in_progress: 'verify', verify: 'open', fixed: 'open', still_open: 'open', dismissed: 'open' };
+    const next = cycle[persistedStatus] || 'open';
+    onStatusChange(issue, next);
+  }
 
   return (
     <div style={{ background: '#fff', border: '1px solid #e9eaf2', borderRadius: 16,
@@ -300,15 +360,12 @@ function FixCard({ issue, n, impact, onAskCernly, onVerify }) {
         <div style={{ borderTop: '1px solid #f0f1f8' }}>
           <div style={{ padding: '14px 16px 16px' }}>
             {/* Meta row */}
-            <div style={{ display: 'flex', gap: 20, marginBottom: 14 }}>
+            <div style={{ display: 'flex', gap: 20, marginBottom: 14, flexWrap: 'wrap' }}>
               <div>
                 <div style={{ fontSize: 10, fontWeight: 800, color: '#b0b4c8', letterSpacing: '.07em', marginBottom: 3 }}>STATUS</div>
-                <button onClick={(e) => {
-                  e.stopPropagation();
-                  const cycle = { open: 'in_progress', in_progress: 'verify', verify: 'open', fixed: 'open', still_open: 'open', dismissed: 'open' };
-                  setStatus(s => cycle[s] || 'open');
-                }} style={{ border: 0, background: st.bg, color: st.color, borderRadius: 7,
-                  padding: '3px 10px', fontSize: 11, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
+                <button onClick={cycleStatus}
+                  style={{ border: 0, background: st.bg, color: st.color, borderRadius: 7,
+                    padding: '3px 10px', fontSize: 11, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
                   {st.label}
                 </button>
               </div>
@@ -316,37 +373,66 @@ function FixCard({ issue, n, impact, onAskCernly, onVerify }) {
                 <div style={{ fontSize: 10, fontWeight: 800, color: '#b0b4c8', letterSpacing: '.07em', marginBottom: 3 }}>EVIDENCE</div>
                 <div style={{ fontSize: 13, fontWeight: 600, color: '#4b5168' }}>{evidence}</div>
               </div>
+              {verifiedStatus && (
+                <div>
+                  <div style={{ fontSize: 10, fontWeight: 800, color: '#b0b4c8', letterSpacing: '.07em', marginBottom: 3 }}>VERIFIED</div>
+                  <div style={{ fontSize: 11, color: verifiedStatus === 'likely_resolved' ? '#19b987' : '#ef6473', fontWeight: 700 }}>
+                    {verifiedStatus === 'likely_resolved' ? 'Resolved ✓' :
+                     verifiedStatus === 'still_detected' ? 'Still detected' :
+                     verifiedStatus === 'partially_resolved' ? 'Partially resolved' : 'Unable to verify'}
+                  </div>
+                </div>
+              )}
             </div>
 
-            {/* Why it matters */}
-            {(issue.description || issue.detail) && (
-              <div style={{ background: '#f8f9fd', borderRadius: 10, padding: '11px 13px', marginBottom: 12 }}>
+            {/* What we found — from rec data (replaces generic issue.description) */}
+            {guidance.whatWeFound && (
+              <div style={{ background: '#f8f9fd', borderRadius: 10, padding: '11px 13px', marginBottom: 10 }}>
                 <div style={{ fontSize: 10, fontWeight: 800, color: '#83899c',
-                  letterSpacing: '.07em', marginBottom: 5 }}>WHY IT MATTERS</div>
+                  letterSpacing: '.07em', marginBottom: 5 }}>WHAT WAS FOUND</div>
                 <p style={{ fontSize: 13, color: '#4b5168', lineHeight: 1.7, margin: 0 }}>
-                  {cleanDesc(issue.description || issue.detail)}
+                  {guidance.whatWeFound}
                 </p>
               </div>
             )}
 
-            {/* Action buttons */}
+            {/* Why it matters */}
+            {guidance.whyItMatters && (
+              <div style={{ background: '#fffbf0', borderRadius: 10, padding: '11px 13px', marginBottom: 10 }}>
+                <div style={{ fontSize: 10, fontWeight: 800, color: '#d97706',
+                  letterSpacing: '.07em', marginBottom: 5 }}>WHY IT MATTERS</div>
+                <p style={{ fontSize: 13, color: '#4b5168', lineHeight: 1.7, margin: 0 }}>
+                  {guidance.whyItMatters}
+                </p>
+              </div>
+            )}
+
+            {/* Ask Cernly contextual chips */}
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 12 }}>
+              {askChips.map((chip, i) => (
+                <button key={i} onClick={() => onAskCernly(issue, chip)}
+                  style={{ fontSize: 11, fontWeight: 600, color: '#7948f6',
+                    background: '#f7f4ff', border: '1px solid #e8e2ff',
+                    borderRadius: 20, padding: '4px 11px', cursor: 'pointer', fontFamily: 'inherit' }}>
+                  {chip}
+                </button>
+              ))}
+            </div>
+
+            {/* Primary action buttons */}
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-              <button onClick={() => setGuideOpen(g => !g)}
-                style={{ display: 'flex', alignItems: 'center', gap: 6, border: '1.5px solid #e9eaf2',
-                  background: '#fff', color: '#151621', borderRadius: 9, padding: '7px 13px',
-                  fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
-                {guideOpen ? 'Hide fix guide' : 'View fix guide'}
-              </button>
-              <button onClick={() => onAskCernly(issue)}
-                style={{ display: 'flex', alignItems: 'center', gap: 6, border: '1.5px solid #ede9ff',
-                  background: '#f7f4ff', color: '#7948f6', borderRadius: 9, padding: '7px 13px',
-                  fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
-                <span style={{ fontSize: 13 }}>✦</span> Ask Cernly
-              </button>
+              {guidance.howToFix && (
+                <button onClick={() => setGuideOpen(g => !g)}
+                  style={{ display: 'flex', alignItems: 'center', gap: 6, border: '1.5px solid #e9eaf2',
+                    background: guideOpen ? '#f4f5fb' : '#fff', color: '#151621', borderRadius: 9,
+                    padding: '7px 13px', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
+                  {guideOpen ? 'Hide fix guide' : 'View fix guide'}
+                </button>
+              )}
               <button onClick={() => onVerify(issue)}
                 style={{ display: 'flex', alignItems: 'center', gap: 6, border: '1.5px solid #e9eaf2',
-                  background: status === 'verify' ? '#f1edff' : '#fff',
-                  color: status === 'verify' ? '#7948f6' : '#4b5168',
+                  background: persistedStatus === 'verify' ? '#f1edff' : '#fff',
+                  color: persistedStatus === 'verify' ? '#7948f6' : '#4b5168',
                   borderRadius: 9, padding: '7px 13px',
                   fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
@@ -357,19 +443,24 @@ function FixCard({ issue, n, impact, onAskCernly, onVerify }) {
             </div>
           </div>
 
-          {/* Fix guide panel */}
-          {guideOpen && (
+          {/* Fix guide panel — from rec's actions[], not generic steps */}
+          {guideOpen && guidance.howToFix && (
             <div style={{ borderTop: '1px solid #f0f1f8', padding: '13px 16px', background: '#fafbff' }}>
               <div style={{ fontSize: 10, fontWeight: 800, color: '#7948f6',
-                letterSpacing: '.07em', marginBottom: 9 }}>FIX GUIDE</div>
+                letterSpacing: '.07em', marginBottom: 9 }}>HOW TO FIX</div>
               <ol style={{ margin: 0, padding: '0 0 0 18px', display: 'flex', flexDirection: 'column', gap: 7 }}>
-                {getFixSteps(issue).map((step, i) => (
+                {guidance.howToFix.map((step, i) => (
                   <li key={i} style={{ fontSize: 13, color: '#4b5168', lineHeight: 1.65 }}>{step}</li>
                 ))}
               </ol>
-              <div style={{ marginTop: 10, fontSize: 11, color: '#b0b4c8', fontStyle: 'italic' }}>
-                Steps are based on the detected issue. Run Verify fix after making changes to confirm.
-              </div>
+              {guidance.howToVerify && (
+                <div style={{ marginTop: 12, background: '#edf9f4', borderRadius: 8, padding: '9px 12px' }}>
+                  <div style={{ fontSize: 10, fontWeight: 800, color: '#19b987', letterSpacing: '.07em', marginBottom: 4 }}>
+                    HOW TO VERIFY
+                  </div>
+                  <p style={{ fontSize: 12, color: '#4b5168', margin: 0, lineHeight: 1.6 }}>{guidance.howToVerify}</p>
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -1100,6 +1191,11 @@ export default function ReportClient({ isPro, userName, userAvatar }) {
   const [comparisonScans, setComparisonScans] = useState(null); // null=not loaded | 'loading' | scan[]
   const [selectedPrevIdx, setSelectedPrevIdx] = useState(1); // index in comparisonScans of the "previous" scan
   const [rescanModal, setRescanModal]     = useState(null); // null | { stageIdx, stage, error }
+  // Stage 5: work items — fingerprint → { userStatus, verifiedStatus, ... }
+  const [workItems, setWorkItems]         = useState({}); // fingerprint → DB row
+  const [workItemsLoaded, setWorkItemsLoaded] = useState(false);
+  const [workItemError, setWorkItemError] = useState(null); // { fingerprint, message } for visible error
+  const [verifyingFingerprint, setVerifyingFingerprint] = useState(null); // fingerprint being verified
 
   const RESCAN_STAGES = [
     'Fetching page…',
@@ -1111,7 +1207,78 @@ export default function ReportClient({ isPro, userName, userAvatar }) {
     'Writing AI insights…',
   ];
 
-  function handleRescan() {
+  // Load work items for authenticated users when the report URL is known
+  useEffect(() => {
+    if (!report?.url || workItemsLoaded) return;
+    setWorkItemsLoaded(true);
+    fetch(`/api/work-items?url=${encodeURIComponent(report.url)}`)
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { if (d?.workItems) setWorkItems(d.workItems); })
+      .catch(() => {}); // silent — anon users or load failure: client state still usable
+  }, [report?.url, workItemsLoaded]);
+
+  /**
+   * Persist a status change for an authenticated user.
+   * Optimistic update: apply immediately, rollback + show error on failure.
+   */
+  async function handleStatusChange(issue, newStatus) {
+    if (!report?.url) return;
+    const fingerprint = issue.fingerprintId || issue.fingerprint || '';
+    if (!fingerprint) return;
+
+    // Optimistic update
+    const prev = workItems[fingerprint];
+    setWorkItems(wi => ({
+      ...wi,
+      [fingerprint]: { ...(wi[fingerprint] || {}), userStatus: newStatus, recFingerprint: fingerprint },
+    }));
+    setWorkItemError(null);
+
+    try {
+      const res = await fetch('/api/work-items', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ recFingerprint: fingerprint, pageUrl: report.url, userStatus: newStatus }),
+      });
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}));
+        throw new Error(d.error || `HTTP ${res.status}`);
+      }
+      const d = await res.json();
+      if (d.workItem) {
+        setWorkItems(wi => ({ ...wi, [fingerprint]: d.workItem }));
+      }
+    } catch (err) {
+      // Rollback on failure — restore previous state
+      setWorkItems(wi => {
+        const next = { ...wi };
+        if (prev) next[fingerprint] = prev; else delete next[fingerprint];
+        return next;
+      });
+      setWorkItemError({
+        fingerprint,
+        message: `Could not save status: ${err.message}. Your change was not saved.`,
+      });
+    }
+  }
+
+  /**
+   * Initiate the Verify fix flow for a specific finding:
+   *   1. Mark work item as 'verify' (saved to DB)
+   *   2. Trigger a rescan
+   *   3. After rescan, navigate to the new report — which will call the verify API
+   */
+  function handleVerify(issue) {
+    if (!report?.url) return;
+    const fingerprint = issue.fingerprintId || issue.fingerprint || '';
+    setVerifyingFingerprint(fingerprint || null);
+    // Mark as 'verify' in DB optimistically
+    if (fingerprint) handleStatusChange(issue, 'verify');
+    // Trigger a rescan
+    handleRescan(fingerprint || null);
+  }
+
+  function handleRescan(verifyFp = null) {
     if (!report?.url) return;
     setRescanModal({ stageIdx: 0, stage: RESCAN_STAGES[0], error: null });
     let step = 0;
@@ -1132,9 +1299,11 @@ export default function ReportClient({ isPro, userName, userAvatar }) {
         } else {
           const newSlug = d.reportSlug || d.reportId;
           setRescanModal(null);
-          // Include ?from=rescan so the new report auto-opens the Progress tab
-          // when there's a previous scan to compare against.
-          router.push(`/report/${newSlug}?from=rescan`);
+          // ?from=rescan auto-opens Progress tab; ?verify=<fp> carries the fingerprint to verify
+          const params = new URLSearchParams({ from: 'rescan' });
+          if (verifyFp) params.set('verify', verifyFp);
+          if (report.id) params.set('prevReportId', String(report.id));
+          router.push(`/report/${newSlug}?${params}`);
         }
       })
       .catch(() => {
@@ -1147,11 +1316,48 @@ export default function ReportClient({ isPro, userName, userAvatar }) {
 
   // Auto-open Progress tab when arriving from a rescan (?from=rescan)
   // so the user immediately sees what changed.
+  // Also trigger server-side verification if ?verify=<fingerprint> present.
   useEffect(() => {
     if (typeof window === 'undefined') return;
     const params = new URLSearchParams(window.location.search);
     if (params.get('from') === 'rescan') setActiveTab('progress');
   }, []);
+
+  // When a ?verify=<fingerprint>&prevReportId=<id> arrives on a freshly loaded report,
+  // call the server-side verification API and update work item state.
+  useEffect(() => {
+    if (!report?.id) return;
+    const params = new URLSearchParams(window.location.search);
+    const fp = params.get('verify');
+    const prevId = params.get('prevReportId');
+    if (!fp || !prevId) return;
+
+    // Run server-side verification once
+    fetch('/api/work-items/verify', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        recFingerprint: fp,
+        previousReportId: Number(prevId),
+        currentReportId: report.id,
+      }),
+    })
+      .then(r => r.json())
+      .then(d => {
+        if (d.verifiedStatus) {
+          setWorkItems(wi => ({
+            ...wi,
+            [fp]: {
+              ...(wi[fp] || {}),
+              verifiedStatus: d.verifiedStatus,
+              verifiedAt: d.comparedAt,
+              verifiedReportId: d.currentReportId,
+            },
+          }));
+        }
+      })
+      .catch(() => {}); // verification failure is non-fatal; result shown in UI on next load
+  }, [report?.id]);
 
   useEffect(() => {
     const params = new URLSearchParams({ slug });
@@ -1193,6 +1399,9 @@ export default function ReportClient({ isPro, userName, userAvatar }) {
   const priorities = allIssues
     .filter(i => i.severity === 'critical' || i.severity === 'warning')
     .slice(0, 7);
+
+  // Stage 5: fingerprint → recommendation map, built once per report load
+  const recMap = buildRecMap(report?.recommendations || []);
 
   const getImpact = (issue, idx) =>
     issue.severity === 'critical' || idx < 2 ? 'high' : idx < 5 ? 'medium' : 'low';
@@ -1704,6 +1913,22 @@ export default function ReportClient({ isPro, userName, userAvatar }) {
         </p>
       </div>
 
+      {/* Persistence error banner */}
+      {workItemError && (
+        <div style={{ background: '#fff0f2', border: '1px solid #fca5a5', borderRadius: 10,
+          padding: '10px 14px', marginBottom: 12, display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#ef6473" strokeWidth="2.5" strokeLinecap="round" style={{ flexShrink: 0, marginTop: 1 }}>
+            <path d="M12 2L2 19h20L12 2zm0 7v5m0 3h.01"/>
+          </svg>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <span style={{ fontSize: 12, color: '#b91c1c', fontWeight: 600 }}>{workItemError.message}</span>
+          </div>
+          <button onClick={() => setWorkItemError(null)}
+            style={{ background: 'none', border: 'none', color: '#b91c1c', cursor: 'pointer',
+              fontSize: 16, lineHeight: 1, padding: 0, fontFamily: 'inherit', flexShrink: 0 }}>×</button>
+        </div>
+      )}
+
       {priorities.length === 0 ? (
         <div style={{ background: '#edf9f4', borderRadius: 14, padding: '22px 20px', textAlign: 'center' }}>
           <div style={{ fontSize: 28, marginBottom: 8 }}>🎉</div>
@@ -1712,18 +1937,31 @@ export default function ReportClient({ isPro, userName, userAvatar }) {
           <div style={{ fontSize: 13, color: '#4b5168' }}>This site is in good shape. Keep monitoring for regressions.</div>
         </div>
       ) : (
-        priorities.map((issue, i) => (
-          <FixCard key={i} issue={issue} n={i + 1} impact={getImpact(issue, i)}
-            onAskCernly={(iss) => {
-              setDrawerContext({ title: iss.message, category: iss.area, detail: iss.description || iss.detail });
-              setDrawerOpen(true);
-            }}
-            onVerify={(iss) => {
-              // placeholder: future verification engine
-              alert(`Verification coming soon!\n\nThis will re-scan "${iss.message}" and compare results to this scan.`);
-            }}
-          />
-        ))
+        priorities.map((issue, i) => {
+          // Resolve rec from the fingerprint map using issue's own fingerprint or fingerprintId
+          const fp = issue.fingerprintId || issue.fingerprint || '';
+          // Find the matched rec: try exact fingerprint, then check each rec's finding_fingerprints
+          const matchedRec = recMap[fp] || null;
+          const workItem = workItems[fp] || null;
+          return (
+            <FixCard key={i} issue={issue} n={i + 1} impact={getImpact(issue, i)}
+              rec={matchedRec}
+              workItem={workItem}
+              onStatusChange={handleStatusChange}
+              onAskCernly={(iss, suggestedQ) => {
+                setDrawerContext({ title: iss.message, category: iss.area, detail: iss.description || iss.detail });
+                setDrawerOpen(true);
+                if (suggestedQ) {
+                  // Pre-fill the suggested question; send via initialMessage
+                  setTimeout(() => {
+                    setDrawerContext(ctx => ctx ? { ...ctx, _initialMessage: suggestedQ } : ctx);
+                  }, 50);
+                }
+              }}
+              onVerify={handleVerify}
+            />
+          );
+        })
       )}
     </div>
   );
@@ -2146,14 +2384,22 @@ export default function ReportClient({ isPro, userName, userAvatar }) {
         {/* Single-scan empty state */}
         {showSingleScanState && (
           <div style={{ background: '#f4f0ff', border: '1px solid #c4aff8', borderRadius: 14,
-            padding: '20px 22px', marginBottom: 16 }}>
-            <div style={{ fontSize: 13, fontWeight: 700, color: '#5b4b8a', marginBottom: 4 }}>
-              This is your first scan for this page.
+            padding: '20px 22px', marginBottom: 16, display: 'flex', alignItems: 'center',
+            justifyContent: 'space-between', gap: 12 }}>
+            <div>
+              <div style={{ fontSize: 13, fontWeight: 700, color: '#5b4b8a', marginBottom: 4 }}>
+                Make your first improvement, then rescan to see what changed.
+              </div>
+              <div style={{ fontSize: 12, color: '#83899c' }}>
+                Cernly will compare scans and show you exactly what improved.
+              </div>
             </div>
-            <div style={{ fontSize: 12, color: '#83899c' }}>
-              Cernly needs at least two comparable scans of the same URL to measure progress.
-              After you make improvements, scan again to see what changed.
-            </div>
+            <button onClick={() => handleRescan()}
+              style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '9px 16px',
+                background: '#7948f6', color: '#fff', border: 0, borderRadius: 10,
+                fontWeight: 700, fontSize: 12, cursor: 'pointer', fontFamily: 'inherit', flexShrink: 0 }}>
+              Rescan
+            </button>
           </div>
         )}
 
