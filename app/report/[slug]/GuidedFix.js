@@ -1,237 +1,297 @@
 'use client';
 
 /**
- * GuidedFix.js — Guided improvement panel for a single recommendation group.
+ * GuidedFix.js — 4-step guided improvement wizard
  *
- * PoC scope: image-optimization. Infrastructure is group-agnostic.
+ * User journey: Understand → Prepare → Fix → Verify
  *
- * UX flow (per approved PoC architecture):
- * 1. Panel opens beside the recommendation card (no navigation away)
- * 2. Evidence summary shown at top — specific measured values from scan
- * 3. Role selector (owner / developer) — remembered across sessions
- * 4. Step-by-step display with role-appropriate instructions
- * 5. Mark-done per step, persisted to guide_progress via PATCH /api/work-items
- * 6. Inline "Ask Cernly" pre-seeded with step context
- * 7. "I've deployed — run a scan" triggers user_status: 'verify'
+ * Design principles:
+ * - Evidence-grounded: only measured values shown, never invented
+ * - Role-stratified: instructions adapted to owner / cms-admin / developer
+ * - Progress persistent: saved to guide_progress via PATCH /api/work-items
+ * - Graceful degradation: fallback + retry when AI plan unavailable
  */
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 
 // ---------------------------------------------------------------------------
-// Constants & helpers
+// Design tokens
 // ---------------------------------------------------------------------------
 
-const FONT = 'var(--font-manrope, Manrope, sans-serif)';
+const FONT   = 'var(--font-manrope, Manrope, sans-serif)';
 const PURPLE = '#7948f6';
 const BLUE   = '#3687fa';
 const GREEN  = '#19b987';
 const AMBER  = '#efa642';
 const RED    = '#ef6473';
-const BG     = '#f4f5fb';
-const SURFACE = '#fff';
-const BORDER = '#e9eaf2';
-const TEXT   = '#151621';
-const MUTED  = '#83899c';
+const DARK_BG     = 'linear-gradient(145deg,#16102b,#0f1f3d)';
+const DARK_SURFACE = 'rgba(255,255,255,.05)';
+const DARK_BORDER  = 'rgba(255,255,255,.10)';
 const GRAD   = 'linear-gradient(135deg,#8a46f8,#3687fa)';
 
-const STEP_STATES = {
-  not_started: { label: 'Not started', color: MUTED },
-  in_progress: { label: 'In progress', color: AMBER },
-  marked_done: { label: 'Done',        color: GREEN },
+// Step definitions
+const STEPS = [
+  { id: 'understand', label: 'Understand' },
+  { id: 'prepare',    label: 'Prepare'    },
+  { id: 'fix',        label: 'Fix'        },
+  { id: 'verify',     label: 'Verify'     },
+];
+
+// Role definitions
+const ROLES = [
+  {
+    id: 'owner',
+    label: 'Website owner',
+    icon: '👤',
+    desc: "I manage the site but don't write code",
+  },
+  {
+    id: 'cms-admin',
+    label: 'CMS administrator',
+    icon: '🛠',
+    desc: 'I manage plugins, themes, and settings',
+  },
+  {
+    id: 'developer',
+    label: 'Developer',
+    icon: '💻',
+    desc: 'I can write code and edit config files',
+  },
+];
+
+// Perf metric fields to display as tiles on Understand step
+const PERF_METRICS = [
+  { key: 'lcp',  label: 'LCP',  unit: 'ms', title: 'Largest Contentful Paint' },
+  { key: 'fcp',  label: 'FCP',  unit: 'ms', title: 'First Contentful Paint'   },
+  { key: 'tbt',  label: 'TBT',  unit: 'ms', title: 'Total Blocking Time'      },
+  { key: 'cls',  label: 'CLS',  unit: '',   title: 'Cumulative Layout Shift'   },
+  { key: 'ttfb', label: 'TTFB', unit: 'ms', title: 'Time to First Byte'       },
+  { key: 'si',   label: 'SI',   unit: 'ms', title: 'Speed Index'               },
+];
+
+function metricStatus(key, value) {
+  if (value == null) return 'neutral';
+  if (key === 'lcp')  return value > 4000 ? 'poor' : value > 2500 ? 'needs-work' : 'good';
+  if (key === 'fcp')  return value > 3000 ? 'poor' : value > 1800 ? 'needs-work' : 'good';
+  if (key === 'tbt')  return value > 600  ? 'poor' : value > 200  ? 'needs-work' : 'good';
+  if (key === 'cls')  return value > 0.25 ? 'poor' : value > 0.1  ? 'needs-work' : 'good';
+  if (key === 'ttfb') return value > 1800 ? 'poor' : value > 800  ? 'needs-work' : 'good';
+  if (key === 'si')   return value > 5800 ? 'poor' : value > 3400 ? 'needs-work' : 'good';
+  return 'neutral';
+}
+
+const STATUS_COLOR = {
+  poor:       RED,
+  'needs-work': AMBER,
+  good:       GREEN,
+  neutral:    'rgba(255,255,255,.5)',
 };
 
-function confidenceBadge(confidence) {
-  const map = {
-    high:   { label: 'High confidence',   bg: '#e8faf4', color: '#19b987', dot: GREEN },
-    medium: { label: 'Medium confidence', bg: '#fff6e5', color: '#c97e0a', dot: AMBER },
-    low:    { label: 'Low confidence',    bg: '#fef2f2', color: '#b91c1c', dot: RED },
-  };
-  return map[confidence] || map.low;
+// Category badge colors
+const CAT_COLORS = {
+  performance:   { bg: 'rgba(54,135,250,.18)',  color: '#7ab4fd' },
+  seo:           { bg: 'rgba(239,166,66,.18)',   color: '#fbbf6a' },
+  security:      { bg: 'rgba(239,100,115,.18)',  color: '#f89aa3' },
+  accessibility: { bg: 'rgba(25,185,135,.18)',   color: '#3fe8b9' },
+  best_practices:{ bg: 'rgba(121,72,246,.18)',   color: '#c5b4fa' },
+};
+
+function categoryColor(cat) {
+  if (!cat) return { bg: 'rgba(121,72,246,.18)', color: '#c5b4fa' };
+  const key = cat.toLowerCase().replace(/[\s-]/g, '_');
+  return CAT_COLORS[key] || { bg: 'rgba(121,72,246,.18)', color: '#c5b4fa' };
 }
 
 // ---------------------------------------------------------------------------
-// MetricPill — compact key/value badge for performance metrics
+// Small shared sub-components
 // ---------------------------------------------------------------------------
-function MetricPill({ label, value }) {
-  return (
-    <div style={{ display: 'inline-flex', alignItems: 'baseline', gap: 4,
-      background: '#ece8ff', borderRadius: 6, padding: '2px 8px' }}>
-      <span style={{ fontSize: 10, fontWeight: 800, color: PURPLE,
-        textTransform: 'uppercase', letterSpacing: '0.04em' }}>{label}</span>
-      <span style={{ fontSize: 11, fontWeight: 700, color: '#3d2d7a' }}>{value}</span>
-    </div>
-  );
-}
 
-// ---------------------------------------------------------------------------
-// Spinner
-// ---------------------------------------------------------------------------
-function Spinner() {
+function Spinner({ label = 'Loading…' }) {
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center',
-      justifyContent: 'center', gap: 12, padding: '32px 0' }}>
+    <div style={{ display:'flex', flexDirection:'column', alignItems:'center',
+      gap:12, padding:'40px 0' }}>
       <div style={{
-        width: 28, height: 28, borderRadius: '50%',
-        border: `3px solid ${BORDER}`,
+        width:28, height:28, borderRadius:'50%',
+        border:'3px solid rgba(255,255,255,.12)',
         borderTopColor: PURPLE,
-        animation: 'spin .7s linear infinite',
-      }} />
-      <div style={{ fontSize: 12, color: MUTED, fontFamily: FONT }}>
-        Generating your personalized plan…
-      </div>
-      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+        animation:'spin .7s linear infinite',
+      }}/>
+      <span style={{ fontSize:12, color:'rgba(255,255,255,.45)', fontFamily:FONT }}>{label}</span>
+      <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
     </div>
   );
 }
 
-// ---------------------------------------------------------------------------
-// Step component
-// ---------------------------------------------------------------------------
-function GuidedStep({ step, stepIndex, total, role, stepState, onMarkDone, onAskCernly }) {
-  const [expanded, setExpanded] = useState(true);
-  const isDone = stepState === 'marked_done';
-  const content = role === 'developer' ? step.developer : step.owner;
+function MetricTile({ label, title, value, unit, status }) {
+  const col = STATUS_COLOR[status] || STATUS_COLOR.neutral;
+  return (
+    <div style={{
+      flex:'1 1 calc(50% - 6px)', minWidth:120,
+      background:'rgba(255,255,255,.04)', border:`1px solid ${DARK_BORDER}`,
+      borderRadius:10, padding:'12px 14px',
+      borderTop:`2px solid ${col}`,
+    }}>
+      <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between',
+        marginBottom:4 }}>
+        <span style={{ fontSize:10, fontWeight:800, letterSpacing:'.06em',
+          textTransform:'uppercase', color: col }}>{label}</span>
+        <span style={{ fontSize:10, color:'rgba(255,255,255,.3)' }}>measured</span>
+      </div>
+      <div style={{ fontSize:22, fontWeight:800, color:'#fff', lineHeight:1.1 }}>
+        {value != null ? value : '—'}
+        {value != null && unit && (
+          <span style={{ fontSize:12, fontWeight:600, color:'rgba(255,255,255,.45)',
+            marginLeft:3 }}>{unit}</span>
+        )}
+      </div>
+      <div style={{ fontSize:11, color:'rgba(255,255,255,.4)', marginTop:3 }}>{title}</div>
+    </div>
+  );
+}
+
+// Role selector card
+function RoleCard({ role, selected, onClick }) {
+  const active = selected === role.id;
+  return (
+    <button
+      onClick={() => onClick(role.id)}
+      style={{
+        display:'flex', alignItems:'flex-start', gap:12, width:'100%',
+        background: active ? 'rgba(121,72,246,.18)' : 'rgba(255,255,255,.04)',
+        border: active ? '1.5px solid rgba(121,72,246,.6)' : `1px solid ${DARK_BORDER}`,
+        borderRadius:12, padding:'14px 16px', cursor:'pointer', textAlign:'left',
+        transition:'all .15s',
+        fontFamily: FONT,
+      }}
+    >
+      <span style={{ fontSize:22, lineHeight:1, flexShrink:0 }}>{role.icon}</span>
+      <div>
+        <div style={{ fontSize:14, fontWeight:700, color:'#fff', marginBottom:2 }}>
+          {role.label}
+        </div>
+        <div style={{ fontSize:12, color:'rgba(255,255,255,.5)', lineHeight:1.5 }}>
+          {role.desc}
+        </div>
+      </div>
+      {active && (
+        <div style={{ marginLeft:'auto', flexShrink:0, width:20, height:20,
+          borderRadius:'50%', background:GRAD,
+          display:'grid', placeItems:'center' }}>
+          <svg width="10" height="8" viewBox="0 0 10 8" fill="none">
+            <path d="M1 4l2.5 2.5L9 1" stroke="#fff" strokeWidth="1.8"
+              strokeLinecap="round" strokeLinejoin="round"/>
+          </svg>
+        </div>
+      )}
+    </button>
+  );
+}
+
+// Fix step instruction card (role-adapted)
+function FixStepCard({ step, index, role, completedSteps, onToggleComplete, onAskCernly }) {
+  const instructions = role === 'developer'
+    ? step.developer
+    : role === 'cms-admin'
+      ? (step['cms-admin'] || step.owner)
+      : step.owner;
+
+  if (!instructions) return null;
+
+  const isDone = completedSteps.includes(step.id || String(index));
+  const stepKey = step.id || String(index);
 
   return (
     <div style={{
-      border: `1.5px solid ${isDone ? '#c7ede0' : BORDER}`,
-      borderRadius: 12,
-      background: isDone ? '#f0faf7' : SURFACE,
-      overflow: 'hidden',
-      transition: 'all .15s',
+      background: isDone ? 'rgba(25,185,135,.07)' : 'rgba(255,255,255,.04)',
+      border: isDone ? '1px solid rgba(25,185,135,.25)' : `1px solid ${DARK_BORDER}`,
+      borderRadius:12, padding:'16px', marginBottom:10,
+      transition:'all .2s',
     }}>
       {/* Step header */}
-      <div
-        onClick={() => setExpanded(e => !e)}
-        style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '11px 14px',
-          cursor: 'pointer', userSelect: 'none' }}
-      >
-        {/* Step number / done indicator */}
+      <div style={{ display:'flex', alignItems:'flex-start', gap:12, marginBottom:10 }}>
         <div style={{
-          width: 24, height: 24, borderRadius: '50%', flexShrink: 0,
-          background: isDone ? GREEN : '#f0ecff',
-          display: 'grid', placeItems: 'center',
+          width:24, height:24, borderRadius:8, flexShrink:0,
+          background: isDone ? GREEN : 'rgba(121,72,246,.25)',
+          border: isDone ? 'none' : '1.5px solid rgba(121,72,246,.5)',
+          display:'grid', placeItems:'center',
         }}>
-          {isDone
-            ? <CheckIcon size={12} color="#fff" />
-            : <span style={{ fontSize: 11, fontWeight: 800, color: PURPLE }}>{stepIndex + 1}</span>
-          }
+          {isDone ? (
+            <svg width="12" height="10" viewBox="0 0 12 10" fill="none">
+              <path d="M1 5l3 3 7-7" stroke="#fff" strokeWidth="1.8"
+                strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+          ) : (
+            <span style={{ fontSize:11, fontWeight:800, color:'rgba(255,255,255,.7)' }}>
+              {index + 1}
+            </span>
+          )}
         </div>
-
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontFamily: FONT, fontWeight: 700, fontSize: 13, color: TEXT,
-            textDecoration: isDone ? 'line-through' : 'none', opacity: isDone ? 0.6 : 1 }}>
+        <div style={{ flex:1, minWidth:0 }}>
+          <div style={{ fontSize:13, fontWeight:700, color:isDone ? '#3fe8b9' : '#fff',
+            lineHeight:1.3, marginBottom:4 }}>
             {step.title}
           </div>
-          {!expanded && (
-            <div style={{ fontSize: 11, color: MUTED, marginTop: 2 }}>
-              {STEP_STATES[stepState]?.label || 'Not started'}
-            </div>
-          )}
+          <div style={{ fontSize:12, color:'rgba(255,255,255,.6)', lineHeight:1.6 }}>
+            {instructions.action}
+          </div>
         </div>
-
-        <ChevronIcon size={14} color={MUTED} down={expanded} />
       </div>
 
-      {/* Step body */}
-      {expanded && (
-        <div style={{ padding: '0 14px 14px' }}>
-          {/* Main action */}
-          <div style={{ fontSize: 13, color: TEXT, lineHeight: 1.6, marginBottom: 10 }}>
-            {content?.action}
-          </div>
-
-          {/* Delegation hint (owner only) */}
-          {role === 'owner' && content?.delegation && (
-            <div style={{ background: '#f8f5ff', borderRadius: 8, padding: '8px 12px',
-              fontSize: 12, color: '#5b3da3', lineHeight: 1.5, marginBottom: 10 }}>
-              <strong>To hand off:</strong> {content.delegation}
-            </div>
-          )}
-
-          {/* Tooling (developer only) */}
-          {role === 'developer' && content?.tooling && (
-            <div style={{ background: '#f4f5fb', borderRadius: 8, padding: '8px 12px',
-              fontFamily: 'monospace', fontSize: 12, color: '#3687fa',
-              lineHeight: 1.5, marginBottom: 10, wordBreak: 'break-all' }}>
-              {content.tooling}
-            </div>
-          )}
-
-          {/* Developer notes */}
-          {role === 'developer' && content?.notes && (
-            <div style={{ fontSize: 11, color: MUTED, lineHeight: 1.5, marginBottom: 10 }}>
-              {content.notes}
-            </div>
-          )}
-
-          {/* Why */}
-          {content?.why && (
-            <div style={{ fontSize: 11, color: MUTED, lineHeight: 1.5, marginBottom: 12 }}>
-              <em>{content.why}</em>
-            </div>
-          )}
-
-          {/* Action bar */}
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-            {!isDone && (
-              <button onClick={onMarkDone}
-                style={{ display: 'inline-flex', alignItems: 'center', gap: 6,
-                  background: GRAD, color: '#fff', border: 0, borderRadius: 8,
-                  padding: '7px 14px', fontSize: 12, fontWeight: 700,
-                  cursor: 'pointer', fontFamily: FONT }}>
-                <CheckIcon size={11} color="#fff" /> Mark done
-              </button>
-            )}
-            <button onClick={onAskCernly}
-              style={{ display: 'inline-flex', alignItems: 'center', gap: 5,
-                background: 'transparent', color: PURPLE,
-                border: `1.5px solid #c9bcf7`, borderRadius: 8,
-                padding: '6px 12px', fontSize: 12, fontWeight: 700,
-                cursor: 'pointer', fontFamily: FONT }}>
-              <span style={{ fontSize: 12 }}>✦</span> Ask Cernly
-            </button>
-          </div>
+      {/* Why it matters */}
+      {instructions.why && (
+        <div style={{ background:'rgba(54,135,250,.08)', border:'1px solid rgba(54,135,250,.2)',
+          borderRadius:8, padding:'8px 12px', marginBottom:10, fontSize:11,
+          color:'rgba(255,255,255,.55)', lineHeight:1.6 }}>
+          <strong style={{ color:'rgba(54,135,250,.9)' }}>Why: </strong>
+          {instructions.why}
         </div>
       )}
-    </div>
-  );
-}
 
-// ---------------------------------------------------------------------------
-// Fallback guide (uses actions[] when AI generation fails)
-// ---------------------------------------------------------------------------
-function FallbackGuide({ actions, rec, onAskCernly }) {
-  return (
-    <div>
-      <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 10,
-        padding: '10px 14px', fontSize: 12, color: '#92400e', marginBottom: 16, lineHeight: 1.5 }}>
-        <strong>Basic guidance</strong> — we couldn't generate a personalized plan right now.
-        Here are the recommended actions from your scan.
+      {/* Tooling / delegation note */}
+      {(instructions.tooling || instructions.delegation) && (
+        <div style={{ fontSize:11, color:'rgba(255,255,255,.4)', lineHeight:1.6,
+          marginBottom:10, fontStyle:'italic' }}>
+          {instructions.tooling || instructions.delegation}
+        </div>
+      )}
+
+      {/* Caution / notes */}
+      {instructions.notes && (
+        <div style={{ background:'rgba(239,166,66,.08)', border:'1px solid rgba(239,166,66,.2)',
+          borderRadius:8, padding:'8px 12px', marginBottom:10, fontSize:11,
+          color:'#fbbf6a', lineHeight:1.6 }}>
+          <strong>Note: </strong>{instructions.notes}
+        </div>
+      )}
+
+      {/* Actions row */}
+      <div style={{ display:'flex', alignItems:'center', gap:8, marginTop:4 }}>
+        <button
+          onClick={() => onToggleComplete(stepKey)}
+          style={{
+            display:'flex', alignItems:'center', gap:6,
+            background: isDone ? 'rgba(25,185,135,.15)' : 'rgba(255,255,255,.08)',
+            border: isDone ? '1px solid rgba(25,185,135,.35)' : `1px solid ${DARK_BORDER}`,
+            borderRadius:7, padding:'5px 12px', cursor:'pointer',
+            fontSize:11, fontWeight:700, color: isDone ? '#3fe8b9' : 'rgba(255,255,255,.6)',
+            fontFamily: FONT,
+          }}
+        >
+          {isDone ? '✓ Marked done' : 'Mark complete'}
+        </button>
+        {onAskCernly && (
+          <button
+            onClick={() => onAskCernly({ title: step.title, detail: instructions.action })}
+            style={{
+              background:'transparent', border:'none', cursor:'pointer',
+              fontSize:11, color:PURPLE, fontWeight:600, fontFamily:FONT,
+              padding:'5px 8px',
+            }}
+          >
+            Ask Cernly →
+          </button>
+        )}
       </div>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-        {actions.map((action, i) => (
-          <div key={i} style={{ border: `1px solid ${BORDER}`, borderRadius: 10,
-            padding: '12px 14px', background: SURFACE }}>
-            <div style={{ fontFamily: FONT, fontWeight: 700, fontSize: 13, color: TEXT,
-              marginBottom: action.description ? 6 : 0 }}>
-              {action.title}
-            </div>
-            {action.description && (
-              <div style={{ fontSize: 12, color: '#4b5168', lineHeight: 1.55 }}>
-                {action.description}
-              </div>
-            )}
-          </div>
-        ))}
-      </div>
-      <button onClick={onAskCernly}
-        style={{ display: 'inline-flex', alignItems: 'center', gap: 6, marginTop: 14,
-          background: 'transparent', color: PURPLE, border: `1.5px solid #c9bcf7`,
-          borderRadius: 9, padding: '8px 14px', fontSize: 12, fontWeight: 700,
-          cursor: 'pointer', fontFamily: FONT }}>
-        <span style={{ fontSize: 12 }}>✦</span> Ask Cernly for help
-      </button>
     </div>
   );
 }
@@ -240,16 +300,6 @@ function FallbackGuide({ actions, rec, onAskCernly }) {
 // Main component
 // ---------------------------------------------------------------------------
 
-/**
- * Props:
- *   rec           — recommendation object from report (has fingerprint, title, evidence, actions, etc.)
- *   reportId      — string
- *   pageUrl       — string (current page URL, for work-item scope key)
- *   workItem      — current work item DB row (may be null)
- *   onClose       — () => void
- *   onStatusChange — (recFp, newStatus) => void
- *   onAskCernly   — ({ title, category, detail, step? }) => void
- */
 export default function GuidedFix({
   rec,
   reportId,
@@ -259,399 +309,716 @@ export default function GuidedFix({
   onStatusChange,
   onAskCernly,
 }) {
-  const recFp   = rec?.fingerprint || '';
-  const evidence = rec?.evidence   || {};
+  // ── wizard state ───────────────────────────────────────────────────────────
+  const [currentStep, setCurrentStep] = useState(0);
+  const [selectedRole, setSelectedRole] = useState(null);
+  const [completedSteps, setCompletedSteps] = useState([]);
 
-  // ------ state ------
-  const [plan,        setPlan]        = useState(null);
-  const [fallback,    setFallback]    = useState(false);
-  const [fallbackActs, setFallbackActs] = useState([]);
-  const [loading,     setLoading]     = useState(true);
-  const [role,        setRole]        = useState('owner'); // 'owner' | 'developer'
-  const [progress,    setProgress]    = useState({});     // stepId → stepState
-  const [planFp,      setPlanFp]      = useState(null);
-  const [allDone,     setAllDone]     = useState(false);
-  const [deployedSent, setDeployedSent] = useState(false);
+  // ── AI plan state ──────────────────────────────────────────────────────────
+  const [plan, setPlan]           = useState(null);
+  const [planStatus, setPlanStatus] = useState('idle'); // idle | loading | ready | fallback | error
+  const [fallbackActions, setFallbackActions] = useState([]);
+  const planFetched = useRef(false);
 
-  // Restore progress from workItem.guideProgress
+  // ── restore persisted progress ────────────────────────────────────────────
   useEffect(() => {
-    const gp = workItem?.guideProgress;
-    if (gp) {
-      if (gp.guidanceLevel) setRole(gp.guidanceLevel);
-      if (gp.stepProgress)  setProgress(gp.stepProgress);
-      if (gp.planFingerprint) setPlanFp(gp.planFingerprint);
-      if (gp.workMarkedComplete) setAllDone(true);
-    }
-  }, [workItem]);
+    const progress = workItem?.guide_progress;
+    if (!progress) return;
+    if (progress.step != null)           setCurrentStep(progress.step);
+    if (progress.role)                   setSelectedRole(progress.role);
+    if (progress.completedSteps?.length) setCompletedSteps(progress.completedSteps);
+  }, []);  // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Fetch or generate plan
+  // ── background AI plan fetch ───────────────────────────────────────────────
   useEffect(() => {
-    if (!recFp || !reportId) { setLoading(false); return; }
+    if (planFetched.current || !rec?.fingerprint || !reportId) return;
+    planFetched.current = true;
+    setPlanStatus('loading');
 
     fetch('/api/guide-plan', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ recFingerprint: recFp, reportId }),
+      body: JSON.stringify({ recFingerprint: rec.fingerprint, reportId }),
     })
       .then(r => r.json())
       .then(data => {
         if (data.plan) {
           setPlan(data.plan);
-          setPlanFp(data.plan.planFingerprint);
-          // Stale progress: keep steps whose IDs exist in the new plan
-          if (planFp && planFp !== data.plan.planFingerprint) {
-            const validIds = new Set((data.plan.steps || []).map(s => s.id));
-            setProgress(prev => {
-              const next = {};
-              for (const [id, state] of Object.entries(prev)) {
-                if (validIds.has(id)) next[id] = state;
-              }
-              return next;
-            });
-          }
+          setPlanStatus('ready');
         } else if (data.fallback) {
-          setFallback(true);
-          setFallbackActs(data.actions || rec?.actions || []);
+          setFallbackActions(data.actions || []);
+          setPlanStatus('fallback');
+        } else {
+          setPlanStatus('error');
         }
       })
-      .catch(() => {
-        setFallback(true);
-        setFallbackActs(rec?.actions || []);
-      })
-      .finally(() => setLoading(false));
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [recFp, reportId]);
+      .catch(() => setPlanStatus('error'));
+  }, [rec?.fingerprint, reportId]);
 
-  // Persist progress patch
-  const persistProgress = useCallback(async (nextProgress, nextRole, nextAllDone) => {
-    if (!recFp || !pageUrl) return;
-    const guideProgress = {
-      planFingerprint:    planFp || plan?.planFingerprint,
-      guidanceLevel:      nextRole   !== undefined ? nextRole   : role,
-      stepProgress:       nextProgress !== undefined ? nextProgress : progress,
-      workMarkedComplete: nextAllDone !== undefined ? nextAllDone : allDone,
-      lastStepAt:         new Date().toISOString(),
-    };
+  // ── persist progress ───────────────────────────────────────────────────────
+  const persistProgress = useCallback(async (updates) => {
+    if (!workItem?.id) return;
+    const current = workItem?.guide_progress || {};
+    const next = { ...current, ...updates };
     try {
       await fetch('/api/work-items', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ recFingerprint: recFp, pageUrl, guideProgress }),
+        body: JSON.stringify({ id: workItem.id, guide_progress: next }),
       });
     } catch {}
-  }, [recFp, pageUrl, planFp, plan, role, progress, allDone]);
+  }, [workItem?.id, workItem?.guide_progress]);
 
-  // Role selection
-  function handleRoleSelect(newRole) {
-    setRole(newRole);
-    persistProgress(undefined, newRole, undefined);
-  }
+  // ── navigation ─────────────────────────────────────────────────────────────
+  const goTo = useCallback((idx) => {
+    setCurrentStep(idx);
+    persistProgress({ step: idx, role: selectedRole, completedSteps });
+  }, [selectedRole, completedSteps, persistProgress]);
 
-  // Mark step done
-  function handleMarkDone(stepId) {
-    const next = { ...progress, [stepId]: 'marked_done' };
-    setProgress(next);
-    // Auto-advance userStatus to in_progress on first step
-    if (!workItem || workItem.userStatus === 'open') {
-      onStatusChange?.(recFp, 'in_progress');
-    }
-    persistProgress(next, undefined, undefined);
-  }
+  const canContinue = useCallback(() => {
+    if (currentStep === 1 && !selectedRole) return false;
+    return true;
+  }, [currentStep, selectedRole]);
 
-  // All steps done — show deploy prompt
-  const handleWorkComplete = () => {
-    setAllDone(true);
-    persistProgress(undefined, undefined, true);
-  };
-
-  // User says they've deployed — request verification
-  const handleDeployed = () => {
-    setDeployedSent(true);
-    onStatusChange?.(recFp, 'verify');
-  };
-
-  // Ask Cernly wired to current step
-  function handleAskForStep(step) {
-    onAskCernly?.({
-      title:    `${rec?.title}: ${step.title}`,
-      category: rec?.category || 'image-optimization',
-      detail:   step.owner?.action || step.developer?.action || '',
-      recFingerprint: recFp,
-      activeStep: step,
+  // ── mark step complete/incomplete ──────────────────────────────────────────
+  const toggleComplete = useCallback((stepKey) => {
+    setCompletedSteps(prev => {
+      const next = prev.includes(stepKey)
+        ? prev.filter(k => k !== stepKey)
+        : [...prev, stepKey];
+      persistProgress({ step: currentStep, role: selectedRole, completedSteps: next });
+      return next;
     });
-  }
+  }, [currentStep, selectedRole, persistProgress]);
 
-  // Check all-done state from progress
-  const computedAllDone = plan && plan.steps.length > 0 &&
-    plan.steps.every(s => progress[s.id] === 'marked_done');
+  // ── retry plan fetch ───────────────────────────────────────────────────────
+  const retryPlan = useCallback(() => {
+    planFetched.current = false;
+    setPlanStatus('idle');
+    setPlan(null);
+    // trigger re-fetch via useEffect below
+    setTimeout(() => {
+      planFetched.current = false;
+      setPlanStatus('loading');
+      fetch('/api/guide-plan', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ recFingerprint: rec.fingerprint, reportId }),
+      })
+        .then(r => r.json())
+        .then(data => {
+          if (data.plan) { setPlan(data.plan); setPlanStatus('ready'); }
+          else if (data.fallback) { setFallbackActions(data.actions || []); setPlanStatus('fallback'); }
+          else setPlanStatus('error');
+        })
+        .catch(() => setPlanStatus('error'));
+    }, 0);
+  }, [rec?.fingerprint, reportId]);
 
-  const conf = evidence?.confidence;
-  const confBadge = conf ? confidenceBadge(conf) : null;
+  // ── Ask Cernly handler ─────────────────────────────────────────────────────
+  const handleAskCernly = useCallback((context) => {
+    if (!onAskCernly) return;
+    onAskCernly({
+      title: rec?.title || 'Guided fix',
+      category: rec?.category || '',
+      detail: context?.detail || '',
+      step: STEPS[currentStep]?.label,
+    });
+  }, [onAskCernly, rec, currentStep]);
+
+  // ── derived evidence ───────────────────────────────────────────────────────
+  const evidence = rec?.evidence || {};
+  const measuredMetrics = PERF_METRICS.filter(m => evidence[m.key] != null);
+  const catColors = categoryColor(rec?.category);
+  const hasAiPlan = planStatus === 'ready' && plan?.steps?.length;
+
+  // ── rescan handler ─────────────────────────────────────────────────────────
+  const handleRescan = useCallback(() => {
+    if (onStatusChange) onStatusChange(rec?.fingerprint, 'verify');
+    onClose();
+  }, [onStatusChange, rec?.fingerprint, onClose]);
+
+  // ==========================================================================
+  // RENDER
+  // ==========================================================================
 
   return (
-    <>
+    <div style={{
+      position:'fixed', inset:0,
+      display:'flex', alignItems:'stretch', justifyContent:'flex-end',
+      zIndex:1000,
+      fontFamily: FONT,
+    }}>
       {/* Backdrop */}
       <div
         onClick={onClose}
-        style={{ position: 'fixed', inset: 0, background: '#0d102040', zIndex: 49 }}
+        style={{ position:'absolute', inset:0, background:'rgba(0,0,0,.45)', backdropFilter:'blur(2px)' }}
       />
 
       {/* Panel */}
       <div style={{
-        position: 'fixed', top: 0, right: 0, bottom: 0,
-        width: 420, maxWidth: '95vw',
-        background: SURFACE, borderLeft: `1px solid ${BORDER}`,
-        boxShadow: '-8px 0 40px #1b1d3215',
-        zIndex: 50, display: 'flex', flexDirection: 'column',
-        animation: 'slideIn .22s ease',
-        fontFamily: FONT,
-      }}>
-        <style>{`
-          @keyframes slideIn { from { transform: translateX(40px); opacity: 0; } to { transform: none; opacity: 1; } }
-        `}</style>
+        position:'relative', zIndex:1,
+        width:'100%', maxWidth:540,
+        background: DARK_BG,
+        boxShadow:'0 0 0 1px rgba(121,72,246,.2), -4px 0 40px rgba(0,0,0,.5)',
+        display:'flex', flexDirection:'column',
+        overflowY:'auto',
+        // mobile: full screen
+      }}
+      // prevent click-through
+      onClick={e => e.stopPropagation()}
+      >
+        {/* ── HEADER ─────────────────────────────────────────────────────── */}
+        <div style={{
+          padding:'16px 20px 0',
+          borderBottom:`1px solid ${DARK_BORDER}`,
+          paddingBottom:14,
+          flexShrink:0,
+        }}>
+          {/* Top row: label + close */}
+          <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between',
+            marginBottom:8 }}>
+            <span style={{ fontSize:9, fontWeight:900, letterSpacing:'.15em',
+              textTransform:'uppercase', color:'rgba(255,255,255,.3)' }}>
+              Cernly Guided Fix
+            </span>
+            <button
+              onClick={onClose}
+              style={{ background:'rgba(255,255,255,.08)', border:`1px solid ${DARK_BORDER}`,
+                borderRadius:6, width:28, height:28, cursor:'pointer',
+                display:'grid', placeItems:'center', color:'rgba(255,255,255,.55)' }}
+              aria-label="Close"
+            >
+              <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+                <path d="M1 1l10 10M11 1 1 11" stroke="currentColor" strokeWidth="1.8"
+                  strokeLinecap="round"/>
+              </svg>
+            </button>
+          </div>
 
-        {/* Header */}
-        <div style={{ padding: '16px 18px', borderBottom: `1px solid ${BORDER}`,
-          display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
-          <div style={{ width: 32, height: 32, borderRadius: 10, flexShrink: 0,
-            background: GRAD, display: 'grid', placeItems: 'center' }}>
-            <span style={{ color: '#fff', fontSize: 14, lineHeight: 1 }}>✦</span>
+          {/* Rec title + category badge */}
+          <div style={{ display:'flex', alignItems:'flex-start', gap:10,
+            flexWrap:'wrap', marginBottom:14 }}>
+            <h2 style={{ fontSize:16, fontWeight:800, color:'#fff', margin:0,
+              flex:'1 1 200px', lineHeight:1.3 }}>
+              {rec?.title || 'Improve your site'}
+            </h2>
+            {rec?.category && (
+              <span style={{
+                fontSize:10, fontWeight:800, letterSpacing:'.06em',
+                textTransform:'uppercase', borderRadius:6,
+                padding:'3px 8px', flexShrink:0,
+                background: catColors.bg, color: catColors.color,
+              }}>
+                {rec.category.replace(/_/g,' ')}
+              </span>
+            )}
           </div>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontWeight: 800, fontSize: 13, color: TEXT }}>Guided Fix</div>
-            <div style={{ fontSize: 11, color: MUTED, whiteSpace: 'nowrap', overflow: 'hidden',
-              textOverflow: 'ellipsis' }}>
-              {rec?.title || 'Image Optimization'}
-            </div>
+
+          {/* Progress bar */}
+          <div style={{ display:'flex', gap:0 }}>
+            {STEPS.map((s, i) => {
+              const active  = i === currentStep;
+              const done    = i < currentStep;
+              return (
+                <div key={s.id} style={{ flex:1, display:'flex', flexDirection:'column',
+                  alignItems:'center', gap:5 }}>
+                  {/* line + dot */}
+                  <div style={{ width:'100%', display:'flex', alignItems:'center' }}>
+                    {i > 0 && (
+                      <div style={{ flex:1, height:2,
+                        background: done ? PURPLE : 'rgba(255,255,255,.12)' }}/>
+                    )}
+                    <div style={{
+                      width:20, height:20, borderRadius:'50%', flexShrink:0,
+                      background: done ? PURPLE : active ? 'rgba(121,72,246,.35)' : 'rgba(255,255,255,.08)',
+                      border: active ? '2px solid ' + PURPLE : done ? 'none' : `1.5px solid rgba(255,255,255,.15)`,
+                      display:'grid', placeItems:'center',
+                    }}>
+                      {done ? (
+                        <svg width="9" height="7" viewBox="0 0 9 7" fill="none">
+                          <path d="M1 3.5l2 2 5-4" stroke="#fff" strokeWidth="1.6"
+                            strokeLinecap="round" strokeLinejoin="round"/>
+                        </svg>
+                      ) : (
+                        <span style={{ fontSize:9, fontWeight:800,
+                          color: active ? '#fff' : 'rgba(255,255,255,.3)' }}>{i+1}</span>
+                      )}
+                    </div>
+                    {i < STEPS.length - 1 && (
+                      <div style={{ flex:1, height:2,
+                        background: done ? PURPLE : 'rgba(255,255,255,.12)' }}/>
+                    )}
+                  </div>
+                  <span style={{ fontSize:10, fontWeight: active ? 800 : 600,
+                    color: active ? '#fff' : done ? 'rgba(255,255,255,.55)' : 'rgba(255,255,255,.3)' }}>
+                    {s.label}
+                  </span>
+                </div>
+              );
+            })}
           </div>
-          <button onClick={onClose}
-            style={{ border: 'none', background: 'none', cursor: 'pointer',
-              padding: 6, color: MUTED, borderRadius: 6 }}
-            aria-label="Close">
-            <CloseIcon size={16} />
-          </button>
         </div>
 
-        {/* Scrollable content */}
-        <div style={{ flex: 1, overflowY: 'auto', padding: '16px 18px',
-          display: 'flex', flexDirection: 'column', gap: 14 }}>
+        {/* ── STEP CONTENT ───────────────────────────────────────────────── */}
+        <div style={{ flex:1, padding:'20px 20px 0', overflowY:'auto' }}>
 
-          {/* Evidence / finding summary — shown for all recommendation groups */}
-          {(rec?.what_we_found || rec?.title) && (
-            <div style={{ background: 'linear-gradient(145deg,#f7f4ff,#eef6ff 90%)',
-              border: '1px solid #e5deff', borderRadius: 12, padding: '12px 14px' }}>
-              <div style={{ fontSize: 11, fontWeight: 800, color: PURPLE,
-                textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8 }}>
-                What we found on your site
-              </div>
-              {rec.what_we_found && (
-                <div style={{ fontSize: 13, color: TEXT, lineHeight: 1.55, marginBottom: 6 }}>
-                  {rec.what_we_found}
+          {/* ── STEP 0: UNDERSTAND ────────────────────────────────────────── */}
+          {currentStep === 0 && (
+            <div>
+              <h3 style={{ fontSize:18, fontWeight:800, color:'#fff', margin:'0 0 8px',
+                lineHeight:1.3 }}>
+                Here's what we found
+              </h3>
+
+              {/* what_we_found or explanation */}
+              {(rec?.what_we_found || rec?.explanation) && (
+                <p style={{ fontSize:13, lineHeight:1.75,
+                  color:'rgba(255,255,255,.7)', margin:'0 0 18px' }}>
+                  {rec.what_we_found || rec.explanation}
+                </p>
+              )}
+
+              {/* Perf metric tiles */}
+              {measuredMetrics.length > 0 && (
+                <div style={{ marginBottom:18 }}>
+                  <div style={{ fontSize:10, fontWeight:800, letterSpacing:'.08em',
+                    textTransform:'uppercase', color:'rgba(255,255,255,.3)', marginBottom:10 }}>
+                    Measured on your site
+                  </div>
+                  <div style={{ display:'flex', flexWrap:'wrap', gap:8 }}>
+                    {measuredMetrics.map(m => (
+                      <MetricTile
+                        key={m.key}
+                        label={m.label}
+                        title={m.title}
+                        value={evidence[m.key]}
+                        unit={m.unit}
+                        status={metricStatus(m.key, evidence[m.key])}
+                      />
+                    ))}
+                  </div>
                 </div>
               )}
-              {/* Image-specific quick stats */}
-              {evidence?.totalSavingsKib != null && (
-                <div style={{ fontSize: 12, fontWeight: 700, color: '#5b3da3', marginBottom: 4 }}>
-                  {evidence.totalSavingsKib} KiB of image savings available
-                  {evidence.imageCount ? ` across ${evidence.imageCount} image${evidence.imageCount > 1 ? 's' : ''}` : ''}
+
+              {/* Other evidence fields */}
+              {(() => {
+                const perfKeys = new Set(PERF_METRICS.map(m => m.key));
+                const otherEvidence = Object.entries(evidence).filter(([k]) =>
+                  !perfKeys.has(k) && evidence[k] != null
+                );
+                if (otherEvidence.length === 0) return null;
+                return (
+                  <div style={{ background:'rgba(255,255,255,.04)',
+                    border:`1px solid ${DARK_BORDER}`, borderRadius:10,
+                    padding:'12px 14px', marginBottom:18 }}>
+                    <div style={{ fontSize:10, fontWeight:800, letterSpacing:'.08em',
+                      textTransform:'uppercase', color:'rgba(255,255,255,.3)', marginBottom:10 }}>
+                      Scan evidence
+                    </div>
+                    <div style={{ display:'flex', flexDirection:'column', gap:6 }}>
+                      {otherEvidence.slice(0,8).map(([k, v]) => (
+                        <div key={k} style={{ display:'flex', justifyContent:'space-between',
+                          gap:8, fontSize:12 }}>
+                          <span style={{ color:'rgba(255,255,255,.5)', flex:'0 0 auto',
+                            maxWidth:'55%' }}>
+                            {k.replace(/([A-Z])/g,' $1').replace(/^./,s=>s.toUpperCase())}
+                          </span>
+                          <span style={{ color:'rgba(255,255,255,.8)', fontWeight:600,
+                            textAlign:'right' }}>
+                            {Array.isArray(v) ? v.slice(0,2).join(', ')+(v.length>2?'…':'') : String(v)}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {/* Why it matters */}
+              {rec?.why_it_matters && (
+                <div style={{ background:'rgba(54,135,250,.07)',
+                  border:'1px solid rgba(54,135,250,.18)', borderRadius:10,
+                  padding:'14px 16px', marginBottom:18 }}>
+                  <div style={{ fontSize:10, fontWeight:800, letterSpacing:'.08em',
+                    textTransform:'uppercase', color:'rgba(54,135,250,.7)',
+                    marginBottom:8 }}>
+                    Why this matters
+                  </div>
+                  <p style={{ fontSize:13, lineHeight:1.7,
+                    color:'rgba(255,255,255,.6)', margin:0 }}>
+                    {rec.why_it_matters}
+                  </p>
                 </div>
               )}
-              {evidence?.lcpImageUrl && (
-                <div style={{ fontSize: 11, color: MUTED, marginBottom: 4, wordBreak: 'break-all' }}>
-                  LCP image: <code style={{ background: '#ece8ff', borderRadius: 4, padding: '1px 5px',
-                    color: PURPLE, fontSize: 11 }}>{evidence.lcpImageUrl}</code>
-                </div>
-              )}
-              {/* Performance metric quick stats */}
-              {(evidence?.lcp || evidence?.tbt || evidence?.cls) && (
-                <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 4 }}>
-                  {evidence.lcp  != null && <MetricPill label="LCP"  value={`${evidence.lcp}ms`}  />}
-                  {evidence.tbt  != null && <MetricPill label="TBT"  value={`${evidence.tbt}ms`}  />}
-                  {evidence.cls  != null && <MetricPill label="CLS"  value={evidence.cls}          />}
-                  {evidence.fcp  != null && <MetricPill label="FCP"  value={`${evidence.fcp}ms`}  />}
-                  {evidence.ttfb != null && <MetricPill label="TTFB" value={`${evidence.ttfb}ms`} />}
-                </div>
-              )}
-              {confBadge && (
-                <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5, marginTop: 8,
-                  background: confBadge.bg, borderRadius: 6, padding: '3px 8px' }}>
-                  <div style={{ width: 6, height: 6, borderRadius: '50%', background: confBadge.dot }} />
-                  <span style={{ fontSize: 11, fontWeight: 700, color: confBadge.color }}>
-                    {confBadge.label}
-                  </span>
+
+              {/* No evidence fallback */}
+              {measuredMetrics.length === 0 && !rec?.what_we_found && !rec?.explanation && (
+                <div style={{ background:'rgba(255,255,255,.04)',
+                  border:`1px solid ${DARK_BORDER}`, borderRadius:10,
+                  padding:'14px 16px', marginBottom:18 }}>
+                  <p style={{ fontSize:13, color:'rgba(255,255,255,.5)',
+                    lineHeight:1.7, margin:0 }}>
+                    This recommendation was flagged during your scan. The next step will
+                    guide you through investigating and resolving it.
+                  </p>
                 </div>
               )}
             </div>
           )}
 
-          {loading ? (
-            <Spinner />
-          ) : fallback ? (
-            <FallbackGuide
-              actions={fallbackActs}
-              rec={rec}
-              onAskCernly={() => onAskCernly?.({
-                title: rec?.title || 'Image Optimization',
-                category: rec?.category || 'image-optimization',
-                detail: rec?.what_we_found || '',
-                recFingerprint: recFp,
-              })}
-            />
-          ) : plan ? (
-            <>
-              {/* Evidence summary from AI */}
-              {plan.evidenceSummary && (
-                <div style={{ fontSize: 13, color: '#4b5168', lineHeight: 1.6,
-                  paddingBottom: 4, borderBottom: `1px solid ${BORDER}` }}>
-                  {plan.evidenceSummary}
-                </div>
-              )}
+          {/* ── STEP 1: PREPARE ───────────────────────────────────────────── */}
+          {currentStep === 1 && (
+            <div>
+              <h3 style={{ fontSize:18, fontWeight:800, color:'#fff', margin:'0 0 8px',
+                lineHeight:1.3 }}>
+                How do you manage this site?
+              </h3>
+              <p style={{ fontSize:13, lineHeight:1.7, color:'rgba(255,255,255,.55)',
+                margin:'0 0 18px' }}>
+                Choose your role to get instructions tailored to your experience level.
+              </p>
 
-              {/* Role selector */}
-              <div>
-                <div style={{ fontSize: 11, fontWeight: 800, color: MUTED,
-                  textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8 }}>
-                  Who's doing this fix?
-                </div>
-                <div style={{ display: 'flex', gap: 8 }}>
-                  {[
-                    { key: 'owner',     label: 'I manage the site',   desc: 'Less technical' },
-                    { key: 'developer', label: 'I\'m the developer',  desc: 'Technical steps' },
-                  ].map(opt => (
-                    <button key={opt.key} onClick={() => handleRoleSelect(opt.key)}
-                      style={{
-                        flex: 1, border: `2px solid ${role === opt.key ? PURPLE : BORDER}`,
-                        background: role === opt.key ? '#f7f4ff' : SURFACE,
-                        borderRadius: 10, padding: '9px 12px', cursor: 'pointer',
-                        fontFamily: FONT, textAlign: 'left', transition: 'all .12s',
-                      }}>
-                      <div style={{ fontWeight: 700, fontSize: 12,
-                        color: role === opt.key ? PURPLE : TEXT }}>
-                        {opt.label}
-                      </div>
-                      <div style={{ fontSize: 11, color: MUTED, marginTop: 2 }}>
-                        {opt.desc}
-                      </div>
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Steps */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                <div style={{ fontSize: 11, fontWeight: 800, color: MUTED,
-                  textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-                  Steps · {plan.steps.filter(s => progress[s.id] === 'marked_done').length}/{plan.steps.length} done
-                </div>
-                {plan.steps.map((step, i) => (
-                  <GuidedStep
-                    key={step.id}
-                    step={step}
-                    stepIndex={i}
-                    total={plan.steps.length}
+              <div style={{ display:'flex', flexDirection:'column', gap:8, marginBottom:20 }}>
+                {ROLES.map(role => (
+                  <RoleCard
+                    key={role.id}
                     role={role}
-                    stepState={progress[step.id] || 'not_started'}
-                    onMarkDone={() => handleMarkDone(step.id)}
-                    onAskCernly={() => handleAskForStep(step)}
+                    selected={selectedRole}
+                    onClick={setSelectedRole}
                   />
                 ))}
               </div>
 
-              {/* All-done confirmation */}
-              {(allDone || computedAllDone) && !deployedSent && (
-                <div style={{ background: '#f0faf7', border: '1.5px solid #c7ede0',
-                  borderRadius: 12, padding: '14px 16px' }}>
-                  <div style={{ fontWeight: 800, fontSize: 13, color: '#145c43', marginBottom: 6 }}>
-                    You've marked all steps complete
+              {/* Prerequisites notice */}
+              {rec?.actions?.length > 0 && (
+                <div style={{ background:'rgba(239,166,66,.07)',
+                  border:'1px solid rgba(239,166,66,.18)', borderRadius:10,
+                  padding:'12px 14px' }}>
+                  <div style={{ fontSize:10, fontWeight:800, letterSpacing:'.08em',
+                    textTransform:'uppercase', color:AMBER, marginBottom:8 }}>
+                    Before you begin
                   </div>
-                  <div style={{ fontSize: 12, color: '#1d7a56', marginBottom: 12, lineHeight: 1.5 }}>
-                    Once you've deployed your changes, run a new scan to verify the fix.
-                  </div>
-                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                    <button onClick={handleDeployed}
-                      style={{ background: GREEN, color: '#fff', border: 0,
-                        borderRadius: 8, padding: '8px 16px', fontSize: 12, fontWeight: 700,
-                        cursor: 'pointer', fontFamily: FONT }}>
-                      I've deployed — run a scan
+                  <ul style={{ margin:0, paddingLeft:16,
+                    color:'rgba(255,255,255,.55)', fontSize:12, lineHeight:1.7 }}>
+                    <li>Make a backup of your site or the files you'll edit.</li>
+                    <li>If you're unsure at any step, the "Ask Cernly" button provides context.</li>
+                    {rec.actions.length > 3 && (
+                      <li>This fix has {rec.actions.length} steps — you can complete them over multiple sessions.</li>
+                    )}
+                  </ul>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ── STEP 2: FIX ───────────────────────────────────────────────── */}
+          {currentStep === 2 && (
+            <div>
+              <div style={{ display:'flex', alignItems:'center',
+                justifyContent:'space-between', marginBottom:14 }}>
+                <h3 style={{ fontSize:18, fontWeight:800, color:'#fff', margin:0,
+                  lineHeight:1.3 }}>
+                  Step-by-step fix
+                </h3>
+                {selectedRole && (
+                  <span style={{ fontSize:10, fontWeight:800, letterSpacing:'.06em',
+                    textTransform:'uppercase', borderRadius:6, padding:'3px 8px',
+                    background:'rgba(121,72,246,.18)', color:'#c5b4fa', flexShrink:0 }}>
+                    {ROLES.find(r=>r.id===selectedRole)?.label || selectedRole}
+                  </span>
+                )}
+              </div>
+
+              {/* Plan loading */}
+              {planStatus === 'loading' && (
+                <Spinner label="Generating your personalised fix plan…" />
+              )}
+
+              {/* AI plan ready */}
+              {planStatus === 'ready' && hasAiPlan && (
+                <>
+                  {plan.evidenceSummary && (
+                    <div style={{ background:'rgba(121,72,246,.08)',
+                      border:'1px solid rgba(121,72,246,.2)', borderRadius:10,
+                      padding:'12px 14px', marginBottom:16, fontSize:12,
+                      color:'rgba(255,255,255,.6)', lineHeight:1.65 }}>
+                      {plan.evidenceSummary}
+                    </div>
+                  )}
+                  {plan.steps.map((step, i) => (
+                    <FixStepCard
+                      key={step.id || i}
+                      step={step}
+                      index={i}
+                      role={selectedRole}
+                      completedSteps={completedSteps}
+                      onToggleComplete={toggleComplete}
+                      onAskCernly={onAskCernly ? handleAskCernly : null}
+                    />
+                  ))}
+                </>
+              )}
+
+              {/* Fallback — AI unavailable */}
+              {(planStatus === 'fallback' || planStatus === 'error') && (
+                <div>
+                  <div style={{ background:'rgba(239,166,66,.08)',
+                    border:'1px solid rgba(239,166,66,.2)', borderRadius:10,
+                    padding:'12px 14px', marginBottom:16, fontSize:12,
+                    color:'#fbbf6a', lineHeight:1.65 }}>
+                    {planStatus === 'error'
+                      ? "Personalised guidance couldn't be generated right now."
+                      : 'AI-generated instructions are unavailable. Here are the identified actions from your scan.'}
+                    <button
+                      onClick={retryPlan}
+                      style={{ marginLeft:8, background:'none', border:'none',
+                        color: PURPLE, fontSize:12, fontWeight:700, cursor:'pointer',
+                        fontFamily:FONT }}
+                    >
+                      Retry
                     </button>
-                    <button onClick={() => setAllDone(false)}
-                      style={{ background: 'transparent', color: MUTED,
-                        border: `1.5px solid ${BORDER}`, borderRadius: 8,
-                        padding: '7px 14px', fontSize: 12, fontWeight: 700,
-                        cursor: 'pointer', fontFamily: FONT }}>
-                      Not yet
-                    </button>
                   </div>
+
+                  {/* Fallback actions from rec */}
+                  {(fallbackActions.length > 0 ? fallbackActions : (rec?.actions || [])).map((action, i) => (
+                    <div key={i} style={{ background:'rgba(255,255,255,.04)',
+                      border:`1px solid ${DARK_BORDER}`, borderRadius:12,
+                      padding:'14px 16px', marginBottom:10 }}>
+                      <div style={{ display:'flex', gap:10, alignItems:'flex-start' }}>
+                        <span style={{ width:22, height:22, borderRadius:7, flexShrink:0,
+                          background:'rgba(121,72,246,.2)', border:'1.5px solid rgba(121,72,246,.4)',
+                          display:'grid', placeItems:'center',
+                          fontSize:10, fontWeight:800, color:'rgba(255,255,255,.6)' }}>
+                          {i+1}
+                        </span>
+                        <div>
+                          <div style={{ fontSize:13, fontWeight:700, color:'#fff',
+                            marginBottom:4, lineHeight:1.3 }}>
+                            {action.title || action}
+                          </div>
+                          {action.description && (
+                            <div style={{ fontSize:12, color:'rgba(255,255,255,.55)',
+                              lineHeight:1.65 }}>
+                              {action.description}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+
+                  {fallbackActions.length === 0 && !rec?.actions?.length && (
+                    <p style={{ fontSize:13, color:'rgba(255,255,255,.4)', lineHeight:1.7 }}>
+                      No specific actions were identified for this recommendation. Use the
+                      "Ask Cernly" button to investigate further.
+                    </p>
+                  )}
                 </div>
               )}
 
-              {deployedSent && (
-                <div style={{ background: '#eff8ff', border: '1.5px solid #bfdbfe',
-                  borderRadius: 12, padding: '14px 16px' }}>
-                  <div style={{ fontWeight: 800, fontSize: 13, color: '#1e40af', marginBottom: 4 }}>
-                    Verification scan requested
-                  </div>
-                  <div style={{ fontSize: 12, color: '#3b82f6', lineHeight: 1.5 }}>
-                    We'll compare your changes against the original findings when the scan completes.
-                  </div>
+              {/* Completed progress note */}
+              {completedSteps.length > 0 && hasAiPlan && (
+                <div style={{ textAlign:'center', padding:'8px 0',
+                  fontSize:12, color:'rgba(255,255,255,.35)' }}>
+                  {completedSteps.length} of {plan.steps.length} steps marked complete
                 </div>
               )}
-            </>
-          ) : null}
+            </div>
+          )}
+
+          {/* ── STEP 3: VERIFY ────────────────────────────────────────────── */}
+          {currentStep === 3 && (
+            <div>
+              <h3 style={{ fontSize:18, fontWeight:800, color:'#fff', margin:'0 0 8px',
+                lineHeight:1.3 }}>
+                How to verify your fix
+              </h3>
+              <p style={{ fontSize:13, lineHeight:1.75,
+                color:'rgba(255,255,255,.6)', margin:'0 0 18px' }}>
+                A rescan measures the same signals as your original audit. Here's what
+                to look for after you've made your changes.
+              </p>
+
+              {/* What success looks like */}
+              <div style={{ background:'rgba(25,185,135,.07)',
+                border:'1px solid rgba(25,185,135,.2)', borderRadius:12,
+                padding:'14px 16px', marginBottom:16 }}>
+                <div style={{ fontSize:10, fontWeight:800, letterSpacing:'.08em',
+                  textTransform:'uppercase', color:GREEN, marginBottom:10 }}>
+                  What success looks like
+                </div>
+                {measuredMetrics.length > 0 ? (
+                  <ul style={{ margin:0, paddingLeft:16,
+                    color:'rgba(255,255,255,.6)', fontSize:12, lineHeight:1.8 }}>
+                    {measuredMetrics.map(m => {
+                      const val = evidence[m.key];
+                      const target = m.key === 'lcp'  ? '< 2,500 ms'
+                                   : m.key === 'fcp'  ? '< 1,800 ms'
+                                   : m.key === 'tbt'  ? '< 200 ms'
+                                   : m.key === 'cls'  ? '< 0.1'
+                                   : m.key === 'ttfb' ? '< 800 ms'
+                                   : m.key === 'si'   ? '< 3,400 ms'
+                                   : null;
+                      return target ? (
+                        <li key={m.key}>
+                          <strong style={{ color:'rgba(255,255,255,.75)' }}>{m.title}</strong>
+                          {' '}should move from <strong style={{ color:RED }}>{val}{m.unit}</strong>
+                          {' '}toward {' '}<strong style={{ color:GREEN }}>{target}</strong>
+                        </li>
+                      ) : null;
+                    }).filter(Boolean)}
+                    {measuredMetrics.every(m => !['lcp','fcp','tbt','cls','ttfb','si'].includes(m.key)) && (
+                      <li>The flagged issue should no longer appear in the scan results.</li>
+                    )}
+                  </ul>
+                ) : (
+                  <p style={{ fontSize:12, color:'rgba(255,255,255,.55)',
+                    lineHeight:1.7, margin:0 }}>
+                    After making your changes, run a new scan and check whether
+                    this recommendation still appears in the results.
+                  </p>
+                )}
+              </div>
+
+              {/* Result interpretation guide */}
+              <div style={{ background:'rgba(255,255,255,.04)',
+                border:`1px solid ${DARK_BORDER}`, borderRadius:12,
+                padding:'14px 16px', marginBottom:20 }}>
+                <div style={{ fontSize:10, fontWeight:800, letterSpacing:'.08em',
+                  textTransform:'uppercase', color:'rgba(255,255,255,.3)', marginBottom:12 }}>
+                  Reading your results
+                </div>
+                <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
+                  {[
+                    { dot: GREEN, label:'Observed improvement',   desc:'Metrics improved — your change had an effect.' },
+                    { dot: BLUE,  label:'Likely resolved',        desc:'Issue no longer flagged; confirm with a second scan.' },
+                    { dot: AMBER, label:'Persistent issue',       desc:'Scores didn\'t change enough. Review the fix steps.' },
+                    { dot: RED,   label:'Unable to verify',       desc:'Evidence is inconclusive. The change may not have been deployed.' },
+                  ].map(r => (
+                    <div key={r.label} style={{ display:'flex', gap:10, alignItems:'flex-start' }}>
+                      <div style={{ width:8, height:8, borderRadius:'50%',
+                        background:r.dot, flexShrink:0, marginTop:4 }}/>
+                      <div>
+                        <span style={{ fontSize:12, fontWeight:700,
+                          color:'rgba(255,255,255,.75)' }}>{r.label}: </span>
+                        <span style={{ fontSize:12, color:'rgba(255,255,255,.45)',
+                          lineHeight:1.6 }}>{r.desc}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Rescan CTA */}
+              <button
+                onClick={handleRescan}
+                style={{
+                  width:'100%', padding:'14px',
+                  background: GRAD, border:'none', borderRadius:12,
+                  color:'#fff', fontSize:14, fontWeight:800,
+                  cursor:'pointer', fontFamily:FONT, marginBottom:10,
+                  boxShadow:'0 4px 20px rgba(121,72,246,.4)',
+                }}
+              >
+                I've made changes — run a new scan →
+              </button>
+              <p style={{ fontSize:11, color:'rgba(255,255,255,.3)',
+                textAlign:'center', margin:0, lineHeight:1.5 }}>
+                A rescan measures the live page — make sure your changes are deployed first.
+              </p>
+            </div>
+          )}
         </div>
 
-        {/* Footer */}
-        <div style={{ padding: '12px 18px', borderTop: `1px solid ${BORDER}`,
-          flexShrink: 0, display: 'flex', justifyContent: 'space-between',
-          alignItems: 'center', gap: 8 }}>
-          <div style={{ fontSize: 11, color: MUTED }}>
-            Cernly AI · based on this scan
+        {/* ── FOOTER: Back / Continue ─────────────────────────────────────── */}
+        <div style={{
+          padding:'16px 20px',
+          borderTop:`1px solid ${DARK_BORDER}`,
+          display:'flex', gap:10,
+          flexShrink:0,
+          background:'rgba(0,0,0,.2)',
+        }}>
+          {currentStep > 0 && (
+            <button
+              onClick={() => goTo(currentStep - 1)}
+              style={{
+                flex:1, padding:'12px',
+                background:'rgba(255,255,255,.07)', border:`1px solid ${DARK_BORDER}`,
+                borderRadius:10, color:'rgba(255,255,255,.7)', fontSize:13,
+                fontWeight:700, cursor:'pointer', fontFamily:FONT,
+              }}
+            >
+              ← Back
+            </button>
+          )}
+          {currentStep < STEPS.length - 1 && (
+            <button
+              onClick={() => goTo(currentStep + 1)}
+              disabled={!canContinue()}
+              style={{
+                flex:2, padding:'12px',
+                background: canContinue() ? GRAD : 'rgba(255,255,255,.08)',
+                border:'none', borderRadius:10,
+                color: canContinue() ? '#fff' : 'rgba(255,255,255,.3)',
+                fontSize:13, fontWeight:800,
+                cursor: canContinue() ? 'pointer' : 'not-allowed',
+                fontFamily:FONT,
+                boxShadow: canContinue() ? '0 4px 16px rgba(121,72,246,.3)' : 'none',
+                transition:'all .15s',
+              }}
+            >
+              {currentStep === 1
+                ? 'Show me how to fix it →'
+                : currentStep === 2
+                  ? 'How do I verify this? →'
+                  : 'Continue →'}
+            </button>
+          )}
+          {currentStep === STEPS.length - 1 && (
+            <button
+              onClick={onClose}
+              style={{
+                flex:2, padding:'12px',
+                background:'rgba(255,255,255,.07)', border:`1px solid ${DARK_BORDER}`,
+                borderRadius:10, color:'rgba(255,255,255,.6)', fontSize:13,
+                fontWeight:700, cursor:'pointer', fontFamily:FONT,
+              }}
+            >
+              Close guide
+            </button>
+          )}
+        </div>
+
+        {/* Ask Cernly footer */}
+        {onAskCernly && (
+          <div style={{
+            padding:'10px 20px 14px',
+            borderTop:`1px solid ${DARK_BORDER}`,
+            display:'flex', alignItems:'center', gap:8,
+            flexShrink:0,
+          }}>
+            <span style={{ fontSize:11, color:'rgba(255,255,255,.3)' }}>
+              Have a question?
+            </span>
+            <button
+              onClick={() => handleAskCernly({})}
+              style={{ background:'none', border:'none', cursor:'pointer',
+                fontSize:11, fontWeight:700, color:PURPLE, fontFamily:FONT,
+                padding:0 }}
+            >
+              Ask Cernly →
+            </button>
           </div>
-          <button
-            onClick={() => onAskCernly?.({
-              title: rec?.title || 'Image Optimization',
-              category: rec?.category || 'image-optimization',
-              detail: rec?.what_we_found || '',
-              recFingerprint: recFp,
-            })}
-            style={{ display: 'inline-flex', alignItems: 'center', gap: 5,
-              background: 'transparent', color: PURPLE,
-              border: `1.5px solid #c9bcf7`, borderRadius: 8,
-              padding: '6px 12px', fontSize: 12, fontWeight: 700,
-              cursor: 'pointer', fontFamily: FONT }}>
-            <span style={{ fontSize: 12 }}>✦</span> Ask Cernly
-          </button>
-        </div>
+        )}
       </div>
-    </>
-  );
-}
 
-// ---------------------------------------------------------------------------
-// SVG icons
-// ---------------------------------------------------------------------------
-function CheckIcon({ size = 14, color = 'currentColor' }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none"
-      stroke={color} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-      <polyline points="20 6 9 17 4 12" />
-    </svg>
-  );
-}
-function ChevronIcon({ size = 14, color = 'currentColor', down = true }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none"
-      stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
-      style={{ transform: down ? 'none' : 'rotate(-90deg)', transition: 'transform .15s' }}>
-      <polyline points="6 9 12 15 18 9" />
-    </svg>
-  );
-}
-function CloseIcon({ size = 16, color = 'currentColor' }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none"
-      stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
-    </svg>
+      <style>{`
+        @keyframes spin { to { transform: rotate(360deg); } }
+        @media (max-width: 600px) {
+          /* Panel already fills width via max-width:100% on small screens */
+        }
+      `}</style>
+    </div>
   );
 }
