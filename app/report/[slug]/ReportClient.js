@@ -439,7 +439,7 @@ function FixCard({ issue, n, impact, rec, workItem, onStatusChange, onAskCernly,
             {/* Primary action buttons */}
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
               {/* Guided fix CTA — all recommendation groups */}
-              {onGuide && (
+              {onGuide && rec && (
                 <button onClick={() => onGuide(rec)}
                   style={{ display: 'inline-flex', alignItems: 'center', gap: 6,
                     background: 'linear-gradient(135deg,#8a46f8,#3687fa)', color: '#fff',
@@ -1773,7 +1773,7 @@ export default function ReportClient({ isPro, userName, userAvatar }) {
                   {ctaRec && (
                     <button
                       onClick={() => setGuidedFixRec(ctaRec)}
-                      style={{ width: '100%', padding: '13px',
+                      style={{ width: '100%', maxWidth: 280, padding: '13px',
                         background: 'linear-gradient(135deg,#8a46f8,#3687fa)',
                         border: 0, borderRadius: 10, color: '#fff',
                         fontSize: 14, fontWeight: 800, cursor: 'pointer',
@@ -2494,7 +2494,7 @@ export default function ReportClient({ isPro, userName, userAvatar }) {
       {guidedFixRec && report && (
         <GuidedFix
           rec={guidedFixRec}
-          reportId={id}
+          reportId={String(report.id)}
           pageUrl={report.url}
           workItem={workItems[guidedFixRec.fingerprint] || null}
           onClose={() => setGuidedFixRec(null)}
