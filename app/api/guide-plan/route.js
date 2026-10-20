@@ -8,12 +8,17 @@ import {
 } from '@/lib/store';
 import { generateGuidancePlan, derivePlanFingerprint } from '@/lib/guidance';
 
+const VALID_PERSONAS = new Set(['owner', 'cms', 'developer']);
+
 // POST /api/guide-plan
-// Body: { recFingerprint, reportId }
+// Body: { recFingerprint, reportId, persona? }
 //
-// Returns a cached or freshly generated guidance plan for the given
-// recommendation. Cache key: recommendation row + content-based planFingerprint.
-// If generation fails, returns { fallback: true, actions: [...] }.
+// Returns a cached or freshly-generated guidance plan for the given
+// recommendation × persona combination.
+//
+// Cache key: (fingerprint, userId, persona) × content-based planFingerprint.
+// If AI generation fails, static evidence-based guidance is returned — the
+// response is always meaningful, never empty.
 export async function POST(request) {
   let userId = null;
   try { const { userId: uid } = await auth(); userId = uid || null; } catch {}
@@ -23,6 +28,8 @@ export async function POST(request) {
   try { body = await request.json(); } catch {}
 
   const { recFingerprint, reportId } = body;
+  // Normalise persona — default to 'owner'; reject unknowns
+  const persona = VALID_PERSONAS.has(body.persona) ? body.persona : 'owner';
 
   if (!recFingerprint || typeof recFingerprint !== 'string') {
     return NextResponse.json({ error: 'recFingerprint is required' }, { status: 400 });
@@ -39,41 +46,65 @@ export async function POST(request) {
   const rec  = recs.find(r => r.fingerprint === recFingerprint);
 
   if (!rec) {
-    console.error('[guide-plan] rec not found | fingerprint:', recFingerprint, '| reportId:', reportId, '| recs loaded:', recs.length, '| fingerprints:', recs.map(r => r.fingerprint).join(','));
+    console.error('[guide-plan] rec not found | fingerprint:', recFingerprint,
+      '| reportId:', reportId, '| recs loaded:', recs.length,
+      '| fingerprints:', recs.map(r => r.fingerprint).join(','));
     return NextResponse.json(
       { error: 'Recommendation not found for this user and report' },
       { status: 404 }
     );
   }
 
-  // Check cache: compare current content-based fingerprint against stored plan
-  const cached = await getGuidancePlan(recFingerprint, userId);
-  const currentFp = derivePlanFingerprint(rec);
+  // ── Cache check ─────────────────────────────────────────────────────────────
+  // The stored guidance_plan is a map keyed by persona:
+  //   { owner: { planFingerprint, steps, ... }, developer: { ... }, ... }
+  // This allows all three personas to be cached in one DB row.
+  const cached      = await getGuidancePlan(recFingerprint, userId);
+  const currentFp   = derivePlanFingerprint(rec);
+  const cachedForPersona = cached?.plan?.[persona];
 
-  if (cached?.plan && cached.plan.planFingerprint === currentFp) {
-    // Cache hit — content has not changed since plan was generated
-    return NextResponse.json({ plan: cached.plan, cached: true });
+  if (cachedForPersona && cachedForPersona.planFingerprint === currentFp) {
+    // Cache hit for this persona — content has not changed since generation
+    return NextResponse.json({ plan: cachedForPersona, cached: true, persona });
   }
 
-  // Cache miss or stale — generate a new plan
+  // ── Generate ────────────────────────────────────────────────────────────────
   const domain = extractDomain(rec.page_url || rec.url || '');
-  const plan   = await generateGuidancePlan(rec, domain);
+  const plan   = await generateGuidancePlan(rec, domain, persona);
 
+  // generateGuidancePlan never returns an empty plan — it always falls back to
+  // static guidance. The only case where fallback: true remains is an unknown
+  // group key with no static template (extremely rare).
   if (plan.fallback) {
-    // Generation failed — return fallback without caching
-    console.error('[guide-plan] fallback reason:', plan.reason || 'unknown', '| rec:', recFingerprint, '| report:', reportId);
-    return NextResponse.json({ plan: null, fallback: true, actions: plan.actions, reason: plan.reason || 'unknown' });
+    console.error('[guide-plan] bare fallback (no static template) | reason:',
+      plan.reason || 'unknown', '| rec:', recFingerprint, '| report:', reportId);
+    return NextResponse.json({
+      plan: null,
+      fallback: true,
+      actions: plan.actions || [],
+      reason: plan.reason || 'unknown',
+      persona,
+    });
   }
 
-  // Persist to DB
+  // ── Persist ─────────────────────────────────────────────────────────────────
+  // Store all persona plans in a single JSONB map row.
+  // Read → merge → write to avoid overwriting sibling personas.
   try {
-    await setGuidancePlan(recFingerprint, userId, plan);
+    const existing     = cached?.plan || {};
+    // Discard sibling plans if the content fingerprint changed (stale)
+    const freshPersonas = {};
+    for (const [p, pPlan] of Object.entries(existing)) {
+      if (pPlan?.planFingerprint === currentFp) freshPersonas[p] = pPlan;
+    }
+    const updatedMap = { ...freshPersonas, [persona]: plan };
+    await setGuidancePlan(recFingerprint, userId, updatedMap);
   } catch (e) {
     console.error('[guide-plan] failed to cache plan:', e.message);
-    // Still return the plan even if caching fails
+    // Return the plan even if caching fails
   }
 
-  return NextResponse.json({ plan, cached: false });
+  return NextResponse.json({ plan, cached: false, persona });
 }
 
 function extractDomain(url) {

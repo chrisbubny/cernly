@@ -473,7 +473,9 @@ export default function GuidedFix({
   const [planStatus,     setPlanStatus]     = useState('idle'); // idle|loading|ready|fallback|error
   const [fallbackActions, setFallbackActions] = useState([]);
   const [showAllEvidence, setShowAllEvidence] = useState(false);
-  const planFetched = useRef(false);
+  // planFetched tracks which persona we last fetched for, so we re-fetch when
+  // the user switches persona.  null = never fetched, string = last persona fetched.
+  const planFetchedForPersona = useRef(null);
 
   // ── restore persisted progress ────────────────────────────────────────────
   useEffect(() => {
@@ -484,19 +486,26 @@ export default function GuidedFix({
     if (progress.completedSteps?.length) setCompletedSteps(progress.completedSteps);
   }, []);  // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ── background AI plan fetch ───────────────────────────────────────────────
+  // ── Fetch guidance plan — fires on mount and whenever persona changes ───────
+  // We eagerly fetch with 'owner' on mount so the plan is often already loading
+  // before the user reaches step 2.  When they pick a different persona we
+  // re-fetch and the server returns from cache if it was already generated.
   useEffect(() => {
-    if (planFetched.current || !rec?.fingerprint || !reportId) return;
-    planFetched.current = true;
+    if (!rec?.fingerprint || !reportId) return;
+    const persona = selectedRole || 'owner';
+    // Skip if we already fetched for this persona
+    if (planFetchedForPersona.current === persona) return;
+    planFetchedForPersona.current = persona;
     setPlanStatus('loading');
+    setPlan(null);
+    setFallbackActions([]);
 
     fetch('/api/guide-plan', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ recFingerprint: rec.fingerprint, reportId }),
+      body: JSON.stringify({ recFingerprint: rec.fingerprint, reportId, persona }),
     })
       .then(r => {
-        // Surface non-OK responses — treat as fallback with rec.actions, not silent error
         if (!r.ok) {
           console.warn('[GuidedFix] guide-plan returned', r.status);
           return { _httpError: r.status };
@@ -505,13 +514,13 @@ export default function GuidedFix({
       })
       .then(data => {
         if (data._httpError) {
-          // HTTP error — use rec.actions as fallback if available
           setFallbackActions(rec?.actions || []);
           setPlanStatus('fallback');
         } else if (data.plan) {
           setPlan(data.plan);
           setPlanStatus('ready');
         } else if (data.fallback) {
+          // Bare fallback — group key not covered by static templates
           setFallbackActions(data.actions || rec?.actions || []);
           setPlanStatus('fallback');
         } else {
@@ -523,7 +532,8 @@ export default function GuidedFix({
         setFallbackActions(rec?.actions || []);
         setPlanStatus('error');
       });
-  }, [rec?.fingerprint, reportId]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Re-run when persona changes (selectedRole) or the rec/report changes
+  }, [selectedRole, rec?.fingerprint, reportId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── persist progress ───────────────────────────────────────────────────────
   const persistProgress = useCallback(async (updates) => {
@@ -561,7 +571,9 @@ export default function GuidedFix({
 
   const retryPlan = useCallback(() => {
     if (!rec?.fingerprint || !reportId) return;
-    planFetched.current = false;
+    const persona = selectedRole || 'owner';
+    // Reset so the effect will re-run
+    planFetchedForPersona.current = null;
     setPlanStatus('loading');
     setPlan(null);
     setFallbackActions([]);
@@ -569,10 +581,11 @@ export default function GuidedFix({
     fetch('/api/guide-plan', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ recFingerprint: rec.fingerprint, reportId }),
+      body: JSON.stringify({ recFingerprint: rec.fingerprint, reportId, persona }),
     })
       .then(r => r.ok ? r.json() : { _httpError: r.status })
       .then(data => {
+        planFetchedForPersona.current = persona;
         if (data._httpError) {
           setFallbackActions(rec?.actions || []);
           setPlanStatus('fallback');
@@ -591,7 +604,7 @@ export default function GuidedFix({
         setFallbackActions(rec?.actions || []);
         setPlanStatus('error');
       });
-  }, [rec?.fingerprint, rec?.actions, reportId]);
+  }, [selectedRole, rec?.fingerprint, rec?.actions, reportId]);
 
   const handleAskCernly = useCallback((context) => {
     if (!onAskCernly) return;
@@ -629,6 +642,7 @@ export default function GuidedFix({
   const expandedOtherEvidence = otherEvidence.slice(3);
 
   const catColors  = categoryColor(rec?.category);
+  // hasPlan covers both AI-generated and static-fallback plans (both use planStatus==='ready')
   const hasAiPlan  = planStatus === 'ready' && plan?.steps?.length > 0;
   const plainText  = plan?.evidenceSummary || buildPlainEnglishSummary(rec) || null;
 
@@ -954,7 +968,7 @@ export default function GuidedFix({
               </div>
 
               {planStatus === 'loading' && (
-                <Spinner label="Generating your personalised fix plan…" />
+                <Spinner label="Loading your fix plan…" />
               )}
 
               {hasAiPlan && (
@@ -964,6 +978,12 @@ export default function GuidedFix({
                       borderRadius:10, padding:'11px 14px', marginBottom:14, fontSize:12,
                       color:TEXT_SECONDARY, lineHeight:1.65 }}>
                       {plan.evidenceSummary}
+                      {plan.isStatic && (
+                        <span style={{ display:'block', marginTop:6, fontSize:10,
+                          color:TEXT_TERTIARY, fontWeight:600 }}>
+                          Evidence-based guidance • AI personalisation unavailable
+                        </span>
+                      )}
                     </div>
                   )}
                   {plan.steps.map((step, i) => (
@@ -987,6 +1007,8 @@ export default function GuidedFix({
               )}
 
               {(planStatus === 'fallback' || planStatus === 'error') && (
+                // This path only fires for recommendation types not yet covered
+                // by the static guidance library.  Should be rare.
                 <div>
                   <div style={{ background:'rgba(239,166,66,.07)',
                     border:'1px solid rgba(239,166,66,.3)', borderRadius:10,
@@ -994,9 +1016,8 @@ export default function GuidedFix({
                     color:'#7a4a00', lineHeight:1.65,
                     display:'flex', alignItems:'flex-start', justifyContent:'space-between', gap:8 }}>
                     <span>
-                      {planStatus === 'error'
-                        ? 'Personalised guidance is temporarily unavailable. Showing scan-identified actions below.'
-                        : 'AI-generated instructions are unavailable. Here are the actions identified by your scan.'}
+                      Detailed guidance is not yet available for this finding.
+                      The actions identified by your scan are shown below.
                     </span>
                     <button
                       onClick={retryPlan}
@@ -1037,8 +1058,8 @@ export default function GuidedFix({
                     <div style={{ background:SURFACE, border:`1px solid ${BORDER}`,
                       borderRadius:10, padding:'13px 15px' }}>
                       <p style={{ fontSize:13, color:TEXT_SECONDARY, lineHeight:1.7, margin:0 }}>
-                        No specific actions were captured for this recommendation.
-                        Use the &ldquo;Ask Cernly&rdquo; button to investigate further.
+                        The scan did not capture specific actions for this finding.
+                        Use Ask Cernly to get tailored guidance.
                       </p>
                       {onAskCernly && (
                         <button
