@@ -283,7 +283,7 @@ const EVIDENCE_SOURCE = {
  *   onAskCernly(issue, suggestedQ)   — opens the Ask Cernly drawer
  *   onVerify(issue)                  — triggers rescan + verification flow
  */
-function FixCard({ issue, n, impact, rec, workItem, onStatusChange, onAskCernly, onVerify, highlighted }) {
+function FixCard({ issue, n, impact, rec, workItem, onStatusChange, onAskCernly, onVerify, onGuide, highlighted }) {
   const [expanded, setExpanded] = useState(!!highlighted);
   const [guideOpen, setGuideOpen] = useState(false);
   const cardRef = useRef(null);
@@ -438,6 +438,21 @@ function FixCard({ issue, n, impact, rec, workItem, onStatusChange, onAskCernly,
 
             {/* Primary action buttons */}
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              {/* Guided fix CTA — only for image-optimization recs */}
+              {rec?.group_key === 'image-optimization' && onGuide && (
+                <button onClick={() => onGuide(rec)}
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: 6,
+                    background: 'linear-gradient(135deg,#8a46f8,#3687fa)', color: '#fff',
+                    border: 0, borderRadius: 9, padding: '7px 13px', fontSize: 12,
+                    fontWeight: 800, cursor: 'pointer', fontFamily: 'inherit',
+                    boxShadow: '0 3px 10px #7948f625' }}>
+                  Guide me through this fix
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                    strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M5 12h14M12 5l7 7-7 7"/>
+                  </svg>
+                </button>
+              )}
               {guidance.howToFix && (
                 <button onClick={() => setGuideOpen(g => !g)}
                   style={{ display: 'flex', alignItems: 'center', gap: 6, border: '1.5px solid #e9eaf2',
@@ -2059,6 +2074,7 @@ export default function ReportClient({ isPro, userName, userAvatar }) {
               workItem={workItem}
               highlighted={!!fp && fp === highlightedFp}
               onStatusChange={handleStatusChange}
+              onGuide={(r) => setGuidedFixRec(r)}
               onAskCernly={(iss, suggestedQ) => {
                 setDrawerContext({ title: iss.message, category: iss.area, detail: iss.description || iss.detail });
                 setDrawerOpen(true);
