@@ -1,7 +1,7 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   experimental: {
-    serverComponentsExternalPackages: ['pg'],
+    serverComponentsExternalPackages: ['pg', 'sharp'],
     instrumentationHook: true,
   },
   images: {
