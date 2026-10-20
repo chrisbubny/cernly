@@ -438,8 +438,8 @@ function FixCard({ issue, n, impact, rec, workItem, onStatusChange, onAskCernly,
 
             {/* Primary action buttons */}
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-              {/* Guided fix CTA — only for image-optimization recs */}
-              {rec?.group_key === 'image-optimization' && onGuide && (
+              {/* Guided fix CTA — all recommendation groups */}
+              {onGuide && (
                 <button onClick={() => onGuide(rec)}
                   style={{ display: 'inline-flex', alignItems: 'center', gap: 6,
                     background: 'linear-gradient(135deg,#8a46f8,#3687fa)', color: '#fff',
@@ -1608,13 +1608,11 @@ export default function ReportClient({ isPro, userName, userAvatar }) {
 
         // CTA buttons (shared between assessment and fallback paths)
         // recFp: fingerprint of the top rec to pre-select (optional)
-        // rec:   full rec object — if group_key is 'image-optimization', opens GuidedFix panel
-        // NOTE: Only promise "Guide me through this fix" when GuidedFix actually supports that group.
-        //       All other groups get "See how to fix this" → opens Action Plan with rec highlighted.
+        // rec:   full rec object — opens GuidedFix panel for all supported groups
         const renderCTAs = (showActionPlan, recFp = null, rec = null) => (
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', marginBottom: 16 }}>
             {showActionPlan && (
-              rec?.group_key === 'image-optimization' ? (
+              rec ? (
                 <button onClick={() => setGuidedFixRec(rec)}
                   style={{ display: 'inline-flex', alignItems: 'center', gap: 7,
                     background: 'linear-gradient(135deg,#8a46f8,#3687fa)', color: '#fff',
@@ -1628,23 +1626,18 @@ export default function ReportClient({ isPro, userName, userAvatar }) {
                   </svg>
                 </button>
               ) : (
-                <>
-                  <button onClick={() => { setActiveTab('action'); if (recFp) setHighlightedFp(recFp); }}
-                    style={{ display: 'inline-flex', alignItems: 'center', gap: 7,
-                      background: 'linear-gradient(135deg,#8a46f8,#3687fa)', color: '#fff',
-                      border: 0, borderRadius: 9, padding: '10px 18px', fontSize: 13,
-                      fontWeight: 800, cursor: 'pointer', fontFamily: 'inherit',
-                      boxShadow: '0 4px 18px #7948f640', letterSpacing: '-.01em' }}>
-                    See how to fix this
-                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                      strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M5 12h14M12 5l7 7-7 7"/>
-                    </svg>
-                  </button>
-                  <span style={{ fontSize: 11, color: 'rgba(255,255,255,.55)', fontStyle: 'italic' }}>
-                    Opens fix steps
-                  </span>
-                </>
+                <button onClick={() => { setActiveTab('action'); if (recFp) setHighlightedFp(recFp); }}
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: 7,
+                    background: 'linear-gradient(135deg,#8a46f8,#3687fa)', color: '#fff',
+                    border: 0, borderRadius: 9, padding: '10px 18px', fontSize: 13,
+                    fontWeight: 800, cursor: 'pointer', fontFamily: 'inherit',
+                    boxShadow: '0 4px 18px #7948f640', letterSpacing: '-.01em' }}>
+                  See how to fix this
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                    strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M5 12h14M12 5l7 7-7 7"/>
+                  </svg>
+                </button>
               )
             )}
           </div>

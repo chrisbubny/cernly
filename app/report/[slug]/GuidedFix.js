@@ -50,6 +50,20 @@ function confidenceBadge(confidence) {
 }
 
 // ---------------------------------------------------------------------------
+// MetricPill — compact key/value badge for performance metrics
+// ---------------------------------------------------------------------------
+function MetricPill({ label, value }) {
+  return (
+    <div style={{ display: 'inline-flex', alignItems: 'baseline', gap: 4,
+      background: '#ece8ff', borderRadius: 6, padding: '2px 8px' }}>
+      <span style={{ fontSize: 10, fontWeight: 800, color: PURPLE,
+        textTransform: 'uppercase', letterSpacing: '0.04em' }}>{label}</span>
+      <span style={{ fontSize: 11, fontWeight: 700, color: '#3d2d7a' }}>{value}</span>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Spinner
 // ---------------------------------------------------------------------------
 function Spinner() {
@@ -422,29 +436,40 @@ export default function GuidedFix({
         <div style={{ flex: 1, overflowY: 'auto', padding: '16px 18px',
           display: 'flex', flexDirection: 'column', gap: 14 }}>
 
-          {/* Evidence summary */}
-          {(evidence?.totalSavingsKib || evidence?.imageCount || evidence?.lcpImageUrl) && (
+          {/* Evidence / finding summary — shown for all recommendation groups */}
+          {(rec?.what_we_found || rec?.title) && (
             <div style={{ background: 'linear-gradient(145deg,#f7f4ff,#eef6ff 90%)',
               border: '1px solid #e5deff', borderRadius: 12, padding: '12px 14px' }}>
               <div style={{ fontSize: 11, fontWeight: 800, color: PURPLE,
                 textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8 }}>
                 What we found on your site
               </div>
-              {evidence.totalSavingsKib != null && (
-                <div style={{ fontSize: 13, fontWeight: 700, color: TEXT, marginBottom: 4 }}>
+              {rec.what_we_found && (
+                <div style={{ fontSize: 13, color: TEXT, lineHeight: 1.55, marginBottom: 6 }}>
+                  {rec.what_we_found}
+                </div>
+              )}
+              {/* Image-specific quick stats */}
+              {evidence?.totalSavingsKib != null && (
+                <div style={{ fontSize: 12, fontWeight: 700, color: '#5b3da3', marginBottom: 4 }}>
                   {evidence.totalSavingsKib} KiB of image savings available
                   {evidence.imageCount ? ` across ${evidence.imageCount} image${evidence.imageCount > 1 ? 's' : ''}` : ''}
                 </div>
               )}
-              {evidence.lcpImageUrl && (
+              {evidence?.lcpImageUrl && (
                 <div style={{ fontSize: 11, color: MUTED, marginBottom: 4, wordBreak: 'break-all' }}>
                   LCP image: <code style={{ background: '#ece8ff', borderRadius: 4, padding: '1px 5px',
                     color: PURPLE, fontSize: 11 }}>{evidence.lcpImageUrl}</code>
                 </div>
               )}
-              {evidence.imageUrls?.length > 0 && (
-                <div style={{ fontSize: 11, color: MUTED }}>
-                  {evidence.imageUrls.length} affected image{evidence.imageUrls.length > 1 ? 's' : ''} identified
+              {/* Performance metric quick stats */}
+              {(evidence?.lcp || evidence?.tbt || evidence?.cls) && (
+                <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 4 }}>
+                  {evidence.lcp  != null && <MetricPill label="LCP"  value={`${evidence.lcp}ms`}  />}
+                  {evidence.tbt  != null && <MetricPill label="TBT"  value={`${evidence.tbt}ms`}  />}
+                  {evidence.cls  != null && <MetricPill label="CLS"  value={evidence.cls}          />}
+                  {evidence.fcp  != null && <MetricPill label="FCP"  value={`${evidence.fcp}ms`}  />}
+                  {evidence.ttfb != null && <MetricPill label="TTFB" value={`${evidence.ttfb}ms`} />}
                 </div>
               )}
               {confBadge && (
