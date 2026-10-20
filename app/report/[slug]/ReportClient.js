@@ -233,7 +233,7 @@ function getContextualGuidance(issue, rec) {
   // 3. How to fix — use rec's actions[] if available; each action is a plain-text string
   let howToFix = [];
   if (Array.isArray(rec?.actions) && rec.actions.length > 0) {
-    howToFix = rec.actions.map(a => cleanMd(typeof a === 'string' ? a : (a.text || a.description || String(a))));
+    howToFix = rec.actions.map(a => cleanMd(typeof a === 'string' ? a : (a.detail || a.title || String(a))));
   } else if (issue.fix) {
     // Single fix hint from the finding itself
     howToFix = [cleanMd(issue.fix)];
@@ -1621,6 +1621,24 @@ export default function ReportClient({ isPro, userName, userAvatar }) {
             {/* ── COMPLETED ASSESSMENT ── */}
             {hasAssessment ? (
               <>
+                {/* Failed-audit warning — shown BEFORE headline so positive copy doesn't mislead */}
+                {assessment.coverage?.audits_failed?.length > 0 && (
+                  <div style={{ display: 'flex', gap: 9, alignItems: 'flex-start',
+                    background: '#fffbf0', border: '1px solid #f0e0b0', borderRadius: 9,
+                    padding: '9px 12px', marginBottom: 12 }}>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#d97706"
+                      strokeWidth="2" strokeLinecap="round" style={{ flexShrink: 0, marginTop: 1 }}>
+                      <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+                    </svg>
+                    <span style={{ fontSize: 11, color: '#92400e', lineHeight: 1.5 }}>
+                      <strong>Partial scan — </strong>
+                      {assessment.coverage.audits_failed.map(k => k.charAt(0).toUpperCase() + k.slice(1)).join(' and ')}{' '}
+                      {assessment.coverage.audits_failed.length === 1 ? 'data was' : 'data were'} unavailable.
+                      {' '}Conclusions about {assessment.coverage.audits_failed.length === 1 ? 'that area' : 'those areas'} are omitted from this assessment.
+                    </span>
+                  </div>
+                )}
+
                 {/* Headline */}
                 <h3 style={{ fontFamily: 'var(--font-manrope, Manrope, sans-serif)',
                   fontSize: 18, lineHeight: 1.3, letterSpacing: '-.04em',
@@ -1721,11 +1739,11 @@ export default function ReportClient({ isPro, userName, userAvatar }) {
                   </div>
                 )}
 
-                {/* Limitations / low-confidence note */}
-                {(limitations || confidenceNote) && (
+                {/* Low-confidence note — limitations are now shown above the headline */}
+                {confidenceNote && (
                   <div style={{ background: '#fffbf0', border: '1px solid #f0e0b0', borderRadius: 8,
                     padding: '8px 12px', marginBottom: 10, fontSize: 11, color: '#92400e', lineHeight: 1.5 }}>
-                    <strong>Note:</strong> {limitations || confidenceNote}
+                    <strong>Note:</strong> {confidenceNote}
                   </div>
                 )}
               </>
@@ -1733,7 +1751,7 @@ export default function ReportClient({ isPro, userName, userAvatar }) {
               <>
                 {/* ── FALLBACK — no assessment (failed / null / historical) ── */}
 
-                {/* Score-based strength highlight */}
+                {/* Score-based strength highlight — only for completed audits */}
                 {(() => {
                   const scores = report.scores || {};
                   const catChecks = [
@@ -1741,7 +1759,14 @@ export default function ReportClient({ isPro, userName, userAvatar }) {
                     { key: 'seo', label: 'SEO', score: scores.seo },
                     { key: 'security', label: 'Security', score: scores.security },
                     { key: 'accessibility', label: 'Accessibility', score: scores.accessibility },
-                  ].filter(c => typeof c.score === 'number' && c.score >= 80);
+                  ].filter(c => {
+                    if (typeof c.score !== 'number' || c.score < 80) return false;
+                    // Only highlight if audit actually completed — a score from a failed
+                    // audit should not be celebrated (e.g. a cached or partial result)
+                    const st = auditStatuses[c.key];
+                    if (st && st.status !== 'completed') return false;
+                    return true;
+                  });
                   const strength = catChecks[0] || null;
                   return strength ? (
                     <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 12,
