@@ -340,7 +340,181 @@ function RoleCard({ role, selected, onClick }) {
   );
 }
 
-function FixStepCard({ step, index, role, completedSteps, onToggleComplete, onAskCernly }) {
+// ---------------------------------------------------------------------------
+// Inline chat panel — displayed inside GuidedFix step 2 when Ask Cernly is clicked
+// ---------------------------------------------------------------------------
+
+const SUGGESTED_PROMPTS = [
+  'Explain this in simpler terms',
+  'How do I do this on my platform?',
+  'How do I check whether this worked?',
+  'I tried this and need help troubleshooting',
+];
+
+function InlineChatPanel({ step, messages, input, loading, error, inputRef, onInputChange, onSend, onClose }) {
+  const messagesEndRef = useRef(null);
+
+  // Scroll to bottom when messages update
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages, loading]);
+
+  const handleKeyDown = (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      onSend(input);
+    }
+  };
+
+  return (
+    <div style={{
+      marginTop: 16,
+      border: `1.5px solid ${PURPLE}`,
+      borderRadius: 14,
+      overflow: 'hidden',
+      background: BG,
+      boxShadow: `0 4px 20px rgba(121,72,246,.12)`,
+    }}>
+      {/* Chat header */}
+      <div style={{
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        padding: '10px 14px',
+        background: SURFACE_ALT,
+        borderBottom: `1px solid rgba(121,72,246,.15)`,
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <div style={{
+            width: 22, height: 22, borderRadius: 7,
+            background: GRAD, display: 'grid', placeItems: 'center', flexShrink: 0,
+          }}>
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round">
+              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+            </svg>
+          </div>
+          <div>
+            <div style={{ fontSize: 11, fontWeight: 800, color: PURPLE }}>Ask Cernly</div>
+            <div style={{ fontSize: 10, color: TEXT_TERTIARY, maxWidth: 260,
+              overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              About: {step.title}
+            </div>
+          </div>
+        </div>
+        <button onClick={onClose} aria-label="Close chat"
+          style={{ background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: 6,
+            width: 26, height: 26, cursor: 'pointer', display: 'grid', placeItems: 'center',
+            color: TEXT_SECONDARY }}>
+          <svg width="9" height="9" viewBox="0 0 12 12" fill="none">
+            <path d="M1 1l10 10M11 1 1 11" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/>
+          </svg>
+        </button>
+      </div>
+
+      {/* Message history */}
+      <div style={{ maxHeight: 240, overflowY: 'auto', padding: '10px 14px', display: 'flex', flexDirection: 'column', gap: 8 }}>
+        {messages.length === 0 && (
+          <p style={{ fontSize: 12, color: TEXT_TERTIARY, margin: 0, textAlign: 'center', padding: '8px 0' }}>
+            Ask a question about this step, or choose a suggested prompt below.
+          </p>
+        )}
+        {messages.map((m, i) => (
+          <div key={i} style={{
+            alignSelf: m.role === 'user' ? 'flex-end' : 'flex-start',
+            maxWidth: '88%',
+            background: m.role === 'user' ? GRAD : SURFACE,
+            color: m.role === 'user' ? '#fff' : TEXT_PRIMARY,
+            borderRadius: m.role === 'user' ? '12px 12px 2px 12px' : '12px 12px 12px 2px',
+            padding: '8px 12px',
+            fontSize: 12,
+            lineHeight: 1.65,
+          }}>
+            {m.content}
+          </div>
+        ))}
+        {loading && (
+          <div style={{ alignSelf: 'flex-start', display: 'flex', gap: 4, padding: '8px 12px',
+            background: SURFACE, borderRadius: '12px 12px 12px 2px' }}>
+            {[0,1,2].map(d => (
+              <div key={d} style={{
+                width: 6, height: 6, borderRadius: '50%', background: TEXT_TERTIARY,
+                animation: `bounce .9s ${d * 0.18}s infinite`,
+              }}/>
+            ))}
+          </div>
+        )}
+        {error && (
+          <div style={{ background: 'rgba(239,100,115,.08)', border: '1px solid rgba(239,100,115,.25)',
+            borderRadius: 8, padding: '8px 12px', fontSize: 12, color: '#c0152f',
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+            <span>{error}</span>
+            <button onClick={() => onSend(messages[messages.length - 1]?.content || '')}
+              style={{ background: 'none', border: 'none', color: PURPLE, fontSize: 11,
+                fontWeight: 700, cursor: 'pointer', fontFamily: FONT, flexShrink: 0 }}>
+              Retry
+            </button>
+          </div>
+        )}
+        <div ref={messagesEndRef} />
+      </div>
+
+      {/* Suggested prompts — only show if no messages yet */}
+      {messages.length === 0 && (
+        <div style={{ padding: '0 14px 10px', display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+          {SUGGESTED_PROMPTS.map(prompt => (
+            <button key={prompt} onClick={() => onSend(prompt)}
+              style={{
+                background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: 8,
+                padding: '5px 10px', fontSize: 11, fontWeight: 600, color: TEXT_SECONDARY,
+                cursor: 'pointer', fontFamily: FONT, lineHeight: 1.4,
+              }}>
+              {prompt}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* Input row */}
+      <div style={{ display: 'flex', gap: 8, padding: '10px 14px',
+        borderTop: `1px solid ${BORDER}`, background: SURFACE }}>
+        <input
+          ref={inputRef}
+          value={input}
+          onChange={e => onInputChange(e.target.value)}
+          onKeyDown={handleKeyDown}
+          placeholder="Ask a follow-up question…"
+          disabled={loading}
+          style={{
+            flex: 1, border: `1.5px solid ${BORDER}`, borderRadius: 8,
+            padding: '8px 12px', fontSize: 12, fontFamily: FONT,
+            background: BG, color: TEXT_PRIMARY, outline: 'none',
+          }}
+        />
+        <button
+          onClick={() => onSend(input)}
+          disabled={!input.trim() || loading}
+          style={{
+            background: (!input.trim() || loading) ? BORDER : GRAD,
+            border: 'none', borderRadius: 8, padding: '8px 12px',
+            color: (!input.trim() || loading) ? TEXT_TERTIARY : '#fff',
+            cursor: (!input.trim() || loading) ? 'default' : 'pointer',
+            fontFamily: FONT, fontSize: 12, fontWeight: 700, flexShrink: 0,
+          }}
+        >
+          Send
+        </button>
+      </div>
+
+      {/* Bounce animation */}
+      <style>{`
+        @keyframes bounce {
+          0%,80%,100%{transform:translateY(0)}
+          40%{transform:translateY(-5px)}
+        }
+      `}</style>
+    </div>
+  );
+}
+
+function FixStepCard({ step, index, role, completedSteps, onToggleComplete, onAskStep }) {
   const instructions = role === 'developer'
     ? step.developer
     : role === 'cms-admin'
@@ -436,9 +610,9 @@ function FixStepCard({ step, index, role, completedSteps, onToggleComplete, onAs
             </>
           ) : 'Mark complete'}
         </button>
-        {onAskCernly && (
+        {onAskStep && (
           <button
-            onClick={() => onAskCernly({ title: step.title, detail: instructions.action })}
+            onClick={() => onAskStep(step)}
             style={{
               background:'transparent', border:'none', cursor:'pointer',
               fontSize:11, color:PURPLE, fontWeight:700, fontFamily:FONT,
@@ -476,6 +650,14 @@ export default function GuidedFix({
   // planFetched tracks which persona we last fetched for, so we re-fetch when
   // the user switches persona.  null = never fetched, string = last persona fetched.
   const planFetchedForPersona = useRef(null);
+
+  // Inline chat state — null = closed, object = open for a specific step
+  const [chatStep,     setChatStep]     = useState(null); // step object
+  const [chatMessages, setChatMessages] = useState([]);   // { role, content }[]
+  const [chatInput,    setChatInput]    = useState('');
+  const [chatLoading,  setChatLoading]  = useState(false);
+  const [chatError,    setChatError]    = useState(null);
+  const chatInputRef = useRef(null);
 
   // ── restore persisted progress ────────────────────────────────────────────
   useEffect(() => {
@@ -606,15 +788,47 @@ export default function GuidedFix({
       });
   }, [selectedRole, rec?.fingerprint, rec?.actions, reportId]);
 
-  const handleAskCernly = useCallback((context) => {
-    if (!onAskCernly) return;
-    onAskCernly({
-      title: rec?.title || 'Guided fix',
-      category: rec?.category || '',
-      detail: context?.detail || '',
-      step: STEPS[currentStep]?.label,
-    });
-  }, [onAskCernly, rec, currentStep]);
+  // Open inline chat for a specific step
+  const handleAskStep = useCallback((step) => {
+    setChatStep(step);
+    setChatMessages([]);
+    setChatInput('');
+    setChatError(null);
+    // Focus input after next paint
+    setTimeout(() => chatInputRef.current?.focus(), 80);
+  }, []);
+
+  // Send a message to /api/ask with full step context
+  const sendChatMessage = useCallback(async (question) => {
+    if (!question?.trim() || chatLoading) return;
+    const q = question.trim();
+    setChatInput('');
+    setChatError(null);
+    const newMessages = [...chatMessages, { role: 'user', content: q }];
+    setChatMessages(newMessages);
+    setChatLoading(true);
+    try {
+      const res = await fetch('/api/ask', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          question: q,
+          reportId,
+          recFingerprint: rec?.fingerprint,
+          activeStep: chatStep,
+          messages: chatMessages.slice(-6),
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      const answer = data.answer || 'Sorry, I couldn\'t get a response.';
+      setChatMessages(prev => [...prev, { role: 'assistant', content: answer }]);
+    } catch {
+      setChatError('Could not reach the assistant — check your connection and try again.');
+      setChatMessages(prev => prev.slice(0, -1)); // remove optimistic user message
+    } finally {
+      setChatLoading(false);
+    }
+  }, [chatLoading, chatMessages, chatStep, rec?.fingerprint, reportId]);
 
   const handleRescan = useCallback(() => {
     if (onStatusChange) onStatusChange(rec?.fingerprint, 'verify');
@@ -1000,7 +1214,7 @@ export default function GuidedFix({
                       role={selectedRole}
                       completedSteps={completedSteps}
                       onToggleComplete={toggleComplete}
-                      onAskCernly={onAskCernly ? handleAskCernly : null}
+                      onAskStep={handleAskStep}
                     />
                   ))}
                   {completedSteps.length > 0 && (
@@ -1008,6 +1222,21 @@ export default function GuidedFix({
                       fontSize:12, color:TEXT_TERTIARY }}>
                       {completedSteps.length} of {plan.steps.length} steps marked complete
                     </div>
+                  )}
+
+                  {/* ── Inline Ask Cernly chat panel ─────────────────────── */}
+                  {chatStep && (
+                    <InlineChatPanel
+                      step={chatStep}
+                      messages={chatMessages}
+                      input={chatInput}
+                      loading={chatLoading}
+                      error={chatError}
+                      inputRef={chatInputRef}
+                      onInputChange={setChatInput}
+                      onSend={sendChatMessage}
+                      onClose={() => { setChatStep(null); setChatMessages([]); setChatInput(''); setChatError(null); }}
+                    />
                   )}
                 </>
               )}
@@ -1067,16 +1296,14 @@ export default function GuidedFix({
                         The scan did not capture specific actions for this finding.
                         Use Ask Cernly to get tailored guidance.
                       </p>
-                      {onAskCernly && (
-                        <button
-                          onClick={() => handleAskCernly({ title: rec?.title, detail: rec?.what_we_found })}
-                          style={{ marginTop:10, background:GRAD, border:'none', borderRadius:8,
-                            color:'#fff', fontSize:12, fontWeight:700, cursor:'pointer',
-                            padding:'8px 16px', fontFamily:FONT }}
-                        >
-                          Ask Cernly about this →
-                        </button>
-                      )}
+                      <button
+                        onClick={() => handleAskStep({ title: rec?.title || 'This finding', owner: { action: rec?.what_we_found || rec?.explanation || '' } })}
+                        style={{ marginTop:10, background:GRAD, border:'none', borderRadius:8,
+                          color:'#fff', fontSize:12, fontWeight:700, cursor:'pointer',
+                          padding:'8px 16px', fontFamily:FONT }}
+                      >
+                        Ask Cernly about this →
+                      </button>
                     </div>
                   )}
                 </div>

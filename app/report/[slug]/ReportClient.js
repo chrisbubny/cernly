@@ -63,7 +63,7 @@ function SevDot({ sev }) {
 }
 
 /* ─── Finding row — expandable ─── */
-function FindingRow({ issue }) {
+function FindingRow({ issue, rec, onGuide }) {
   const [open, setOpen] = useState(false);
   const hasDetail = !!(issue.fix); // description always visible; only expand for fix guide
   const sev = issue.severity;
@@ -114,12 +114,33 @@ function FindingRow({ issue }) {
           </div>
         </div>
       )}
+      {/* Help me fix this — links to GuidedFix when a recommendation is matched */}
+      {rec && onGuide && (sev === 'critical' || sev === 'warning') && (
+        <div style={{ padding: '0 18px 12px 37px' }}>
+          <button
+            onClick={() => onGuide(rec)}
+            style={{
+              display: 'inline-flex', alignItems: 'center', gap: 6,
+              background: 'linear-gradient(135deg,#8a46f8,#3687fa)', color: '#fff',
+              border: 0, borderRadius: 8, padding: '6px 12px', fontSize: 11,
+              fontWeight: 800, cursor: 'pointer', fontFamily: 'inherit',
+              boxShadow: '0 2px 8px #7948f625',
+            }}
+          >
+            Help me fix this
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+              strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M5 12h14M12 5l7 7-7 7"/>
+            </svg>
+          </button>
+        </div>
+      )}
     </div>
   );
 }
 
 /* ─── Category section ─── */
-function CategorySection({ label, accent, issues, auditStatus, sectionSummary }) {
+function CategorySection({ label, accent, issues, auditStatus, sectionSummary, recMap, onGuide }) {
   const [collapsed, setCollapsed] = useState(false);
   const crit = issues.filter(i => i.severity === 'critical').length;
   const warn = issues.filter(i => i.severity === 'warning').length;
@@ -187,7 +208,11 @@ function CategorySection({ label, accent, issues, auditStatus, sectionSummary })
                       <p style={{ fontSize: 12.5, color: '#3d4259', lineHeight: 1.6, margin: 0 }}>{sectionSummary}</p>
                     </div>
                   )}
-                  {issues.map((issue, i) => <FindingRow key={i} issue={issue} />)}
+                  {issues.map((issue, i) => {
+                    const fp = issue.fingerprintId || issue.fingerprint || '';
+                    const issueRec = recMap ? (recMap[fp] || null) : null;
+                    return <FindingRow key={i} issue={issue} rec={issueRec} onGuide={onGuide} />;
+                  })}
                 </>
           }
         </div>
@@ -464,10 +489,11 @@ function FixCard({ issue, n, impact, rec, workItem, onStatusChange, onAskCernly,
               <button onClick={() => onVerify(issue)}
                 style={{ display: 'flex', alignItems: 'center', gap: 6, border: '1.5px solid #e9eaf2',
                   background: persistedStatus === 'verify' ? '#f1edff' : '#fff',
-                  color: persistedStatus === 'verify' ? '#7948f6' : '#4b5168',
+                  color: persistedStatus === 'verify' ? '#7948f6' : '#83899c',
                   borderRadius: 9, padding: '7px 13px',
-                  fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+                  fontSize: 11, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit',
+                  opacity: (onGuide && rec && persistedStatus !== 'verify') ? 0.75 : 1 }}>
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
                   <path d="M21 12a9 9 0 1 1-9-9M9 12l2 2 4-4"/>
                 </svg>
                 Verify fix
@@ -2059,7 +2085,9 @@ export default function ReportClient({ isPro, userName, userAvatar }) {
             <CategorySection key={label} label={label} accent={accent}
               issues={allIssues.filter(match)}
               auditStatus={auditStatuses[auditKey]}
-              sectionSummary={sectionSummaries?.[summaryKey] || null} />
+              sectionSummary={sectionSummaries?.[summaryKey] || null}
+              recMap={recMap}
+              onGuide={(r) => setGuidedFixRec(r)} />
           ))
         }
       </div>
