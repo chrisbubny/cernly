@@ -251,12 +251,13 @@ function getContextualGuidance(issue, rec) {
 
 /* Status config for fix lifecycle */
 const FIX_STATUSES = {
-  open:        { label: 'Open',           color: '#efa642', bg: '#fff8ee' },
-  in_progress: { label: 'In progress',    color: '#3687fa', bg: '#eef5ff' },
-  verify:      { label: 'Ready to verify',color: '#7948f6', bg: '#f1edff' },
-  fixed:       { label: 'Verified fixed', color: '#19b987', bg: '#edf9f4' },
-  still_open:  { label: 'Still detected', color: '#ef6473', bg: '#fff0f2' },
-  dismissed:   { label: 'Dismissed',      color: '#b0b4c8', bg: '#f4f5fb' },
+  open:           { label: 'Open',                    color: '#efa642', bg: '#fff8ee' },
+  in_progress:    { label: 'In progress',             color: '#3687fa', bg: '#eef5ff' },
+  verify:         { label: 'Awaiting verification',   color: '#7948f6', bg: '#f1edff' },
+  fixed:          { label: 'Likely resolved',         color: '#19b987', bg: '#edf9f4' },
+  still_open:     { label: 'Still detected',          color: '#ef6473', bg: '#fff0f2' },
+  dismissed:      { label: 'Dismissed',               color: '#b0b4c8', bg: '#f4f5fb' },
+  unable_verify:  { label: 'Unable to verify',        color: '#83899c', bg: '#f4f5fb' },
 };
 
 const EVIDENCE_SOURCE = {
@@ -281,9 +282,21 @@ const EVIDENCE_SOURCE = {
  *   onAskCernly(issue, suggestedQ)   — opens the Ask Cernly drawer
  *   onVerify(issue)                  — triggers rescan + verification flow
  */
-function FixCard({ issue, n, impact, rec, workItem, onStatusChange, onAskCernly, onVerify }) {
-  const [expanded, setExpanded] = useState(false);
+function FixCard({ issue, n, impact, rec, workItem, onStatusChange, onAskCernly, onVerify, highlighted }) {
+  const [expanded, setExpanded] = useState(!!highlighted);
   const [guideOpen, setGuideOpen] = useState(false);
+  const cardRef = useRef(null);
+
+  // When pre-selected via URL param: auto-expand and scroll into view
+  useEffect(() => {
+    if (!highlighted) return;
+    setExpanded(true);
+    const el = cardRef.current;
+    if (el) {
+      // Small delay so the tab has rendered before we scroll
+      setTimeout(() => el.scrollIntoView({ behavior: 'smooth', block: 'nearest' }), 80);
+    }
+  }, [highlighted]);
 
   // Derive displayed status: prefer DB-persisted, fall back to local default
   const persistedStatus = workItem?.userStatus || 'open';
@@ -291,9 +304,10 @@ function FixCard({ issue, n, impact, rec, workItem, onStatusChange, onAskCernly,
 
   // Map verified_status from server to display FIX_STATUS key
   const effectiveStatusKey = (() => {
-    if (verifiedStatus === 'likely_resolved') return 'fixed';
-    if (verifiedStatus === 'still_detected')  return 'still_open';
+    if (verifiedStatus === 'likely_resolved')    return 'fixed';
+    if (verifiedStatus === 'still_detected')     return 'still_open';
     if (verifiedStatus === 'partially_resolved') return 'still_open';
+    if (verifiedStatus === 'unable_to_verify')   return 'unable_verify';
     return persistedStatus; // user's own workflow status
   })();
 
@@ -326,8 +340,10 @@ function FixCard({ issue, n, impact, rec, workItem, onStatusChange, onAskCernly,
   }
 
   return (
-    <div style={{ background: '#fff', border: '1px solid #e9eaf2', borderRadius: 16,
-      marginBottom: 8, overflow: 'hidden', boxShadow: '0 1px 6px #1b1d3206' }}>
+    <div ref={cardRef} style={{ background: '#fff',
+      border: highlighted ? '2px solid #7948f6' : '1px solid #e9eaf2',
+      borderRadius: 16, marginBottom: 8, overflow: 'hidden',
+      boxShadow: highlighted ? '0 0 0 4px #7948f615, 0 1px 6px #1b1d3206' : '0 1px 6px #1b1d3206' }}>
 
       {/* Compact summary row — always visible */}
       <button onClick={() => setExpanded(e => !e)}
@@ -1196,6 +1212,7 @@ export default function ReportClient({ isPro, userName, userAvatar }) {
   const [workItemsLoaded, setWorkItemsLoaded] = useState(false);
   const [workItemError, setWorkItemError] = useState(null); // { fingerprint, message } for visible error
   const [verifyingFingerprint, setVerifyingFingerprint] = useState(null); // fingerprint being verified
+  const [highlightedFp, setHighlightedFp]   = useState(null);            // pre-selected rec from ?rec= param
 
   const RESCAN_STAGES = [
     'Fetching page…',
@@ -1314,13 +1331,21 @@ export default function ReportClient({ isPro, userName, userAvatar }) {
 
   const displayName = userName || 'User';
 
-  // Auto-open Progress tab when arriving from a rescan (?from=rescan)
-  // so the user immediately sees what changed.
-  // Also trigger server-side verification if ?verify=<fingerprint> present.
+  // Auto-open tabs based on URL params on mount:
+  //   ?from=rescan     → Progress tab (user just rescanned)
+  //   ?rec=<fp>        → Action Plan tab with that rec pre-selected and highlighted
   useEffect(() => {
     if (typeof window === 'undefined') return;
     const params = new URLSearchParams(window.location.search);
-    if (params.get('from') === 'rescan') setActiveTab('progress');
+    if (params.get('from') === 'rescan') {
+      setActiveTab('progress');
+    } else {
+      const recFp = params.get('rec');
+      if (recFp) {
+        setActiveTab('action');
+        setHighlightedFp(recFp);
+      }
+    }
   }, []);
 
   // When a ?verify=<fingerprint>&prevReportId=<id> arrives on a freshly loaded report,
@@ -1560,10 +1585,14 @@ export default function ReportClient({ isPro, userName, userAvatar }) {
           ? assessment.confidence?.explanation : null;
 
         // CTA buttons (shared between assessment and fallback paths)
-        const renderCTAs = (showActionPlan) => (
+        // recFp: fingerprint of the top rec to pre-select in the Action Plan tab (optional)
+        const renderCTAs = (showActionPlan, recFp = null) => (
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 16 }}>
             {showActionPlan && (
-              <button onClick={() => setActiveTab('action')}
+              <button onClick={() => {
+                setActiveTab('action');
+                if (recFp) setHighlightedFp(recFp);
+              }}
                 style={{ display: 'inline-flex', alignItems: 'center', gap: 7,
                   background: 'linear-gradient(135deg,#8a46f8,#3687fa)', color: '#fff',
                   border: 0, borderRadius: 9, padding: '9px 16px', fontSize: 12,
@@ -1687,20 +1716,23 @@ export default function ReportClient({ isPro, userName, userAvatar }) {
                   </div>
                 )}
 
-                {/* Top opportunity */}
+                {/* Top opportunity — "Your next best step" */}
                 {topOpportunity ? (
                   <div style={{ background: 'rgba(255,255,255,.72)', border: '1px solid #e4daff',
                     borderRadius: 10, padding: '12px 14px', marginBottom: 14 }}>
                     <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: '.07em',
                       textTransform: 'uppercase', color: '#9898b0', marginBottom: 7 }}>
-                      Top opportunity
+                      Your next best step
                     </div>
                     <p style={{ fontSize: 13, fontWeight: 700, color: '#3b3f56', margin: '0 0 6px', lineHeight: 1.4 }}>
                       {topOpportunity.title}
                     </p>
-                    <p style={{ fontSize: 12, color: '#5a5a78', margin: 0, lineHeight: 1.6 }}>
-                      {topOpportunity.rationale}
-                    </p>
+                    {/* Prefer the saved rec's impact language; fall back to assessment rationale */}
+                    {(linkedRec?.why_it_matters || linkedRec?.what_we_found || topOpportunity.rationale) && (
+                      <p style={{ fontSize: 12, color: '#5a5a78', margin: 0, lineHeight: 1.6 }}>
+                        {linkedRec?.why_it_matters || linkedRec?.what_we_found || topOpportunity.rationale}
+                      </p>
+                    )}
                   </div>
                 ) : recs.length === 0 ? (
                   <div style={{ display: 'flex', gap: 7, alignItems: 'center',
@@ -1717,7 +1749,7 @@ export default function ReportClient({ isPro, userName, userAvatar }) {
                 ) : null}
 
                 {/* CTAs — prominent, immediately after top opportunity */}
-                {renderCTAs(topOpportunity != null || recs.length > 0)}
+                {renderCTAs(topOpportunity != null || recs.length > 0, displayRec?.fingerprint || null)}
 
                 {/* Next steps */}
                 {assessment.next_steps?.length > 0 && (
@@ -1798,13 +1830,13 @@ export default function ReportClient({ isPro, userName, userAvatar }) {
                   </p>
                 ) : null}
 
-                {/* Top recommendation box */}
+                {/* Top recommendation box — "Your next best step" */}
                 {topRec && (
                   <div style={{ background: 'rgba(255,255,255,.72)', border: '1px solid #e4daff',
                     borderRadius: 10, padding: '12px 14px', marginBottom: 14 }}>
                     <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: '.07em',
                       textTransform: 'uppercase', color: '#9898b0', marginBottom: 7 }}>
-                      Where to focus first
+                      Your next best step
                     </div>
                     <p style={{ fontSize: 13, fontWeight: 700, color: '#3b3f56', margin: '0 0 5px', lineHeight: 1.4 }}>
                       {topRec.title}
@@ -1826,7 +1858,7 @@ export default function ReportClient({ isPro, userName, userAvatar }) {
                 )}
 
                 {/* CTAs */}
-                {renderCTAs(!!topRec)}
+                {renderCTAs(!!topRec, topRec?.fingerprint || null)}
               </>
             )}
 
@@ -1936,6 +1968,39 @@ export default function ReportClient({ isPro, userName, userAvatar }) {
         <p style={{ fontSize: 13, color: '#83899c', margin: 0 }}>
           {priorities.length} prioritized fixes · mark progress as you go
         </p>
+        {/* Work-item status tally — only when there are tracked items */}
+        {(() => {
+          const counts = { open: 0, in_progress: 0, verify: 0, fixed: 0, still_open: 0, unable_verify: 0 };
+          priorities.forEach(issue => {
+            const fp = issue.fingerprintId || issue.fingerprint || '';
+            const wi = workItems[fp];
+            const vs = wi?.verifiedStatus;
+            const us = wi?.userStatus || 'open';
+            let key;
+            if (vs === 'likely_resolved')    key = 'fixed';
+            else if (vs === 'still_detected' || vs === 'partially_resolved') key = 'still_open';
+            else if (vs === 'unable_to_verify') key = 'unable_verify';
+            else key = us;
+            if (counts[key] !== undefined) counts[key]++;
+          });
+          const active = Object.entries(counts).filter(([, v]) => v > 0);
+          if (active.length === 0 || !workItemsLoaded) return null;
+          return (
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 10 }}>
+              {active.map(([key, count]) => {
+                const st = FIX_STATUSES[key];
+                if (!st) return null;
+                return (
+                  <span key={key} style={{ display: 'inline-flex', alignItems: 'center', gap: 4,
+                    background: st.bg, borderRadius: 20, padding: '3px 10px',
+                    fontSize: 11, fontWeight: 700, color: st.color }}>
+                    {count} {st.label.toLowerCase()}
+                  </span>
+                );
+              })}
+            </div>
+          );
+        })()}
       </div>
 
       {/* Persistence error banner */}
@@ -1972,6 +2037,7 @@ export default function ReportClient({ isPro, userName, userAvatar }) {
             <FixCard key={i} issue={issue} n={i + 1} impact={getImpact(issue, i)}
               rec={matchedRec}
               workItem={workItem}
+              highlighted={!!fp && fp === highlightedFp}
               onStatusChange={handleStatusChange}
               onAskCernly={(iss, suggestedQ) => {
                 setDrawerContext({ title: iss.message, category: iss.area, detail: iss.description || iss.detail });
