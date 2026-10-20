@@ -1598,7 +1598,7 @@ export default function ReportClient({ isPro, userName, userAvatar }) {
                   border: 0, borderRadius: 9, padding: '9px 16px', fontSize: 12,
                   fontWeight: 800, cursor: 'pointer', fontFamily: 'inherit',
                   boxShadow: '0 4px 14px #7948f630' }}>
-                See action plan
+                Guide me through this fix
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                   strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M5 12h14M12 5l7 7-7 7"/>
