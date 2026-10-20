@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useParams, useSearchParams, useRouter } from 'next/navigation';
 import { useClerk } from '@clerk/nextjs';
 import { compareScans } from '@/lib/comparison';
+import GuidedFix from './GuidedFix';
 
 /* ─── SVG stroke attrs ─── */
 const sa = { fill: 'none', stroke: 'currentColor', strokeWidth: 1.8, strokeLinecap: 'round', strokeLinejoin: 'round' };
@@ -858,7 +859,7 @@ function UxCard({ uxScore, uxInsights, uxAnnotations, visionStatus, siteType, ur
 }
 
 /* ─── Ask Cernly drawer ─── */
-function AskCernlyDrawer({ reportId, domain, onClose, initialContext, initialMessage }) {
+function AskCernlyDrawer({ reportId, domain, onClose, initialContext, initialMessage, recFingerprint, activeStep }) {
   const openingMsg = initialContext
     ? `I'm looking at the **${initialContext.category || 'finding'}** issue: **${initialContext.title}**.\n\n${initialContext.detail ? initialContext.detail.replace(/\[([^\]]+)\]\([^)]+\)/g, '$1').slice(0, 200) : 'What would you like to know about this finding?'}`
     : `Hi! I've analyzed **${domain || 'this site'}** and I'm ready to help. Ask me what a finding means, how to fix it, or where to start.`;
@@ -895,7 +896,11 @@ function AskCernlyDrawer({ reportId, domain, onClose, initialContext, initialMes
       const res = await fetch('/api/ask', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ question: q, reportId, messages: updated.slice(-6) }),
+        body: JSON.stringify({
+          question: q, reportId, messages: updated.slice(-6),
+          ...(recFingerprint ? { recFingerprint } : {}),
+          ...(activeStep ? { activeStep } : {}),
+        }),
       });
       const data = await res.json();
       setMessages(m => [...m, { role: 'assistant', content: data.answer || 'Sorry, something went wrong.' }]);
@@ -1213,6 +1218,8 @@ export default function ReportClient({ isPro, userName, userAvatar }) {
   const [workItemError, setWorkItemError] = useState(null); // { fingerprint, message } for visible error
   const [verifyingFingerprint, setVerifyingFingerprint] = useState(null); // fingerprint being verified
   const [highlightedFp, setHighlightedFp]   = useState(null);            // pre-selected rec from ?rec= param
+  // Stage 6: guided fix panel — null = closed, rec object = open
+  const [guidedFixRec, setGuidedFixRec]     = useState(null);
 
   const RESCAN_STAGES = [
     'Fetching page…',
@@ -1585,13 +1592,19 @@ export default function ReportClient({ isPro, userName, userAvatar }) {
           ? assessment.confidence?.explanation : null;
 
         // CTA buttons (shared between assessment and fallback paths)
-        // recFp: fingerprint of the top rec to pre-select in the Action Plan tab (optional)
-        const renderCTAs = (showActionPlan, recFp = null) => (
+        // recFp: fingerprint of the top rec to pre-select (optional)
+        // rec:   full rec object — if group_key is 'image-optimization', opens GuidedFix panel
+        const renderCTAs = (showActionPlan, recFp = null, rec = null) => (
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 16 }}>
             {showActionPlan && (
               <button onClick={() => {
-                setActiveTab('action');
-                if (recFp) setHighlightedFp(recFp);
+                // PoC: open GuidedFix panel for image-optimization recs; fallback to tab for others
+                if (rec && rec.group_key === 'image-optimization') {
+                  setGuidedFixRec(rec);
+                } else {
+                  setActiveTab('action');
+                  if (recFp) setHighlightedFp(recFp);
+                }
               }}
                 style={{ display: 'inline-flex', alignItems: 'center', gap: 7,
                   background: 'linear-gradient(135deg,#8a46f8,#3687fa)', color: '#fff',
@@ -1749,7 +1762,7 @@ export default function ReportClient({ isPro, userName, userAvatar }) {
                 ) : null}
 
                 {/* CTAs — prominent, immediately after top opportunity */}
-                {renderCTAs(topOpportunity != null || recs.length > 0, displayRec?.fingerprint || null)}
+                {renderCTAs(topOpportunity != null || recs.length > 0, displayRec?.fingerprint || null, displayRec)}
 
                 {/* Next steps */}
                 {assessment.next_steps?.length > 0 && (
@@ -1858,7 +1871,7 @@ export default function ReportClient({ isPro, userName, userAvatar }) {
                 )}
 
                 {/* CTAs */}
-                {renderCTAs(!!topRec, topRec?.fingerprint || null)}
+                {renderCTAs(!!topRec, topRec?.fingerprint || null, topRec)}
               </>
             )}
 
@@ -2523,7 +2536,32 @@ export default function ReportClient({ isPro, userName, userAvatar }) {
         <AskCernlyDrawer reportId={id} domain={domain}
           initialContext={drawerContext?._initialMessage ? null : drawerContext}
           initialMessage={drawerContext?._initialMessage || null}
+          recFingerprint={drawerContext?._recFingerprint || null}
+          activeStep={drawerContext?._activeStep || null}
           onClose={() => { setDrawerOpen(false); setDrawerContext(null); }} />
+      )}
+
+      {/* Guided Fix panel — PoC: image-optimization group only */}
+      {guidedFixRec && report && (
+        <GuidedFix
+          rec={guidedFixRec}
+          reportId={id}
+          pageUrl={report.url}
+          workItem={workItems[guidedFixRec.fingerprint] || null}
+          onClose={() => setGuidedFixRec(null)}
+          onStatusChange={(recFp, newStatus) => {
+            // Adapt fingerprint-based call to issue-based handleStatusChange
+            handleStatusChange({ fingerprintId: recFp, fingerprint: recFp }, newStatus);
+          }}
+          onAskCernly={({ title, category, detail, recFingerprint, activeStep }) => {
+            setDrawerContext({
+              title, category, detail,
+              _recFingerprint: recFingerprint,
+              _activeStep: activeStep,
+            });
+            setDrawerOpen(true);
+          }}
+        />
       )}
 
       <div style={{ display: 'grid', gridTemplateColumns: '244px minmax(0,1fr)', minHeight: '100vh' }}

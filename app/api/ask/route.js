@@ -3,7 +3,7 @@ import { getReport } from '@/lib/store';
 import { buildScoreLines } from '@/lib/scoring';
 
 // POST /api/ask
-// Body: { question, reportId, messages?, findingFingerprintId? }
+// Body: { question, reportId, messages?, findingFingerprintId?, recFingerprint?, activeStep? }
 // Returns: { answer }
 export async function POST(request) {
   const apiKey = process.env.ANTHROPIC_API_KEY;
@@ -14,7 +14,7 @@ export async function POST(request) {
   let body = {};
   try { body = await request.json(); } catch {}
 
-  const { question, reportId, messages = [], findingFingerprintId } = body;
+  const { question, reportId, messages = [], findingFingerprintId, recFingerprint, activeStep } = body;
   if (!question?.trim()) {
     return NextResponse.json({ error: 'question required' }, { status: 400 });
   }
@@ -90,13 +90,28 @@ ${a.coverage?.limitations && !a.coverage.limitations.match(/^no significant/i) ?
           recsBlock = `\nKEY RECOMMENDATIONS (${topRecs.length} of ${(report.recommendations || []).length} total):\n${recLines}`;
         }
 
+        // Active guided fix step context — wires Ask Cernly to the specific
+        // recommendation and step the user is currently working on.
+        let stepBlock = '';
+        if (recFingerprint && activeStep) {
+          const activeRec = (report.recommendations || []).find(r => r.fingerprint === recFingerprint);
+          stepBlock = `
+ACTIVE GUIDED FIX:
+Recommendation: ${activeRec?.title || recFingerprint}
+Current step: "${activeStep.title}"
+Step guidance: ${activeStep.owner?.action || activeStep.developer?.action || ''}
+${activeStep.developer?.tooling ? `Tooling: ${activeStep.developer.tooling}` : ''}
+${activeStep.developer?.notes ? `Notes: ${activeStep.developer.notes}` : ''}
+`;
+        }
+
         reportContext = `
 SITE CONTEXT:
 Domain: ${domain}
 Scores: ${scoreLines}
 Key issues:
 ${issueLines || 'None found'}
-${focusBlock}${assessmentBlock}${recsBlock}${!assessmentBlock && report.aiSummary ? `\nAI Summary: ${report.aiSummary}` : ''}
+${focusBlock}${stepBlock}${assessmentBlock}${recsBlock}${!assessmentBlock && report.aiSummary ? `\nAI Summary: ${report.aiSummary}` : ''}
 `;
       }
     } catch {}
@@ -121,7 +136,7 @@ Be concise, practical, and friendly. Use plain English. When explaining a fix, g
         'anthropic-version': '2023-06-01',
       },
       body: JSON.stringify({
-        model: 'claude-haiku-4-5-20251001',
+        model: 'claude-haiku-5-5',
         max_tokens: 500,
         system: systemPrompt,
         messages: [

@@ -5,6 +5,7 @@ import {
   getWorkItemsByUrl,
   upsertWorkItem,
   deriveWorkItemScopeKey,
+  updateGuideProgress,
 } from '@/lib/store';
 
 // GET /api/work-items?url=<page-url>
@@ -32,6 +33,7 @@ export async function GET(request) {
       verifiedStatus:   item.verified_status   || null,
       verifiedAt:       item.verified_at       || null,
       verifiedReportId: item.verified_report_id || null,
+      guideProgress:    item.guide_progress    || null,
       updatedAt:        item.updated_at,
     };
   }
@@ -50,13 +52,42 @@ export async function PATCH(request) {
   let body = {};
   try { body = await request.json(); } catch {}
 
-  const { recFingerprint, pageUrl, userStatus } = body;
+  const { recFingerprint, pageUrl, userStatus, guideProgress } = body;
 
   if (!recFingerprint || typeof recFingerprint !== 'string') {
     return NextResponse.json({ error: 'recFingerprint is required' }, { status: 400 });
   }
   if (!pageUrl || typeof pageUrl !== 'string') {
     return NextResponse.json({ error: 'pageUrl is required' }, { status: 400 });
+  }
+
+  const scopeKey = deriveWorkItemScopeKey(recFingerprint, pageUrl);
+  if (!scopeKey) {
+    return NextResponse.json({ error: 'Could not derive scope key from pageUrl' }, { status: 400 });
+  }
+
+  await ensureWorkItemsTable();
+
+  // guideProgress-only update (no userStatus required)
+  if (guideProgress && !userStatus) {
+    let updated;
+    try {
+      updated = await updateGuideProgress(userId, { recFingerprint, scopeKey, guideProgress });
+    } catch (e) {
+      console.error('[work-items] guideProgress update error:', e.message);
+      return NextResponse.json({ error: 'Failed to save guide progress' }, { status: 500 });
+    }
+    if (!updated) return NextResponse.json({ error: 'Work item not found' }, { status: 404 });
+    return NextResponse.json({
+      workItem: {
+        id:             updated.id,
+        recFingerprint: updated.rec_fingerprint,
+        scopeKey:       updated.scope_key,
+        userStatus:     updated.user_status,
+        guideProgress:  updated.guide_progress || null,
+        updatedAt:      updated.updated_at,
+      },
+    });
   }
 
   const VALID_USER_STATUSES = ['open', 'in_progress', 'verify', 'dismissed'];
@@ -66,13 +97,6 @@ export async function PATCH(request) {
       { status: 400 }
     );
   }
-
-  const scopeKey = deriveWorkItemScopeKey(recFingerprint, pageUrl);
-  if (!scopeKey) {
-    return NextResponse.json({ error: 'Could not derive scope key from pageUrl' }, { status: 400 });
-  }
-
-  await ensureWorkItemsTable();
 
   let updated;
   try {
@@ -91,6 +115,7 @@ export async function PATCH(request) {
       verifiedStatus:   updated.verified_status   || null,
       verifiedAt:       updated.verified_at       || null,
       verifiedReportId: updated.verified_report_id || null,
+      guideProgress:    updated.guide_progress    || null,
       updatedAt:        updated.updated_at,
     },
   });
