@@ -39,6 +39,7 @@ export async function POST(request) {
   const rec  = recs.find(r => r.fingerprint === recFingerprint);
 
   if (!rec) {
+    console.error('[guide-plan] rec not found | fingerprint:', recFingerprint, '| reportId:', reportId, '| recs loaded:', recs.length, '| fingerprints:', recs.map(r => r.fingerprint).join(','));
     return NextResponse.json(
       { error: 'Recommendation not found for this user and report' },
       { status: 404 }
@@ -60,7 +61,8 @@ export async function POST(request) {
 
   if (plan.fallback) {
     // Generation failed — return fallback without caching
-    return NextResponse.json({ plan: null, fallback: true, actions: plan.actions });
+    console.error('[guide-plan] fallback reason:', plan.reason || 'unknown', '| rec:', recFingerprint, '| report:', reportId);
+    return NextResponse.json({ plan: null, fallback: true, actions: plan.actions, reason: plan.reason || 'unknown' });
   }
 
   // Persist to DB
