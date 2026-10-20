@@ -2494,7 +2494,7 @@ export default function ReportClient({ isPro, userName, userAvatar }) {
       {guidedFixRec && report && (
         <GuidedFix
           rec={guidedFixRec}
-          reportId={String(report.id)}
+          reportId={String(guidedFixRec.reportId || report.id)}
           pageUrl={report.url}
           workItem={workItems[guidedFixRec.fingerprint] || null}
           onClose={() => setGuidedFixRec(null)}
