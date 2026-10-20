@@ -1597,26 +1597,33 @@ export default function ReportClient({ isPro, userName, userAvatar }) {
         const renderCTAs = (showActionPlan, recFp = null, rec = null) => (
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 16 }}>
             {showActionPlan && (
-              <button onClick={() => {
-                // PoC: open GuidedFix panel for image-optimization recs; fallback to tab for others
-                if (rec && rec.group_key === 'image-optimization') {
-                  setGuidedFixRec(rec);
-                } else {
-                  setActiveTab('action');
-                  if (recFp) setHighlightedFp(recFp);
-                }
-              }}
-                style={{ display: 'inline-flex', alignItems: 'center', gap: 7,
-                  background: 'linear-gradient(135deg,#8a46f8,#3687fa)', color: '#fff',
-                  border: 0, borderRadius: 9, padding: '9px 16px', fontSize: 12,
-                  fontWeight: 800, cursor: 'pointer', fontFamily: 'inherit',
-                  boxShadow: '0 4px 14px #7948f630' }}>
-                Guide me through this fix
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                  strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M5 12h14M12 5l7 7-7 7"/>
-                </svg>
-              </button>
+              {rec?.group_key === 'image-optimization' ? (
+                <button onClick={() => setGuidedFixRec(rec)}
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: 7,
+                    background: 'linear-gradient(135deg,#8a46f8,#3687fa)', color: '#fff',
+                    border: 0, borderRadius: 9, padding: '9px 16px', fontSize: 12,
+                    fontWeight: 800, cursor: 'pointer', fontFamily: 'inherit',
+                    boxShadow: '0 4px 14px #7948f630' }}>
+                  Guide me through this fix
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                    strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M5 12h14M12 5l7 7-7 7"/>
+                  </svg>
+                </button>
+              ) : (
+                <button onClick={() => { setActiveTab('action'); if (recFp) setHighlightedFp(recFp); }}
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: 7,
+                    background: 'linear-gradient(135deg,#8a46f8,#3687fa)', color: '#fff',
+                    border: 0, borderRadius: 9, padding: '9px 16px', fontSize: 12,
+                    fontWeight: 800, cursor: 'pointer', fontFamily: 'inherit',
+                    boxShadow: '0 4px 14px #7948f630' }}>
+                  View action plan
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                    strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M5 12h14M12 5l7 7-7 7"/>
+                  </svg>
+                </button>
+              )}
             )}
             <button onClick={() => handleRescan()}
               style={{ display: 'inline-flex', alignItems: 'center', gap: 7,
