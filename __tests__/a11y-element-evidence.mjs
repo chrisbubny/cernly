@@ -11,12 +11,14 @@ import assert from 'node:assert/strict';
 // ─── Inline the logic under test (avoids Next.js import resolution) ───────────
 // This mirrors the exact filter in lib/analyzers/a11y.js
 
+const ITEM_CAP = 20; // keep in sync with lib/analyzers/a11y.js
+
 function extractMissingAltItems(html) {
   const imgs = html.match(/<img[^>]*>/gi) || [];
   const imgsNoAltTags = imgs.filter(i => !/alt=["'][^"']*["']/.test(i));
   const imgsNoAlt = imgsNoAltTags.length;
 
-  const imgItems = imgsNoAltTags.slice(0, 8).map(tag => {
+  const imgItems = imgsNoAltTags.slice(0, ITEM_CAP).map(tag => {
     const srcMatch = tag.match(/src=["']([^"']+)["']/i);
     const src = srcMatch ? srcMatch[1] : null;
     if (!src || src.startsWith('data:')) return null;
@@ -90,17 +92,18 @@ function extractMissingAltItems(html) {
   console.log('✓ Test 3 passed: no false positives');
 }
 
-// ─── Test 4: capped at 8 items ────────────────────────────────────────────────
+// ─── Test 4: capped at ITEM_CAP items ────────────────────────────────────────
 {
-  const imgs = Array.from({ length: 12 }, (_, i) => `<img src="/img${i}.jpg">`).join('\n');
+  const total = ITEM_CAP + 5; // generate more than the cap
+  const imgs = Array.from({ length: total }, (_, i) => `<img src="/img${i}.jpg">`).join('\n');
   const html = `<html><body>${imgs}</body></html>`;
 
   const { imgsNoAlt, imgItems } = extractMissingAltItems(html);
 
-  assert.equal(imgsNoAlt, 12, 'Count all 12 missing');
-  assert.equal(imgItems.length, 8, 'Items capped at 8');
+  assert.equal(imgsNoAlt, total, `Count all ${total} missing`);
+  assert.equal(imgItems.length, ITEM_CAP, `Items capped at ${ITEM_CAP}`);
 
-  console.log('✓ Test 4 passed: items capped at 8');
+  console.log(`✓ Test 4 passed: items capped at ${ITEM_CAP}`);
 }
 
 console.log('\n✅ All a11y element evidence tests passed');

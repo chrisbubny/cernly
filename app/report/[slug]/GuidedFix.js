@@ -14,6 +14,7 @@
  */
 
 import { useState, useEffect, useCallback, useRef } from 'react';
+import AffectedElements from './AffectedElements';
 
 // ---------------------------------------------------------------------------
 // Design tokens — light theme
@@ -798,8 +799,9 @@ export default function GuidedFix({
     setTimeout(() => chatInputRef.current?.focus(), 80);
   }, []);
 
-  // Send a message to /api/ask with full step context
-  const sendChatMessage = useCallback(async (question) => {
+  // Send a message to /api/ask with full step context.
+  // opts.elementContext — optional item object for per-element targeted questions.
+  const sendChatMessage = useCallback(async (question, opts = {}) => {
     if (!question?.trim() || chatLoading) return;
     const q = question.trim();
     setChatInput('');
@@ -817,6 +819,7 @@ export default function GuidedFix({
           recFingerprint: rec?.fingerprint,
           activeStep: chatStep,
           messages: chatMessages.slice(-6),
+          ...(opts.elementContext ? { elementContext: opts.elementContext } : {}),
         }),
       });
       const data = await res.json().catch(() => ({}));
@@ -1084,6 +1087,42 @@ export default function GuidedFix({
                   )}
                 </div>
               )}
+
+              {/* Affected elements — deduplicated across all supporting findings */}
+              {(() => {
+                const allItems = [];
+                const seen = new Set();
+                let totalDetected = 0;
+                let firstCheckId = null;
+                let firstAuditId = null;
+                for (const f of (rec?.supporting_findings || [])) {
+                  if (!firstCheckId && f.checkId) firstCheckId = f.checkId;
+                  if (!firstAuditId && f.auditId) firstAuditId = f.auditId;
+                  if (f.totalDetected) totalDetected = Math.max(totalDetected, f.totalDetected);
+                  for (const item of (f.items || [])) {
+                    const key = item.url || item.selector || item.snippet || JSON.stringify(item);
+                    if (!seen.has(key)) { seen.add(key); allItems.push(item); }
+                  }
+                }
+                if (!allItems.length) return null;
+                return (
+                  <AffectedElements
+                    items={allItems}
+                    totalDetected={totalDetected || allItems.length}
+                    checkId={firstCheckId}
+                    auditId={firstAuditId}
+                    onFixElement={(item) => {
+                      const name = item.label || item.selector
+                        || (item.url ? item.url.split('/').pop().split('?')[0] : null)
+                        || 'this element';
+                      sendChatMessage(
+                        `How do I fix the issue with "${name}"?`,
+                        { elementContext: item },
+                      );
+                    }}
+                  />
+                );
+              })()}
 
               {/* Why it matters */}
               {rec?.why_it_matters && (

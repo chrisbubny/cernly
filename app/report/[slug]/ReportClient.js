@@ -6,6 +6,7 @@ import { useParams, useSearchParams, useRouter } from 'next/navigation';
 import { useClerk } from '@clerk/nextjs';
 import { compareScans } from '@/lib/comparison';
 import GuidedFix from './GuidedFix';
+import AffectedElements from './AffectedElements';
 
 /* ─── SVG stroke attrs ─── */
 const sa = { fill: 'none', stroke: 'currentColor', strokeWidth: 1.8, strokeLinecap: 'round', strokeLinejoin: 'round' };
@@ -436,6 +437,20 @@ function FixCard({ issue, n, impact, rec, workItem, onStatusChange, onAskCernly,
                   {guidance.whatWeFound}
                 </p>
               </div>
+            )}
+
+            {/* Affected elements — specific evidence from this issue's items[] */}
+            {issue.items?.length > 0 && (
+              <AffectedElements
+                items={issue.items}
+                totalDetected={issue.totalDetected}
+                checkId={issue.checkId}
+                auditId={issue.auditId}
+                onFixElement={(item) => {
+                  const name = item.label || item.selector || (item.url ? item.url.split('/').pop().split('?')[0] : null) || 'this element';
+                  onAskCernly(issue, `How do I fix the issue with "${name}"?`, rec, { element: item });
+                }}
+              />
             )}
 
             {/* Why it matters */}
@@ -907,7 +922,7 @@ function UxCard({ uxScore, uxInsights, uxAnnotations, visionStatus, siteType, ur
 }
 
 /* ─── Ask Cernly drawer ─── */
-function AskCernlyDrawer({ reportId, domain, onClose, initialContext, initialMessage, recFingerprint, activeStep }) {
+function AskCernlyDrawer({ reportId, domain, onClose, initialContext, initialMessage, recFingerprint, activeStep, elementContext }) {
   const openingMsg = initialContext
     ? `I'm looking at the **${initialContext.category || 'finding'}** issue: **${initialContext.title}**.\n\n${initialContext.detail ? initialContext.detail.replace(/\[([^\]]+)\]\([^)]+\)/g, '$1').slice(0, 200) : 'What would you like to know about this finding?'}`
     : `Hi! I've analyzed **${domain || 'this site'}** and I'm ready to help. Ask me what a finding means, how to fix it, or where to start.`;
@@ -948,6 +963,7 @@ function AskCernlyDrawer({ reportId, domain, onClose, initialContext, initialMes
           question: q, reportId, messages: updated.slice(-6),
           ...(recFingerprint ? { recFingerprint } : {}),
           ...(activeStep ? { activeStep } : {}),
+          ...(elementContext ? { elementContext } : {}),
         }),
       });
       const data = await res.json();
@@ -2034,7 +2050,7 @@ export default function ReportClient({ isPro, userName, userAvatar }) {
               highlighted={!!fp && fp === highlightedFp}
               onStatusChange={handleStatusChange}
               onGuide={(r) => setGuidedFixRec(r)}
-              onAskCernly={(iss, suggestedQ, matchedRec) => {
+              onAskCernly={(iss, suggestedQ, matchedRec, extra) => {
                 setDrawerContext({
                   title: iss.message,
                   category: iss.area,
@@ -2042,6 +2058,8 @@ export default function ReportClient({ isPro, userName, userAvatar }) {
                   // Forward rec fingerprint so /api/ask can load full evidence
                   ...(matchedRec?.fingerprint ? { _recFingerprint: matchedRec.fingerprint } : {}),
                   ...(suggestedQ ? { _initialMessage: suggestedQ } : {}),
+                  // Per-element context: passed when user clicks "Fix this →" on a specific item
+                  ...(extra?.element ? { _elementContext: extra.element } : {}),
                 });
                 setDrawerOpen(true);
               }}
@@ -2523,6 +2541,7 @@ export default function ReportClient({ isPro, userName, userAvatar }) {
           initialMessage={drawerContext?._initialMessage || null}
           recFingerprint={drawerContext?._recFingerprint || null}
           activeStep={drawerContext?._activeStep || null}
+          elementContext={drawerContext?._elementContext || null}
           onClose={() => { setDrawerOpen(false); setDrawerContext(null); }} />
       )}
 

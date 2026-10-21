@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getReport } from '@/lib/store';
+import { getReport, getRecommendationsByReport } from '@/lib/store';
 import { buildScoreLines } from '@/lib/scoring';
 
 // POST /api/ask
@@ -14,7 +14,7 @@ export async function POST(request) {
   let body = {};
   try { body = await request.json(); } catch {}
 
-  const { question, reportId, messages = [], findingFingerprintId, recFingerprint, activeStep } = body;
+  const { question, reportId, messages = [], findingFingerprintId, recFingerprint, activeStep, elementContext } = body;
   if (!question?.trim()) {
     return NextResponse.json({ error: 'question required' }, { status: 400 });
   }
@@ -25,6 +25,15 @@ export async function POST(request) {
     try {
       const report = await getReport(reportId);
       if (report) {
+        // CRITICAL: getReport() only returns the reports table row (no recommendations).
+        // Fetch recommendations separately and attach so focusRecBlock / recsBlock work.
+        try {
+          const recs = await getRecommendationsByReport(report.id);
+          report.recommendations = recs || [];
+        } catch (recErr) {
+          console.error('[Ask API] Failed to fetch recommendations:', recErr.message);
+          report.recommendations = [];
+        }
         const domain = (() => { try { return new URL(report.url).hostname; } catch { return report.url; } })();
         // buildScoreLines uses normalizeScores — safe against auditStatuses contamination
         const scoreLines = buildScoreLines(report.scores || {}, report.auditStatuses || {});
@@ -153,13 +162,30 @@ ${activeStep.developer?.notes ? `Notes: ${activeStep.developer.notes}` : ''}
 `;
         }
 
+        // Element-specific context — set when the user clicks "Fix this →" on a
+        // specific affected element so the AI can give targeted, element-level guidance.
+        let elementBlock = '';
+        if (elementContext && typeof elementContext === 'object') {
+          const el = elementContext;
+          const elLines = [
+            el.label   ? `  Filename/label: ${el.label}` : '',
+            el.url     ? `  URL: ${el.url}` : '',
+            el.selector ? `  Selector: ${el.selector}` : '',
+            el.snippet  ? `  HTML: ${el.snippet.slice(0, 300)}` : '',
+            el.wastedMs != null ? `  Wasted: ${el.wastedMs}ms` : '',
+          ].filter(Boolean).join('\n');
+          if (elLines) {
+            elementBlock = `\nFOCUS ELEMENT (the user is asking about this specific item):\n${elLines}\n`;
+          }
+        }
+
         reportContext = `
 SITE CONTEXT:
 Domain: ${domain}
 Scores: ${scoreLines}
 Key issues:
 ${issueLines || 'None found'}
-${focusBlock}${focusRecBlock}${stepBlock}${assessmentBlock}${recsBlock}${!assessmentBlock && report.aiSummary ? `\nAI Summary: ${report.aiSummary}` : ''}
+${focusBlock}${elementBlock}${focusRecBlock}${stepBlock}${assessmentBlock}${recsBlock}${!assessmentBlock && report.aiSummary ? `\nAI Summary: ${report.aiSummary}` : ''}
 `;
       }
     } catch {}
