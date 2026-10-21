@@ -1475,6 +1475,8 @@ export default function ReportClient({ isPro, userName, userAvatar }) {
   }
 
   function handleRescan(verifyFp = null) {
+    // Defensive: ignore non-string arguments (e.g. React SyntheticEvent passed via onClick={handleRescan})
+    const fp = typeof verifyFp === 'string' && verifyFp ? verifyFp : null;
     if (!report?.url) return;
     setRescanModal({ stageIdx: 0, stage: RESCAN_STAGES[0], error: null });
     let step = 0;
@@ -1497,7 +1499,7 @@ export default function ReportClient({ isPro, userName, userAvatar }) {
           setRescanModal(null);
           // ?from=rescan auto-opens Progress tab; ?verify=<fp> carries the fingerprint to verify
           const params = new URLSearchParams({ from: 'rescan' });
-          if (verifyFp) params.set('verify', verifyFp);
+          if (fp) params.set('verify', fp);
           if (report.id) params.set('prevReportId', String(report.id));
           router.push(`/report/${newSlug}?${params}`);
         }
@@ -2588,7 +2590,7 @@ export default function ReportClient({ isPro, userName, userAvatar }) {
               Scan history for <strong>{domain}</strong>
             </div>
           </div>
-          <button onClick={handleRescan}
+          <button onClick={() => handleRescan()}
             style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '9px 16px',
               background: '#7948f6', color: '#fff', border: 0, borderRadius: 10,
               fontWeight: 700, fontSize: 12, cursor: 'pointer', fontFamily: 'inherit' }}>
@@ -2852,7 +2854,7 @@ export default function ReportClient({ isPro, userName, userAvatar }) {
                     </button>
                   )
               )}
-              <button onClick={handleRescan}
+              <button onClick={() => handleRescan()}
                 style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 13px',
                   background: '#151621', color: '#fff',
                   border: 0, borderRadius: 9, fontWeight: 700, fontSize: 12,
