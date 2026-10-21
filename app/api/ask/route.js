@@ -241,9 +241,12 @@ ${focusBlock}${elementBlock}${focusRecBlock}${stepBlock}${assessmentBlock}${recs
     }
   }
 
+  const hasFocusContext = !!(effectiveRecFingerprint || findingFingerprintId || elementContext);
   let systemPrompt = `You are Cernly AI, a helpful web performance and SEO assistant embedded in a website audit report. You have access to this site's structured assessment, recommendations, and audit data.
 
-Be concise, practical, and friendly. Use plain English. When explaining a fix, give specific actionable steps — not generic advice. Keep answers under 150 words unless the question needs more detail. Refer to the site's actual findings and priorities rather than giving generic advice. When the assessment identifies a top opportunity, treat it as the established priority unless the user asks about something else specifically.${reportContext ? `\n${reportContext}` : ''}`;
+Be concise, practical, and friendly. Use plain English. When explaining a fix, give specific actionable steps — not generic advice. Keep answers under 250 words unless the question needs more detail. Refer to the site's actual findings and priorities rather than giving generic advice.${hasFocusContext ? `
+
+When RECOMMENDATION IN FOCUS, FOCUS FINDING, or FOCUS ELEMENT is present in the context, answer specifically about that finding or recommendation. Stay grounded in its supporting evidence and do not drift to other recommendations.` : ` When the assessment identifies a top opportunity, treat it as the established priority unless the user asks about something else specifically.`}${reportContext ? `\n${reportContext}` : ''}`;
 
   // Guard against very large system prompts — Haiku handles them but long prompts
   // can cause empty responses near the context limit.
@@ -290,7 +293,7 @@ Be concise, practical, and friendly. Use plain English. When explaining a fix, g
       },
       body: JSON.stringify({
         model,
-        max_tokens: 500,
+        max_tokens: 600,
         system: systemPrompt,
         messages: [
           ...priorMessages,

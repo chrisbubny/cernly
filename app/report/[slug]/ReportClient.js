@@ -975,10 +975,117 @@ function AskCernlyDrawer({ reportId, domain, onClose, initialContext, initialMes
     setLoading(false);
   }
 
+  // Render inline Markdown: **bold** and `code`
+  function renderInline(text) {
+    const parts = text.split(/(`[^`]+`|\*\*[^*]+\*\*)/g);
+    if (parts.length === 1) return text;
+    return parts.map((p, i) => {
+      if (p.startsWith('`') && p.endsWith('`') && p.length > 2)
+        return <code key={i} style={{ background: '#e4e6f2', borderRadius: 4,
+          padding: '1px 5px', fontSize: 11.5,
+          fontFamily: '"JetBrains Mono", ui-monospace, monospace',
+          color: '#4a1fb8' }}>{p.slice(1, -1)}</code>;
+      if (p.startsWith('**') && p.endsWith('**') && p.length > 4)
+        return <strong key={i}>{p.slice(2, -2)}</strong>;
+      return p;
+    });
+  }
+
+  // Render block-level Markdown: headings, lists, code fences, paragraphs
   function renderContent(text) {
-    return text.split(/(\*\*[^*]+\*\*)/g).map((p, i) =>
-      p.startsWith('**') && p.endsWith('**') ? <strong key={i}>{p.slice(2, -2)}</strong> : p
-    );
+    if (!text) return null;
+    const lines = text.split('\n');
+    const nodes = [];
+    let i = 0;
+    while (i < lines.length) {
+      const line = lines[i];
+
+      // Fenced code block
+      if (line.trimStart().startsWith('```')) {
+        const codeLines = [];
+        i++;
+        while (i < lines.length && !lines[i].trimStart().startsWith('```')) {
+          codeLines.push(lines[i]);
+          i++;
+        }
+        nodes.push(
+          <pre key={`code-${i}`} style={{ background: '#e4e6f2', borderRadius: 7,
+            padding: '8px 11px', margin: '5px 0', color: '#151621',
+            whiteSpace: 'pre', wordBreak: 'normal', overflowX: 'auto',
+            fontSize: 11.5, fontFamily: '"JetBrains Mono", ui-monospace, monospace',
+            lineHeight: 1.5 }}>
+            {codeLines.join('\n')}
+          </pre>
+        );
+        i++; continue;
+      }
+
+      // Heading (## or ###)
+      const hm = line.match(/^(#{1,3}) +(.+)/);
+      if (hm) {
+        const lvl = hm[1].length;
+        nodes.push(
+          <div key={`h-${i}`} style={{
+            fontWeight: 700, fontSize: lvl === 1 ? 14.5 : 13,
+            marginTop: nodes.length > 0 ? 9 : 2, marginBottom: 3,
+            lineHeight: 1.35, color: '#151621',
+            borderBottom: lvl === 1 ? '1px solid #e4e6f2' : 'none',
+            paddingBottom: lvl === 1 ? 4 : 0,
+          }}>
+            {renderInline(hm[2])}
+          </div>
+        );
+        i++; continue;
+      }
+
+      // Unordered list (- or *)
+      if (/^[-*] /.test(line)) {
+        const items = [];
+        while (i < lines.length && /^[-*] /.test(lines[i])) {
+          items.push(lines[i].slice(2));
+          i++;
+        }
+        nodes.push(
+          <ul key={`ul-${i}`} style={{ paddingLeft: 17, margin: '3px 0',
+            listStyleType: 'disc' }}>
+            {items.map((item, j) => (
+              <li key={j} style={{ marginBottom: 2, paddingLeft: 1 }}>
+                {renderInline(item)}
+              </li>
+            ))}
+          </ul>
+        );
+        continue;
+      }
+
+      // Ordered list (1. 2. …)
+      if (/^\d+\. /.test(line)) {
+        const items = [];
+        while (i < lines.length && /^\d+\. /.test(lines[i])) {
+          items.push(lines[i].replace(/^\d+\. /, ''));
+          i++;
+        }
+        nodes.push(
+          <ol key={`ol-${i}`} style={{ paddingLeft: 18, margin: '3px 0' }}>
+            {items.map((item, j) => (
+              <li key={j} style={{ marginBottom: 2 }}>{renderInline(item)}</li>
+            ))}
+          </ol>
+        );
+        continue;
+      }
+
+      // Empty line — paragraph gap
+      if (!line.trim()) {
+        if (nodes.length > 0) nodes.push(<div key={`sp-${i}`} style={{ height: 5 }} />);
+        i++; continue;
+      }
+
+      // Regular text line
+      nodes.push(<div key={`p-${i}`}>{renderInline(line)}</div>);
+      i++;
+    }
+    return nodes;
   }
 
   const userHasMessaged = messages.some(m => m.role === 'user');
