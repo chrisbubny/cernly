@@ -7,6 +7,7 @@ import { useClerk } from '@clerk/nextjs';
 import { compareScans } from '@/lib/comparison';
 import GuidedFix from './GuidedFix';
 import AffectedElements from './AffectedElements';
+import ProgressTab from './ProgressTab';
 
 /* ─── SVG stroke attrs ─── */
 const sa = { fill: 'none', stroke: 'currentColor', strokeWidth: 1.8, strokeLinecap: 'round', strokeLinejoin: 'round' };
@@ -1413,6 +1414,26 @@ export default function ReportClient({ isPro, userName, userAvatar }) {
       .catch(() => {}); // silent — anon users or load failure: client state still usable
   }, [report?.url, workItemsLoaded]);
 
+  // Load slim scan history (for Progress tab history list + trend chart)
+  useEffect(() => {
+    if (scanHistory !== null || !domain) return;
+    setScanHistory([]); // sentinel to prevent double-fetch
+    fetch(`/api/scan-history?domain=${encodeURIComponent(domain)}`)
+      .then(r => r.json())
+      .then(d => setScanHistory(Array.isArray(d.reports) ? d.reports : []))
+      .catch(() => setScanHistory([]));
+  }, [domain, scanHistory]);
+
+  // Load enriched comparison data (for Progress tab fix verification + overview)
+  useEffect(() => {
+    if (comparisonScans !== null || !report?.url) return;
+    setComparisonScans('loading');
+    fetch(`/api/scan-history?url=${encodeURIComponent(report.url)}&full=true`)
+      .then(r => r.json())
+      .then(d => setComparisonScans(Array.isArray(d.scans) ? d.scans : []))
+      .catch(() => setComparisonScans([]));
+  }, [report?.url, comparisonScans]);
+
   /**
    * Persist a status change for an authenticated user.
    * Optimistic update: apply immediately, rollback + show error on failure.
@@ -2233,409 +2254,6 @@ export default function ReportClient({ isPro, userName, userAvatar }) {
     );
   };
 
-  const renderProgress = () => {
-    // ── Load slim scan list (for section D) ─────────────────────────────────
-    if (scanHistory === null && domain) {
-      setScanHistory([]);
-      fetch(`/api/scan-history?domain=${encodeURIComponent(domain)}`)
-        .then(r => r.json())
-        .then(d => setScanHistory(Array.isArray(d.reports) ? d.reports : []))
-        .catch(() => setScanHistory([]));
-    }
-
-    // ── Load enriched comparison data (for sections A–C) ────────────────────
-    // Requires auth; silently skipped if no URL available.
-    if (comparisonScans === null && report?.url) {
-      setComparisonScans('loading');
-      fetch(`/api/scan-history?url=${encodeURIComponent(report.url)}&full=true`)
-        .then(r => r.json())
-        .then(d => setComparisonScans(Array.isArray(d.scans) ? d.scans : []))
-        .catch(() => setComparisonScans([]));
-    }
-
-    // ── Helpers ──────────────────────────────────────────────────────────────
-    const scoreColor = s => s == null ? '#b0b4c8' : s >= 80 ? '#19b987' : s >= 60 ? '#efa642' : '#ef6473';
-    const scoreLabel = s => s == null ? '—' : s;
-    const Spinner    = () => (
-      <div style={{ width: 14, height: 14, border: '2px solid #e9eaf2', borderTopColor: '#7948f6',
-        borderRadius: '50%', animation: 'spin .7s linear infinite', flexShrink: 0 }} />
-    );
-
-    // ── Compute comparison ───────────────────────────────────────────────────
-    // comparisonScans[0] is the current scan (most recent), scans[1+] are older.
-    // selectedPrevIdx points to the "previous" scan to compare against.
-    const scans         = Array.isArray(comparisonScans) ? comparisonScans : [];
-    const currScan      = scans[0] || null;
-    const prevScan      = scans[selectedPrevIdx] || null;
-    const hasMultiScans = scans.length >= 2;
-    const comparison    = (currScan && prevScan) ? compareScans(prevScan, currScan) : null;
-
-    // Inject current report's richer data into currScan for better comparison
-    // (the comparison endpoint returns slim data; the full report has more)
-    const enrichedCurr = currScan && report ? {
-      ...currScan,
-      issues:          report.issues          || currScan.issues,
-      auditStatuses:   report.auditStatuses   || currScan.auditStatuses || {},
-      recommendations: report.recommendations || currScan.recommendations,
-    } : currScan;
-    const liveComparison = (enrichedCurr && prevScan) ? compareScans(prevScan, enrichedCurr) : comparison;
-
-    // ── Section A: Progress overview ─────────────────────────────────────────
-    const renderOverviewSection = () => {
-      if (comparisonScans === null || comparisonScans === 'loading') {
-        return (
-          <div style={{ background: '#fff', border: '1px solid #e9eaf2', borderRadius: 14,
-            padding: '20px 22px', marginBottom: 16, display: 'flex', alignItems: 'center', gap: 10 }}>
-            <Spinner />
-            <span style={{ fontSize: 13, color: '#83899c' }}>Loading comparison data…</span>
-          </div>
-        );
-      }
-      if (!hasMultiScans) return null; // handled by single-scan empty state below
-
-      const c = liveComparison;
-      if (!c || !c.isComparable) {
-        return (
-          <div style={{ background: '#fff8f0', border: '1px solid #f5d9b0', borderRadius: 14,
-            padding: '16px 20px', marginBottom: 16 }}>
-            <div style={{ fontSize: 13, color: '#8a5a00', fontWeight: 600 }}>
-              {c?.incompatibilityReason || 'These scans cannot be compared.'}
-            </div>
-          </div>
-        );
-      }
-
-      const prevDate = new Date(prevScan.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-      const improved  = Object.entries(c.scoreDelta).filter(([, d]) => d.direction === 'improved' && d.significance !== 'noise');
-      const regressed = Object.entries(c.scoreDelta).filter(([, d]) => d.direction === 'regressed' && d.significance !== 'noise');
-
-      return (
-        <div style={{ background: '#fff', border: '1px solid #e9eaf2', borderRadius: 14, padding: '20px 22px', marginBottom: 16 }}>
-          {/* Selector + summary */}
-          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, marginBottom: 14, flexWrap: 'wrap' }}>
-            <div style={{ fontFamily: 'var(--font-manrope, Manrope, sans-serif)', fontWeight: 800, fontSize: 14, color: '#151621', flex: 1 }}>
-              {c.summary}
-            </div>
-            {scans.length > 2 && (
-              <select
-                value={selectedPrevIdx}
-                onChange={e => setSelectedPrevIdx(Number(e.target.value))}
-                style={{ fontSize: 11, color: '#5b4b8a', background: '#f4f0ff', border: '1px solid #c4aff8',
-                  borderRadius: 8, padding: '5px 10px', cursor: 'pointer', fontFamily: 'inherit', flexShrink: 0 }}>
-                {scans.slice(1).map((s, i) => {
-                  const d = new Date(s.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-                  return <option key={s.slug || s.id} value={i + 1}>vs {d}</option>;
-                })}
-              </select>
-            )}
-          </div>
-
-          {/* Score delta chips */}
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            {['performance', 'seo', 'security', 'accessibility'].map(cat => {
-              const d = c.scoreDelta[cat];
-              if (!d || d.delta == null) return null;
-              const isNoise    = d.significance === 'noise';
-              const isImproved = d.direction === 'improved';
-              const isRegress  = d.direction === 'regressed';
-              const chipBg     = isNoise ? '#f5f6fb' : isImproved ? '#edfaf5' : isRegress ? '#fff1f3' : '#f5f6fb';
-              const chipBorder = isNoise ? '#e9eaf2' : isImproved ? '#b6efdb' : isRegress ? '#fcc9d0' : '#e9eaf2';
-              const chipColor  = isNoise ? '#83899c' : isImproved ? '#0f7a50' : isRegress ? '#c0192d' : '#83899c';
-              const sign       = d.delta > 0 ? '+' : '';
-              const catLabel   = { performance: 'Perf', seo: 'SEO', security: 'Sec', accessibility: 'A11y' }[cat] || cat;
-              return (
-                <div key={cat} style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '5px 10px',
-                  background: chipBg, border: `1px solid ${chipBorder}`, borderRadius: 20, fontSize: 11 }}>
-                  <span style={{ fontWeight: 700, color: chipColor }}>
-                    {!isNoise && (d.delta > 0 ? '↑' : '↓')} {sign}{d.delta}
-                  </span>
-                  <span style={{ color: '#83899c' }}>{catLabel}</span>
-                  {isNoise && <span style={{ color: '#b0b4c8', fontSize: 10 }}>≈</span>}
-                </div>
-              );
-            })}
-          </div>
-
-          {/* Caveat about score variability */}
-          {(improved.length > 0 || regressed.length > 0) && (
-            <div style={{ fontSize: 11, color: '#83899c', marginTop: 10, lineHeight: 1.5 }}>
-              Score changes are observed differences, not verified improvements.
-              Performance scores can naturally vary ±8 points between identical scans.
-            </div>
-          )}
-
-          {/* Verification limitations */}
-          {c.verificationLimitations.length > 0 && (
-            <div style={{ marginTop: 10, padding: '8px 12px', background: '#fffbf0',
-              border: '1px solid #ffe4a0', borderRadius: 8, fontSize: 11, color: '#7a5800' }}>
-              {c.verificationLimitations[0]}
-            </div>
-          )}
-        </div>
-      );
-    };
-
-    // ── Section B: Fix verification ──────────────────────────────────────────
-    const renderVerificationSection = () => {
-      if (!liveComparison || !liveComparison.isComparable) return null;
-      const c   = liveComparison;
-      const recs = c.recommendations;
-      const findings = c.findings;
-
-      const totalItems = recs.likely_resolved.length + recs.still_open.length +
-        recs.partially_resolved.length + recs.unable_to_verify.length +
-        findings.new_since.length + recs.new_high_priority.length;
-
-      if (totalItems === 0) return null;
-
-      const SectionLabel = ({ color, icon, label, count }) => (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 8 }}>
-          <span style={{ fontSize: 14 }}>{icon}</span>
-          <span style={{ fontSize: 12, fontWeight: 700, color, flex: 1 }}>{label}</span>
-          <span style={{ fontSize: 11, color: '#b0b4c8', fontWeight: 600 }}>{count}</span>
-        </div>
-      );
-
-      const RecRow = ({ title, category, note, borderColor }) => (
-        <div style={{ padding: '10px 14px', borderLeft: `3px solid ${borderColor}`,
-          background: '#fafbff', borderRadius: '0 8px 8px 0', marginBottom: 6 }}>
-          <div style={{ fontSize: 12, fontWeight: 700, color: '#151621' }}>{title}</div>
-          {category && <div style={{ fontSize: 10, color: '#83899c', marginTop: 2 }}>{category}</div>}
-          {note && <div style={{ fontSize: 11, color: '#83899c', marginTop: 3, fontStyle: 'italic' }}>{note}</div>}
-        </div>
-      );
-
-      return (
-        <div style={{ background: '#fff', border: '1px solid #e9eaf2', borderRadius: 14, padding: '20px 22px', marginBottom: 16 }}>
-          <div style={{ fontFamily: 'var(--font-manrope, Manrope, sans-serif)', fontWeight: 800, fontSize: 14, color: '#151621', marginBottom: 16 }}>
-            Fix Verification
-          </div>
-
-          {/* Likely resolved */}
-          {recs.likely_resolved.length > 0 && (
-            <div style={{ marginBottom: 16 }}>
-              <SectionLabel color="#0f7a50" icon="✓" label="Likely resolved" count={recs.likely_resolved.length} />
-              {recs.likely_resolved.map((m, i) => (
-                <RecRow key={i} title={m.rec.title} category={m.rec.category}
-                  note={`All ${m.total} supporting ${m.total === 1 ? 'finding' : 'findings'} absent in successful audit`}
-                  borderColor="#19b987" />
-              ))}
-            </div>
-          )}
-
-          {/* Partially resolved */}
-          {recs.partially_resolved.length > 0 && (
-            <div style={{ marginBottom: 16 }}>
-              <SectionLabel color="#7a5800" icon="◑" label="Partially addressed" count={recs.partially_resolved.length} />
-              {recs.partially_resolved.map((m, i) => (
-                <RecRow key={i} title={m.rec.title} category={m.rec.category}
-                  note={`${m.resolvedFindings} of ${m.total} findings resolved${m.unverifiableFindings > 0 ? `; ${m.unverifiableFindings} could not be verified` : ''}`}
-                  borderColor="#efa642" />
-              ))}
-            </div>
-          )}
-
-          {/* Still open */}
-          {recs.still_open.length > 0 && (
-            <div style={{ marginBottom: 16 }}>
-              <SectionLabel color="#c0192d" icon="•" label="Still present" count={recs.still_open.length} />
-              {recs.still_open.map((m, i) => (
-                <RecRow key={i} title={m.rec.title} category={m.rec.category}
-                  note={m.note || null}
-                  borderColor="#ef6473" />
-              ))}
-            </div>
-          )}
-
-          {/* Unable to verify */}
-          {recs.unable_to_verify.length > 0 && (
-            <div style={{ marginBottom: 16 }}>
-              <SectionLabel color="#83899c" icon="?" label="Unable to verify" count={recs.unable_to_verify.length} />
-              {recs.unable_to_verify.map((m, i) => (
-                <RecRow key={i} title={m.rec.title} category={m.rec.category}
-                  note={m.reason}
-                  borderColor="#c8ccd8" />
-              ))}
-            </div>
-          )}
-
-          {/* New high-priority recs */}
-          {recs.new_high_priority.length > 0 && (
-            <div style={{ marginBottom: 16 }}>
-              <SectionLabel color="#c0192d" icon="!" label="New high-priority issues" count={recs.new_high_priority.length} />
-              {recs.new_high_priority.map((m, i) => (
-                <RecRow key={i} title={m.rec.title} category={m.rec.category}
-                  note="Appeared since last scan — see Action Plan"
-                  borderColor="#ef6473" />
-              ))}
-            </div>
-          )}
-
-          {/* Finding-level new issues (not tied to a rec) */}
-          {findings.new_since.length > 0 && recs.new_high_priority.length === 0 && (
-            <div style={{ marginBottom: 16 }}>
-              <SectionLabel color="#c0192d" icon="!" label="New findings detected" count={findings.new_since.length} />
-              {findings.new_since.slice(0, 5).map((m, i) => (
-                <RecRow key={i} title={m.issue?.message || m.fingerprintId} category={m.issue?.category}
-                  note={`Severity: ${m.issue?.severity || 'unknown'}`}
-                  borderColor="#ef6473" />
-              ))}
-            </div>
-          )}
-
-          {/* CTA to action plan */}
-          <button onClick={() => setActiveTab('action')}
-            style={{ display: 'inline-flex', alignItems: 'center', gap: 6, marginTop: 4,
-              background: 'none', border: '1.5px solid #c9bcf7', borderRadius: 9,
-              color: '#7948f6', fontWeight: 700, fontSize: 12, padding: '7px 14px',
-              cursor: 'pointer', fontFamily: 'inherit' }}>
-            View full Action Plan
-            <svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round">
-              <path d="M9 18l6-6-6-6"/>
-            </svg>
-          </button>
-        </div>
-      );
-    };
-
-    // ── Section D: Scan history list (condensed) ─────────────────────────────
-    const renderHistorySection = () => {
-      const loading = scanHistory === null;
-      const empty   = Array.isArray(scanHistory) && scanHistory.length === 0;
-
-      if (loading || empty) {
-        return (
-          <div style={{ background: '#fff', border: '1px solid #e9eaf2', borderRadius: 14,
-            padding: '28px 24px', textAlign: 'center' }}>
-            {loading ? (
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, color: '#83899c' }}>
-                <Spinner /><span style={{ fontSize: 13 }}>Loading history…</span>
-              </div>
-            ) : (
-              <>
-                <div style={{ fontSize: 14, fontWeight: 700, color: '#151621', marginBottom: 6 }}>No previous scans found</div>
-                <div style={{ fontSize: 13, color: '#83899c' }}>
-                  Cernly needs at least two comparable scans to show progress.
-                  Scan this site again to begin tracking changes.
-                </div>
-              </>
-            )}
-          </div>
-        );
-      }
-
-      return (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
-          {scanHistory.map((s, i) => {
-            const isCurrent = s.slug === slug || String(s.id) === String(id);
-            const date = new Date(s.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-            const time = new Date(s.createdAt).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
-            return (
-              <Link key={s.slug || s.id} href={`/report/${s.slug || s.id}`} style={{ textDecoration: 'none', display: 'block' }}>
-                <div style={{ background: isCurrent ? '#f4f0ff' : '#fff',
-                  border: `1px solid ${isCurrent ? '#c4aff8' : '#e9eaf2'}`,
-                  borderRadius: 12, padding: '12px 16px', display: 'flex', alignItems: 'center', gap: 12 }}>
-                  <div style={{ width: 26, height: 26, borderRadius: '50%', flexShrink: 0,
-                    background: isCurrent ? '#7948f6' : '#f0f1f8',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    <span style={{ fontSize: 10, fontWeight: 800, color: isCurrent ? '#fff' : '#83899c' }}>
-                      {scanHistory.length - i}
-                    </span>
-                  </div>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 12, fontWeight: 700, color: '#151621' }}>
-                      {date} <span style={{ fontWeight: 500, color: '#83899c' }}>at {time}</span>
-                      {isCurrent && (
-                        <span style={{ marginLeft: 7, fontSize: 10, fontWeight: 800, background: '#7948f6',
-                          color: '#fff', borderRadius: 20, padding: '2px 7px', verticalAlign: 'middle' }}>
-                          Current
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                  <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
-                    {[['Perf', s.scores?.performance ?? null], ['SEO', s.scores?.seo ?? null],
-                      ['Sec', s.scores?.security ?? null], ['A11y', s.scores?.accessibility ?? null]].map(([lbl, val]) => (
-                      <div key={lbl} style={{ textAlign: 'center', minWidth: 34 }}>
-                        <div style={{ fontSize: 12, fontWeight: 800, color: scoreColor(val) }}>{scoreLabel(val)}</div>
-                        <div style={{ fontSize: 9, color: '#b0b4c8', fontWeight: 600 }}>{lbl}</div>
-                      </div>
-                    ))}
-                  </div>
-                  <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="#b0b4c8" strokeWidth={2} strokeLinecap="round">
-                    <path d="M9 18l6-6-6-6"/>
-                  </svg>
-                </div>
-              </Link>
-            );
-          })}
-        </div>
-      );
-    };
-
-    // ── Full render ───────────────────────────────────────────────────────────
-    const hasScans = Array.isArray(scanHistory) && scanHistory.length > 0;
-    const scansLoaded = Array.isArray(comparisonScans);
-    const showSingleScanState = scansLoaded && scans.length < 2 && hasScans;
-
-    return (
-      <div>
-        {/* Header */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
-          <div>
-            <div style={{ fontFamily: 'var(--font-manrope, Manrope, sans-serif)', fontWeight: 800, fontSize: 16, color: '#151621' }}>
-              Progress
-            </div>
-            <div style={{ fontSize: 12, color: '#83899c', marginTop: 3 }}>
-              Scan history for <strong>{domain}</strong>
-            </div>
-          </div>
-          <button onClick={() => handleRescan()}
-            style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '9px 16px',
-              background: '#7948f6', color: '#fff', border: 0, borderRadius: 10,
-              fontWeight: 700, fontSize: 12, cursor: 'pointer', fontFamily: 'inherit' }}>
-            <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round">
-              <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/>
-            </svg>
-            Scan again
-          </button>
-        </div>
-
-        {/* Single-scan empty state */}
-        {showSingleScanState && (
-          <div style={{ background: '#f4f0ff', border: '1px solid #c4aff8', borderRadius: 14,
-            padding: '20px 22px', marginBottom: 16, display: 'flex', alignItems: 'center',
-            justifyContent: 'space-between', gap: 12 }}>
-            <div>
-              <div style={{ fontSize: 13, fontWeight: 700, color: '#5b4b8a', marginBottom: 4 }}>
-                Make your first improvement, then rescan to see what changed.
-              </div>
-              <div style={{ fontSize: 12, color: '#83899c' }}>
-                Cernly will compare scans and show you exactly what improved.
-              </div>
-            </div>
-            <button onClick={() => handleRescan()}
-              style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '9px 16px',
-                background: '#7948f6', color: '#fff', border: 0, borderRadius: 10,
-                fontWeight: 700, fontSize: 12, cursor: 'pointer', fontFamily: 'inherit', flexShrink: 0 }}>
-              Rescan
-            </button>
-          </div>
-        )}
-
-        {/* Sections A + B (only when ≥2 comparable scans) */}
-        {!showSingleScanState && renderOverviewSection()}
-        {!showSingleScanState && renderVerificationSection()}
-
-        {/* Section D: scan history list */}
-        <div style={{ fontFamily: 'var(--font-manrope, Manrope, sans-serif)', fontWeight: 700, fontSize: 12,
-          color: '#83899c', marginBottom: 8, letterSpacing: '0.04em', textTransform: 'uppercase' }}>
-          All scans
-        </div>
-        {renderHistorySection()}
-      </div>
-    );
-  };
 
   return (
     <div style={{ background: '#f8f9fd', minHeight: '100vh', colorScheme: 'light',
@@ -3063,7 +2681,22 @@ export default function ReportClient({ isPro, userName, userAvatar }) {
                 {activeTab === 'overview' && renderOverview()}
                 {activeTab === 'action'   && renderActionPlan()}
                 {activeTab === 'findings' && renderFindings()}
-                {activeTab === 'progress' && renderProgress()}
+                {activeTab === 'progress' && (
+                  <ProgressTab
+                    domain={domain}
+                    slug={slug}
+                    id={id}
+                    report={report}
+                    scanHistory={scanHistory}
+                    comparisonScans={comparisonScans}
+                    selectedPrevIdx={selectedPrevIdx}
+                    setSelectedPrevIdx={setSelectedPrevIdx}
+                    onRescan={handleRescan}
+                    onSwitchTab={setActiveTab}
+                    fromRescan={new URLSearchParams(typeof window !== 'undefined' ? window.location.search : '').get('from') === 'rescan'}
+                    verifyFp={typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('verify') : null}
+                  />
+                )}
               </React.Fragment>
             )}
           </div>
