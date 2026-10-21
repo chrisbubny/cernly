@@ -101,12 +101,17 @@ ${a.coverage?.limitations && !a.coverage.limitations.match(/^no significant/i) ?
             const findingLines = (focusRec.supporting_findings || []).slice(0, 8).map(f => {
               const dv  = f.displayValue ? ` (${f.displayValue})` : '';
               const desc = f.description ? ' — ' + f.description.slice(0, 80) : '';
-              // Surface up to 3 specific affected resources if captured
+              // Surface up to 3 specific affected resources if captured.
+              // Items may be resource-based (url + wastedMs) or element-based
+              // (url from src extraction, label from filename or nodeLabel,
+              // snippet from Lighthouse node audit details).
               const itemNote = f.items?.length
-                ? ' [resources: ' + f.items.slice(0, 3).map(it => {
-                    const name = it.url ? it.url.split('/').pop().split('?')[0] || it.url : it.label || '';
-                    const ms   = it.wastedMs != null ? `${it.wastedMs}ms` : '';
-                    return [name, ms].filter(Boolean).join(' ');
+                ? ' [affected: ' + f.items.slice(0, 5).map(it => {
+                    const name = it.label || (it.url ? it.url.split('/').pop().split('?')[0] || it.url : '');
+                    const ms   = it.wastedMs != null ? `${it.wastedMs}ms wasted` : '';
+                    // For element-based items from Lighthouse node audits
+                    const loc  = it.selector ? `(${it.selector})` : '';
+                    return [name, ms, loc].filter(Boolean).join(' ');
                   }).filter(Boolean).join(', ') + ']'
                 : '';
               return `  - [${(f.severity || 'issue').toUpperCase()}] ${f.message}${dv}${desc}${itemNote}`;
@@ -160,9 +165,19 @@ ${focusBlock}${focusRecBlock}${stepBlock}${assessmentBlock}${recsBlock}${!assess
     } catch {}
   }
 
-  const systemPrompt = `You are Cernly AI, a helpful web performance and SEO assistant embedded in a website audit report. You have access to this site's structured assessment, recommendations, and audit data.
+  let systemPrompt = `You are Cernly AI, a helpful web performance and SEO assistant embedded in a website audit report. You have access to this site's structured assessment, recommendations, and audit data.
 
 Be concise, practical, and friendly. Use plain English. When explaining a fix, give specific actionable steps — not generic advice. Keep answers under 150 words unless the question needs more detail. Refer to the site's actual findings and priorities rather than giving generic advice. When the assessment identifies a top opportunity, treat it as the established priority unless the user asks about something else specifically.${reportContext ? `\n${reportContext}` : ''}`;
+
+  // Guard: Haiku has a ~200K token context window but very large system prompts
+  // (assessments + recommendations + full rec focus block) can approach practical
+  // limits and cause empty responses. Trim to ~12 000 chars (~3 000 tokens) if
+  // needed — that covers all critical context with room for the conversation.
+  const SYSTEM_PROMPT_CHAR_LIMIT = 12000;
+  if (systemPrompt.length > SYSTEM_PROMPT_CHAR_LIMIT) {
+    systemPrompt = systemPrompt.slice(0, SYSTEM_PROMPT_CHAR_LIMIT) + '\n[context trimmed for length]';
+    console.warn('[Ask API] System prompt trimmed from', systemPrompt.length, 'chars');
+  }
 
   // Convert prior messages to Anthropic format
   const priorMessages = messages.slice(-6).map(m => ({
@@ -170,7 +185,11 @@ Be concise, practical, and friendly. Use plain English. When explaining a fix, g
     content: m.content,
   }));
 
-  try {
+  // Model preference order — try the latest Haiku first, fall back to a known-
+  // good model if the API key doesn't have access to the newest generation.
+  const MODEL_PREFERENCE = ['claude-haiku-5-5', 'claude-3-5-haiku-20241022', 'claude-haiku-3-5'];
+
+  async function tryModel(model) {
     const res = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
@@ -179,7 +198,7 @@ Be concise, practical, and friendly. Use plain English. When explaining a fix, g
         'anthropic-version': '2023-06-01',
       },
       body: JSON.stringify({
-        model: 'claude-haiku-5-5',
+        model,
         max_tokens: 500,
         system: systemPrompt,
         messages: [
@@ -187,20 +206,55 @@ Be concise, practical, and friendly. Use plain English. When explaining a fix, g
           { role: 'user', content: question },
         ],
       }),
-      signal: AbortSignal.timeout(20000),
+      signal: AbortSignal.timeout(25000),
     });
+    return res;
+  }
 
-    if (res.ok) {
-      const data = await res.json();
-      const answer = data.content?.[0]?.text?.trim() || 'Sorry, I couldn\'t generate a response.';
-      return NextResponse.json({ answer });
+  try {
+    let res = null;
+    let lastErr = '';
+
+    for (const model of MODEL_PREFERENCE) {
+      try {
+        res = await tryModel(model);
+        if (res.ok) {
+          const data = await res.json();
+          const text = data.content?.[0]?.text?.trim();
+          if (text) {
+            return NextResponse.json({ answer: text });
+          }
+          // 200 but empty content — log the full response for diagnosis
+          console.error('[Ask API] Empty content from', model, '— response:', JSON.stringify(data).slice(0, 500));
+          lastErr = `model ${model} returned empty content`;
+          continue; // try next model
+        }
+        // Non-200 — check if it's a model-not-found error (try next) vs a real error
+        const errBody = await res.text().catch(() => '');
+        console.error('[Ask API]', model, res.status, errBody.slice(0, 300));
+        if (res.status === 400 || res.status === 404) {
+          // Likely model unavailable — try next
+          lastErr = `${res.status} from ${model}: ${errBody.slice(0, 100)}`;
+          continue;
+        }
+        // Rate limit, auth error, etc — no point trying another model
+        return NextResponse.json({ answer: 'Something went wrong — please try again.' });
+      } catch (modelErr) {
+        lastErr = modelErr.message;
+        if (modelErr.name === 'TimeoutError') {
+          // Don't retry on timeout — next model would likely time out too
+          console.error('[Ask API] Timeout on', model);
+          return NextResponse.json({ answer: 'The assistant took too long to respond — please try again.' });
+        }
+        console.error('[Ask API] Error on', model, ':', modelErr.message);
+        // Network error — try next model
+      }
     }
 
-    const errText = await res.text().catch(() => '');
-    console.error('[Ask API]', res.status, errText);
+    console.error('[Ask API] All models failed. Last error:', lastErr);
     return NextResponse.json({ answer: 'Something went wrong — please try again.' });
   } catch (e) {
-    console.error('[Ask API]', e.message);
+    console.error('[Ask API] Unexpected error:', e.message);
     return NextResponse.json({ answer: 'Something went wrong — please try again.' });
   }
 }
