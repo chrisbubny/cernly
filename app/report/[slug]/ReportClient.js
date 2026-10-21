@@ -1415,15 +1415,18 @@ export default function ReportClient({ isPro, userName, userAvatar }) {
   }, [report?.url, workItemsLoaded]);
 
   // Load slim scan history (for Progress tab history list + trend chart)
-  // domain is stable for the life of the report; run once when domain is known.
+  // Derive domain inline to avoid TDZ — domain const is declared later in render.
   useEffect(() => {
-    if (!domain) return;
-    fetch(`/api/scan-history?domain=${encodeURIComponent(domain)}`)
+    if (!report?.url) return;
+    let d;
+    try { d = new URL(report.url).hostname; } catch { d = report.url; }
+    if (!d) return;
+    fetch(`/api/scan-history?domain=${encodeURIComponent(d)}`)
       .then(r => r.json())
-      .then(d => setScanHistory(Array.isArray(d.reports) ? d.reports : []))
+      .then(data => setScanHistory(Array.isArray(data.reports) ? data.reports : []))
       .catch(() => setScanHistory([]));
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [domain]);
+  }, [report?.url]);
 
   // Load enriched comparison data (for Progress tab fix verification + overview)
   // report.url is stable for the life of the report; run once when url is known.

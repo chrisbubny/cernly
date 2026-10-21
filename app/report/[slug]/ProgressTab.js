@@ -38,10 +38,11 @@ const scoreColor = s =>
  * scanHistory is newest-first; chart displays oldest→newest left→right.
  */
 function ScoreTrendChart({ scanHistory, slug, id }) {
-  const [selectedCat, setSelectedCat] = useState('performance');
-
-  // Reverse to chronological order
+  // Reverse to chronological order — computed before hooks so early return is safe
   const scans = [...(scanHistory || [])].reverse();
+
+  // Hooks must come before any early return (Rules of Hooks)
+  const [selectedCat, setSelectedCat] = useState('performance');
 
   if (scans.length < 2) return null;
 
