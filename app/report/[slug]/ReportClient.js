@@ -1415,24 +1415,27 @@ export default function ReportClient({ isPro, userName, userAvatar }) {
   }, [report?.url, workItemsLoaded]);
 
   // Load slim scan history (for Progress tab history list + trend chart)
+  // domain is stable for the life of the report; run once when domain is known.
   useEffect(() => {
-    if (scanHistory !== null || !domain) return;
-    setScanHistory([]); // sentinel to prevent double-fetch
+    if (!domain) return;
     fetch(`/api/scan-history?domain=${encodeURIComponent(domain)}`)
       .then(r => r.json())
       .then(d => setScanHistory(Array.isArray(d.reports) ? d.reports : []))
       .catch(() => setScanHistory([]));
-  }, [domain, scanHistory]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [domain]);
 
   // Load enriched comparison data (for Progress tab fix verification + overview)
+  // report.url is stable for the life of the report; run once when url is known.
   useEffect(() => {
-    if (comparisonScans !== null || !report?.url) return;
+    if (!report?.url) return;
     setComparisonScans('loading');
     fetch(`/api/scan-history?url=${encodeURIComponent(report.url)}&full=true`)
       .then(r => r.json())
       .then(d => setComparisonScans(Array.isArray(d.scans) ? d.scans : []))
       .catch(() => setComparisonScans([]));
-  }, [report?.url, comparisonScans]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [report?.url]);
 
   /**
    * Persist a status change for an authenticated user.
