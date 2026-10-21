@@ -2028,14 +2028,13 @@ export default function ReportClient({ isPro, userName, userAvatar }) {
               onStatusChange={handleStatusChange}
               onGuide={(r) => setGuidedFixRec(r)}
               onAskCernly={(iss, suggestedQ) => {
-                setDrawerContext({ title: iss.message, category: iss.area, detail: iss.description || iss.detail });
+                setDrawerContext({
+                  title: iss.message,
+                  category: iss.area,
+                  detail: iss.description || iss.detail,
+                  ...(suggestedQ ? { _initialMessage: suggestedQ } : {}),
+                });
                 setDrawerOpen(true);
-                if (suggestedQ) {
-                  // Pre-fill the suggested question; send via initialMessage
-                  setTimeout(() => {
-                    setDrawerContext(ctx => ctx ? { ...ctx, _initialMessage: suggestedQ } : ctx);
-                  }, 50);
-                }
               }}
               onVerify={handleVerify}
             />
