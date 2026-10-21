@@ -42,7 +42,8 @@ export async function POST(request) {
           .slice(0, 10)
           .map(i => {
             const id = i.fingerprintId ? ` [id:${i.fingerprintId}]` : '';
-            return `[${i.severity.toUpperCase()}]${id} ${i.area}: ${i.message}${i.description ? ' — ' + i.description.slice(0, 120) : ''}`;
+            const dv = i.displayValue ? ` (${i.displayValue})` : '';
+            return `[${i.severity.toUpperCase()}]${id} ${i.area}: ${i.message}${dv}${i.description ? ' — ' + i.description.slice(0, 80) : ''}`;
           })
           .join('\n');
 
@@ -90,6 +91,48 @@ ${a.coverage?.limitations && !a.coverage.limitations.match(/^no significant/i) ?
           recsBlock = `\nKEY RECOMMENDATIONS (${topRecs.length} of ${(report.recommendations || []).length} total):\n${recLines}`;
         }
 
+        // Focused recommendation context — used when a chip is clicked from
+        // an Action Plan card. Gives the AI the full stored evidence for that
+        // specific recommendation so it can answer grounded questions.
+        let focusRecBlock = '';
+        if (recFingerprint) {
+          const focusRec = (report.recommendations || []).find(r => r.fingerprint === recFingerprint);
+          if (focusRec) {
+            const findingLines = (focusRec.supporting_findings || []).slice(0, 8).map(f => {
+              const dv  = f.displayValue ? ` (${f.displayValue})` : '';
+              const desc = f.description ? ' — ' + f.description.slice(0, 80) : '';
+              // Surface up to 3 specific affected resources if captured
+              const itemNote = f.items?.length
+                ? ' [resources: ' + f.items.slice(0, 3).map(it => {
+                    const name = it.url ? it.url.split('/').pop().split('?')[0] || it.url : it.label || '';
+                    const ms   = it.wastedMs != null ? `${it.wastedMs}ms` : '';
+                    return [name, ms].filter(Boolean).join(' ');
+                  }).filter(Boolean).join(', ') + ']'
+                : '';
+              return `  - [${(f.severity || 'issue').toUpperCase()}] ${f.message}${dv}${desc}${itemNote}`;
+            }).join('\n');
+
+            const evidenceParts = focusRec.evidence
+              ? Object.entries(focusRec.evidence).map(([k, v]) => `${k}: ${v}`).join(', ')
+              : null;
+
+            const actionLines = (focusRec.actions || []).slice(0, 3)
+              .map(a => `  → ${a.title}: ${a.detail}`)
+              .join('\n');
+
+            focusRecBlock = `
+RECOMMENDATION IN FOCUS: ${focusRec.title} [${focusRec.priority || 'medium'} priority]
+${focusRec.what_we_found || focusRec.explanation ? `What we found: ${focusRec.what_we_found || focusRec.explanation}` : ''}
+${focusRec.why_it_matters ? `Why it matters: ${focusRec.why_it_matters}` : ''}
+${evidenceParts ? `Measured: ${evidenceParts}` : ''}
+${focusRec.verification_approach ? `How to verify: ${focusRec.verification_approach}` : ''}
+Supporting findings:
+${findingLines || '  (see issues above)'}
+${actionLines ? `Recommended actions:\n${actionLines}` : ''}
+`;
+          }
+        }
+
         // Active guided fix step context — wires Ask Cernly to the specific
         // recommendation and step the user is currently working on.
         let stepBlock = '';
@@ -111,7 +154,7 @@ Domain: ${domain}
 Scores: ${scoreLines}
 Key issues:
 ${issueLines || 'None found'}
-${focusBlock}${stepBlock}${assessmentBlock}${recsBlock}${!assessmentBlock && report.aiSummary ? `\nAI Summary: ${report.aiSummary}` : ''}
+${focusBlock}${focusRecBlock}${stepBlock}${assessmentBlock}${recsBlock}${!assessmentBlock && report.aiSummary ? `\nAI Summary: ${report.aiSummary}` : ''}
 `;
       }
     } catch {}

@@ -452,7 +452,14 @@ function FixCard({ issue, n, impact, rec, workItem, onStatusChange, onAskCernly,
             {/* Ask Cernly contextual chips */}
             <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 12 }}>
               {askChips.map((chip, i) => (
-                <button key={i} onClick={() => onAskCernly(issue, chip)}
+                <button key={i} onClick={() => {
+                  // "How do I fix?" opens Guided Fix directly when a rec is available
+                  if (chip.startsWith('How do I fix') && rec && onGuide) {
+                    onGuide(rec);
+                  } else {
+                    onAskCernly(issue, chip, rec);
+                  }
+                }}
                   style={{ fontSize: 11, fontWeight: 600, color: '#7948f6',
                     background: '#f7f4ff', border: '1px solid #e8e2ff',
                     borderRadius: 20, padding: '4px 11px', cursor: 'pointer', fontFamily: 'inherit' }}>
@@ -2027,11 +2034,13 @@ export default function ReportClient({ isPro, userName, userAvatar }) {
               highlighted={!!fp && fp === highlightedFp}
               onStatusChange={handleStatusChange}
               onGuide={(r) => setGuidedFixRec(r)}
-              onAskCernly={(iss, suggestedQ) => {
+              onAskCernly={(iss, suggestedQ, matchedRec) => {
                 setDrawerContext({
                   title: iss.message,
                   category: iss.area,
                   detail: iss.description || iss.detail,
+                  // Forward rec fingerprint so /api/ask can load full evidence
+                  ...(matchedRec?.fingerprint ? { _recFingerprint: matchedRec.fingerprint } : {}),
                   ...(suggestedQ ? { _initialMessage: suggestedQ } : {}),
                 });
                 setDrawerOpen(true);
