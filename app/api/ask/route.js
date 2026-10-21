@@ -46,6 +46,19 @@ export async function POST(request) {
           ? allIssues.find(i => i.fingerprintId === findingFingerprintId)
           : null;
 
+        // Auto-resolve recFingerprint from findingFingerprintId when the client
+        // didn't (or couldn't) supply one — e.g. when matchedRec was null client-side.
+        // This means every chip click reliably loads the full recommendation evidence,
+        // even for old scans or findings without a pre-built rec.
+        let effectiveRecFingerprint = recFingerprint;
+        if (!effectiveRecFingerprint && findingFingerprintId) {
+          const autoRec = (report.recommendations || []).find(r =>
+            Array.isArray(r.finding_fingerprints) &&
+            r.finding_fingerprints.includes(findingFingerprintId)
+          );
+          if (autoRec?.fingerprint) effectiveRecFingerprint = autoRec.fingerprint;
+        }
+
         const issueLines = allIssues
           .filter(i => i.severity === 'critical' || i.severity === 'warning')
           .slice(0, 10)
@@ -104,8 +117,8 @@ ${a.coverage?.limitations && !a.coverage.limitations.match(/^no significant/i) ?
         // an Action Plan card. Gives the AI the full stored evidence for that
         // specific recommendation so it can answer grounded questions.
         let focusRecBlock = '';
-        if (recFingerprint) {
-          const focusRec = (report.recommendations || []).find(r => r.fingerprint === recFingerprint);
+        if (effectiveRecFingerprint) {
+          const focusRec = (report.recommendations || []).find(r => r.fingerprint === effectiveRecFingerprint);
           if (focusRec) {
             const findingLines = (focusRec.supporting_findings || []).slice(0, 8).map(f => {
               const dv  = f.displayValue ? ` (${f.displayValue})` : '';

@@ -922,7 +922,7 @@ function UxCard({ uxScore, uxInsights, uxAnnotations, visionStatus, siteType, ur
 }
 
 /* ─── Ask Cernly drawer ─── */
-function AskCernlyDrawer({ reportId, domain, onClose, initialContext, initialMessage, recFingerprint, activeStep, elementContext }) {
+function AskCernlyDrawer({ reportId, domain, onClose, initialContext, initialMessage, recFingerprint, findingFingerprintId, activeStep, elementContext }) {
   const openingMsg = initialContext
     ? `I'm looking at the **${initialContext.category || 'finding'}** issue: **${initialContext.title}**.\n\n${initialContext.detail ? initialContext.detail.replace(/\[([^\]]+)\]\([^)]+\)/g, '$1').slice(0, 200) : 'What would you like to know about this finding?'}`
     : `Hi! I've analyzed **${domain || 'this site'}** and I'm ready to help. Ask me what a finding means, how to fix it, or where to start.`;
@@ -961,6 +961,7 @@ function AskCernlyDrawer({ reportId, domain, onClose, initialContext, initialMes
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           question: q, reportId, messages: updated.slice(-6),
+          ...(findingFingerprintId ? { findingFingerprintId } : {}),
           ...(recFingerprint ? { recFingerprint } : {}),
           ...(activeStep ? { activeStep } : {}),
           ...(elementContext ? { elementContext } : {}),
@@ -2055,7 +2056,10 @@ export default function ReportClient({ isPro, userName, userAvatar }) {
                   title: iss.message,
                   category: iss.area,
                   detail: iss.description || iss.detail,
-                  // Forward rec fingerprint so /api/ask can load full evidence
+                  // Always forward the issue's stable fingerprint so /api/ask can build
+                  // focusBlock and auto-resolve the rec even when matchedRec is null.
+                  ...(iss.fingerprintId ? { _findingFingerprintId: iss.fingerprintId } : {}),
+                  // Forward rec fingerprint for full recommendation context when available
                   ...(matchedRec?.fingerprint ? { _recFingerprint: matchedRec.fingerprint } : {}),
                   ...(suggestedQ ? { _initialMessage: suggestedQ } : {}),
                   // Per-element context: passed when user clicks "Fix this →" on a specific item
@@ -2539,6 +2543,7 @@ export default function ReportClient({ isPro, userName, userAvatar }) {
         <AskCernlyDrawer reportId={id} domain={domain}
           initialContext={drawerContext?._initialMessage ? null : drawerContext}
           initialMessage={drawerContext?._initialMessage || null}
+          findingFingerprintId={drawerContext?._findingFingerprintId || null}
           recFingerprint={drawerContext?._recFingerprint || null}
           activeStep={drawerContext?._activeStep || null}
           elementContext={drawerContext?._elementContext || null}
