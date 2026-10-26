@@ -202,9 +202,9 @@ See `lib/recommendations.js` for `RECOMMENDATION_GROUPS`, grouping logic, and pr
 
 ```javascript
 const MODEL_PREFERENCE = [
-  'claude-haiku-5-5',           // Try first; 400/404 if account lacks access
-  'claude-3-5-haiku-20241022',  // Widely accessible fallback
-  'claude-3-haiku-20240307',    // Final fallback — correct dated ID
+  'claude-haiku-5-5',           // Primary — fastest; 400/404 if account lacks access
+  'claude-sonnet-5-5',          // Fallback — also used in vision.js
+  'claude-3-5-sonnet-20241022', // Last resort — confirmed accessible Oct 2026
 ];
 ```
 

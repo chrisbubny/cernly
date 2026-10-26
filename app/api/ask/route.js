@@ -330,9 +330,9 @@ When RECOMMENDATION IN FOCUS, FOCUS FINDING, or FOCUS ELEMENT is present in the 
   // Non-retriable (same API key will fail on any model): 401 (invalid key),
   //   403 (permissions), other unexpected 4xx
   const MODEL_PREFERENCE = [
-    'claude-haiku-5-5',           // Claude Haiku 5.5 — try first; 400/404 if key lacks access
-    'claude-3-5-haiku-20241022',  // Claude 3.5 Haiku — known-valid, widely accessible
-    'claude-3-haiku-20240307',    // Claude 3 Haiku — final fallback
+    'claude-haiku-5-5',           // Claude Haiku 5.5 — primary; fastest and cheapest
+    'claude-sonnet-5-5',          // Claude Sonnet 5.5 — fallback if Haiku 5.5 unavailable
+    'claude-3-5-sonnet-20241022', // Claude 3.5 Sonnet — last resort; confirmed accessible
   ];
 
   // Statuses that are transient — worth trying the next model in the list.
