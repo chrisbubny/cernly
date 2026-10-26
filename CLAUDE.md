@@ -370,6 +370,7 @@ node __tests__/<filename>.mjs
 | `a11y-element-evidence.mjs` | Accessibility element evidence collection |
 | `items-persistence.mjs` | Work item persistence |
 | `alias-hooks.mjs` / `alias-loader.mjs` | Module alias resolution |
+| `ask-quota-integration.mjs` | **Real PostgreSQL** integration test for `reserveAskSlot()` — 120 concurrent reservations, quota 100; requires `DATABASE_URL`; not in CI |
 
 ### Browser-level testing
 
