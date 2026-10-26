@@ -281,10 +281,13 @@ ${activeStep.developer?.notes ? `Notes: ${activeStep.developer.notes}` : ''}
           }
         }
 
+        // Include detected platform/CMS type when available
+        const siteTypeLine = report.siteType ? `Platform/CMS: ${report.siteType}` : '';
+
         reportContext = `
 SITE CONTEXT:
 Domain: ${domain}
-Scores: ${scoreLines}
+${siteTypeLine ? siteTypeLine + '\n' : ''}Scores: ${scoreLines}
 Key issues:
 ${issueLines || 'None found'}
 ${focusBlock}${elementBlock}${focusRecBlock}${stepBlock}${assessmentBlock}${recsBlock}${!assessmentBlock && report.aiSummary ? `\nAI Summary: ${report.aiSummary}` : ''}
@@ -300,7 +303,9 @@ ${focusBlock}${elementBlock}${focusRecBlock}${stepBlock}${assessmentBlock}${recs
   const hasFocusContext = !!(effectiveRecFingerprint || findingFingerprintId || elementContext);
   let systemPrompt = `You are Cernly AI, a helpful web performance and SEO assistant embedded in a website audit report. You have access to this site's structured assessment, recommendations, and audit data.
 
-Be concise, practical, and friendly. Use plain English. When explaining a fix, give specific actionable steps — not generic advice. Keep answers under 250 words unless the question needs more detail. Refer to the site's actual findings and priorities rather than giving generic advice.${hasFocusContext ? `
+Be concise, practical, and friendly. Use plain English. When explaining a fix, give specific actionable steps — not generic advice. Keep answers under 250 words unless the question needs more detail. Refer to the site's actual findings and priorities rather than giving generic advice.
+
+When the Platform/CMS is known, tailor advice to that platform. For WordPress sites: never recommend blindly removing or deferring jQuery or other shared scripts — themes and plugins may depend on them. Instead, advise the user to check what depends on the resource first (using browser DevTools or Query Monitor) before deferring or removing it. Distinguish confirmed scan findings from steps that require manual investigation.${hasFocusContext ? `
 
 When RECOMMENDATION IN FOCUS, FOCUS FINDING, or FOCUS ELEMENT is present in the context, answer specifically about that finding or recommendation. Stay grounded in its supporting evidence and do not drift to other recommendations.` : ` When the assessment identifies a top opportunity, treat it as the established priority unless the user asks about something else specifically.`}${reportContext ? `\n${reportContext}` : ''}`;
 

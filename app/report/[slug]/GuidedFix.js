@@ -15,6 +15,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import AffectedElements from './AffectedElements';
+import AskMarkdown from './AskMarkdown';
 
 // ---------------------------------------------------------------------------
 // Design tokens — light theme
@@ -428,7 +429,9 @@ function InlineChatPanel({ step, messages, input, loading, error, inputRef, onIn
             fontSize: 12,
             lineHeight: 1.65,
           }}>
-            {m.content}
+            {m.role === 'assistant'
+              ? <AskMarkdown content={m.content} dark />
+              : m.content}
           </div>
         ))}
         {loading && (
