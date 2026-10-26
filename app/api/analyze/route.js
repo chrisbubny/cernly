@@ -5,7 +5,7 @@ import { runSeoAudit } from '@/lib/analyzers/seo';
 import { runSslCheck } from '@/lib/analyzers/ssl';
 import { runA11yCheck } from '@/lib/analyzers/a11y';
 import { runAiSummary, runAssessment } from '@/lib/analyzers/ai';
-import { saveReport, saveRecommendations, ensureRecommendationsTable, ensureAssessmentColumns, updateReportAssessment, getUserSubscription, getMonthlyScansCount, tryScanLock, FREE_SCAN_LIMIT } from '@/lib/store';
+import { saveReport, saveRecommendations, ensureRecommendationsTable, ensureAssessmentColumns, updateReportAssessment, getUserSubscription, getMonthlyScansCount, tryScanLock, FREE_SCAN_LIMIT, PRO_SCAN_LIMIT } from '@/lib/store';
 import { normalizeScore, assignIssueFingerprintIds } from '@/lib/scoring';
 import { generateRecommendations } from '@/lib/recommendations';
 
@@ -43,39 +43,48 @@ export async function POST(request) {
   // report save. Partially completed scans (some analyzers failed, report saved) DO count.
   //
   // userId is guaranteed non-null here (auth check above returns 401 before this).
-  let scanLimit = null; // null = no limit (Pro or admin)
+  // scanLimit drives both the pre-flight check and the atomic save-time check.
+  //   null  = no server-enforced ceiling (should not occur post-Release 1 — all
+  //           authenticated users have either a free or Pro limit)
+  //   FREE_SCAN_LIMIT (3)  for free users
+  //   PRO_SCAN_LIMIT  (15) for Pro subscribers
+  let scanLimit = null;
+  let isPro = false;
 
-  if (userId) {
+  {
     const [subResult, countResult] = await Promise.allSettled([
       getUserSubscription(userId),
       getMonthlyScansCount(userId),
     ]);
     const subscription = subResult.status === 'fulfilled' ? subResult.value : null;
     const monthlyCount = countResult.status === 'fulfilled' ? countResult.value : 0;
-    const isPro = !!subscription;
+    isPro = !!subscription;
 
     // BYPASS_SCAN_LIMIT=true in .env.local skips enforcement for local/staging dev.
     // Never set this in production.
     const bypassLimit = process.env.BYPASS_SCAN_LIMIT === 'true';
 
-    if (!isPro && !bypassLimit && monthlyCount >= FREE_SCAN_LIMIT) {
-      return NextResponse.json(
-        {
-          error: 'scan_limit_reached',
-          message: `Free plan includes ${FREE_SCAN_LIMIT} scans per month. Upgrade to Pro for unlimited scans.`,
-          used: monthlyCount,
-          limit: FREE_SCAN_LIMIT,
-        },
-        { status: 429 }
-      );
+    if (!bypassLimit) {
+      const limit = isPro ? PRO_SCAN_LIMIT : FREE_SCAN_LIMIT;
+      if (monthlyCount >= limit) {
+        return NextResponse.json(
+          {
+            error: 'scan_limit_reached',
+            message: isPro
+              ? `Pro plan includes ${PRO_SCAN_LIMIT} scans per month. You have used all ${PRO_SCAN_LIMIT} this month.`
+              : `Free plan includes ${FREE_SCAN_LIMIT} scans per month. Upgrade to Pro for more scans.`,
+            used: monthlyCount,
+            limit,
+          },
+          { status: 429 }
+        );
+      }
+      scanLimit = limit;
     }
-
-    // Non-Pro authenticated users get limit enforcement at save time too
-    if (!isPro && !bypassLimit) scanLimit = FREE_SCAN_LIMIT;
   }
   // ── End scan limit pre-check ─────────────────────────────────────────────────
 
-  // ── Concurrent scan serialization (free-plan users only) ────────────────────
+  // ── Concurrent scan serialization (all authenticated users) ─────────────────
   // Acquire a session-level advisory lock *before* running analyzers so that a
   // second simultaneous request for this user fails fast (immediate 429) instead
   // of wasting ~15 s of Lighthouse / SEO / AI resources it cannot save anyway.

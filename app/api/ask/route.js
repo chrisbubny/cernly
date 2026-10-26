@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { auth } from '@clerk/nextjs/server';
-import { getReport, getRecommendationsByReport } from '@/lib/store';
+import { getReport, getRecommendationsByReport, getMonthlyAskCount, incrementAskCount, ASK_LIMIT } from '@/lib/store';
 import { buildScoreLines } from '@/lib/scoring';
 
 // POST /api/ask
@@ -19,6 +19,28 @@ export async function POST(request) {
   if (!userId) {
     return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
   }
+
+  // ── Ask usage ceiling (all plans) ────────────────────────────────────────────
+  // Hard ceiling of ASK_LIMIT requests per user per calendar month.
+  // Checked pre-flight; incremented atomically on success (after the AI responds).
+  // This is a safety ceiling — not a per-plan entitlement system (that is Release 2).
+  const bypassAskLimit = process.env.BYPASS_SCAN_LIMIT === 'true'; // reuse dev bypass
+  if (!bypassAskLimit) {
+    const askCount = await getMonthlyAskCount(userId).catch(() => 0);
+    if (askCount >= ASK_LIMIT) {
+      console.warn(`[Ask API] [${reqId}] ask_limit_reached userId=${userId} count=${askCount}`);
+      return NextResponse.json(
+        {
+          error: 'ask_limit_reached',
+          message: `You've reached the ${ASK_LIMIT} Ask Cernly requests allowed this month.`,
+          used: askCount,
+          limit: ASK_LIMIT,
+        },
+        { status: 429 }
+      );
+    }
+  }
+  // ── End Ask usage ceiling ────────────────────────────────────────────────────
 
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {
@@ -344,6 +366,13 @@ When RECOMMENDATION IN FOCUS, FOCUS FINDING, or FOCUS ELEMENT is present in the 
               `output_tokens=${outTok ?? 'unknown'}` +
               (estCostUsd != null ? ` est_cost_usd=${estCostUsd}` : '')
             );
+            // Increment ask counter after successful response — fail open (never
+            // block the user if the counter write fails, but do log the failure).
+            if (!bypassAskLimit) {
+              incrementAskCount(userId).catch(e =>
+                console.error(`[Ask API] [${reqId}] ask_count increment failed:`, e.message)
+              );
+            }
             return NextResponse.json({ answer: text });
           }
           // 200 OK but empty content — log full response for diagnosis
