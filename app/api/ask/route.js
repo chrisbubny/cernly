@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { auth } from '@clerk/nextjs/server';
 import { getReport, getRecommendationsByReport, reserveAskSlot } from '@/lib/store';
 import { buildScoreLines } from '@/lib/scoring';
+import { estimateCost } from '@/lib/ai-cost';
 
 // POST /api/ask
 // Body: { question, reportId, messages?, findingFingerprintId?, recFingerprint?, activeStep?, elementContext? }
@@ -331,16 +332,6 @@ When RECOMMENDATION IN FOCUS, FOCUS FINDING, or FOCUS ELEMENT is present in the 
     'claude-3-haiku-20240307',    // Claude 3 Haiku — final fallback
   ];
 
-  // Per-model token cost rates (USD per token, approximate — for monitoring only,
-  // NOT for billing decisions).  Rates sourced from Anthropic pricing page.
-  // Models not in this table fall back to the generic Haiku rate.
-  const MODEL_COST_RATES = {
-    'claude-haiku-5-5':          { input: 0.0000008, output: 0.000004 },
-    'claude-3-5-haiku-20241022': { input: 0.0000008, output: 0.000004 },
-    'claude-3-haiku-20240307':   { input: 0.00000025, output: 0.00000125 },
-  };
-  const DEFAULT_RATE = { input: 0.0000008, output: 0.000004 };
-
   // Statuses that are transient — worth trying the next model in the list.
   // 400/404 mean model unavailable for this key; 429/503/529 are server-side load issues.
   const RETRIABLE_STATUSES = new Set([400, 404, 429, 503, 529]);
@@ -386,10 +377,11 @@ When RECOMMENDATION IN FOCUS, FOCUS FINDING, or FOCUS ELEMENT is present in the 
             // Rates are approximate and for monitoring only — not billing records.
             const inTok  = data.usage?.input_tokens  ?? null;
             const outTok = data.usage?.output_tokens ?? null;
-            const rate   = MODEL_COST_RATES[model] ?? DEFAULT_RATE;
-            const estCostUsd = (inTok != null && outTok != null)
-              ? ((inTok * rate.input) + (outTok * rate.output)).toFixed(6)
-              : null;
+            const costInfo = estimateCost(model, inTok, outTok);
+            if (costInfo?.rateSource === 'unknown') {
+              console.warn(`[Ask API] [${reqId}] unknown model in rate table: ${costInfo.model} — tokens logged, cost omitted`);
+            }
+            const estCostUsd = costInfo?.est_cost_usd_estimate ?? null;
             console.log(
               `[Ask API] [${reqId}] ai_success model=${model} ` +
               `answerLen=${text.length} ` +

@@ -1,25 +1,35 @@
 /**
  * __tests__/release1-runtime-auth.mjs
  *
- * EXECUTABLE authorization tests for Release 1.
+ * Authorization logic tests for Release 1.
  *
- * These tests exercise the actual route handler logic by:
- *   1. Importing the real route modules (after patching module-level imports
- *      via a lightweight module-mock layer built on Node's module cache)
- *   2. Calling the exported POST/GET handlers directly with synthetic Request objects
- *   3. Asserting on the HTTP status and JSON body
+ * SCOPE AND LIMITATIONS — read before interpreting results:
  *
- * Mock strategy:
- *   - Clerk (@clerk/nextjs/server): mocked at import time via global.__mockAuth
- *   - PostgreSQL (lib/store): mocked via global.__mockStore for DB-dependent paths
- *   - Stripe (lib/stripe-session): mocked via global.__mockStripeSession
- *   - Anthropic (fetch): mocked via global.fetch override inside each test
+ *   These tests do NOT invoke Next.js route handlers, do NOT connect to
+ *   PostgreSQL, and do NOT call the Anthropic API.  They verify authorization
+ *   decision logic, session-validation logic, and SQL-source properties by:
  *
- * Because Next.js route files import their dependencies at module load time, and
- * Node's ES module cache doesn't support re-importing with different mocks, we
- * test the AUTHORIZATION LOGIC directly rather than running the full HTTP stack.
- * This is the appropriate scope for a Node.js unit/integration test without a
- * running Next.js server.
+ *     1. Extracting and re-implementing the key conditional (e.g. "if (!userId)
+ *        return 401") as a local function and asserting its behaviour.
+ *        → Establishes: the policy is correctly stated in isolation.
+ *        → Does NOT establish: the policy is wired into the actual route handler,
+ *          or that the handler returns the expected HTTP status in production.
+ *
+ *     2. Inspecting source files (readFileSync) for required SQL patterns.
+ *        → Establishes: the expected pattern appears in the source text.
+ *        → Does NOT establish: the SQL executes correctly against a real DB.
+ *
+ *     3. Running in-memory simulations of counter logic (Section 4 concurrency
+ *        test) to verify the quota arithmetic is sound.
+ *        → Establishes: the arithmetic is correct for single-threaded JS.
+ *        → Does NOT establish: the PostgreSQL ON CONFLICT DO UPDATE WHERE clause
+ *          actually prevents over-counting under concurrent DB writes.
+ *          That requires a real DB integration test (see Section 4 note).
+ *
+ *   What still requires verification beyond these tests:
+ *     - Real route handler returns correct HTTP status in a running Next.js server
+ *     - reserveAskSlot() enforces the ceiling in PostgreSQL under concurrency
+ *     - Deployment on DigitalOcean with live Clerk, Stripe, Anthropic API
  *
  * Run: node __tests__/release1-runtime-auth.mjs
  */
@@ -350,10 +360,61 @@ async function parseResponse(res) {
 }
 
 // ---------------------------------------------------------------------------
+// Section 8: reserveAskSlot — SQL ceiling enforcement (source verification)
+// ---------------------------------------------------------------------------
+// Verify that the SQL in reserveAskSlot contains the WHERE clause that prevents
+// the counter from incrementing past ASK_LIMIT.  This is a source-text check,
+// not a live DB test.
+//
+// NOTE: This verifies the SQL text is correctly written.  It does NOT verify
+// that PostgreSQL enforces the ceiling correctly under concurrent writes.
+// A real integration test against a test database would be needed for that.
+
+{
+  const storeSource = readFileSync(new URL('../lib/store.js', import.meta.url), 'utf8');
+
+  // The ON CONFLICT clause must include a WHERE condition on ask_count
+  assert.ok(
+    storeSource.includes('WHERE ask_usage.ask_count < $2'),
+    'reserveAskSlot SQL must include WHERE ask_usage.ask_count < $2 to enforce ceiling atomically'
+  );
+
+  // Must use RETURNING so the route can detect whether the update fired (0 rows = rejected)
+  assert.ok(
+    /INSERT INTO ask_usage[\s\S]*?RETURNING ask_count/.test(storeSource),
+    'reserveAskSlot SQL must use RETURNING ask_count so the caller can detect 0-row result'
+  );
+
+  // The route must check result.rows.length === 0 to detect exhausted quota
+  assert.ok(
+    storeSource.includes('result.rows.length === 0'),
+    'reserveAskSlot must check result.rows.length === 0 to return { allowed: false } when limit is exhausted'
+  );
+
+  // Must not use DEFAULT_RATE or a fallback that bypasses the ceiling check
+  assert.ok(
+    !storeSource.includes('DEFAULT_RATE'),
+    'lib/store.js must not contain DEFAULT_RATE (cost rates belong in lib/ai-cost.js)'
+  );
+
+  // Verify ASK_LIMIT constant is defined
+  assert.ok(
+    /const ASK_LIMIT\s*=\s*\d+/.test(storeSource),
+    'ASK_LIMIT constant must be defined in lib/store.js'
+  );
+
+  console.log('✓ [reserveAskSlot SQL] WHERE ceiling clause present; RETURNING clause present; 0-row rejection check present');
+}
+
+// ---------------------------------------------------------------------------
 // Done
 // ---------------------------------------------------------------------------
 
 console.log('\n✅ All release1-runtime-auth tests passed');
 console.log('   Verified: auth gate logic, Stripe session validation (7 cases), scan-history');
 console.log('             isolation, atomic quota concurrency (120 requests), failed-call');
-console.log('             quota consumption, Pro PDF authorization (6 cases), SQL injection guard');
+console.log('             quota consumption, Pro PDF authorization (6 cases), SQL injection guard,');
+console.log('             reserveAskSlot SQL ceiling enforcement (source verification)');
+console.log('');
+console.log('   LIMITATIONS: Tests use extracted logic, source inspection, and in-memory');
+console.log('   simulation — NOT live Next.js routes, NOT real PostgreSQL, NOT Anthropic API.');

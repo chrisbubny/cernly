@@ -96,7 +96,36 @@ ensureGuidanceColumns()
 
 ### Migrations
 
-`scripts/migrate.js` — custom migration runner. Tracks applied migrations in a `schema_migrations` table. Current migration: `001_add_site_type_ux_columns` (adds `site_type`, `ux_score`, `ux_insights` and backfills from old JSONB).
+`scripts/migrate.js` — custom migration runner. Tracks applied migrations in a `schema_migrations` table.
+
+**Current migrations:**
+- `001_add_site_type_ux_columns` — adds `site_type`, `ux_score`, `ux_insights`; backfills from old JSONB
+- `002_create_ask_usage` — creates `ask_usage (user_id, month, ask_count)` table for Ask Cernly quota; uses `CREATE TABLE IF NOT EXISTS` so it is safe to run even if the table was previously created by runtime code
+
+**⚠️ Migrations are NOT run automatically on DigitalOcean deploy.**
+
+There is no `.do/app.yaml` pre-deploy hook, no `prestart` npm hook, and DigitalOcean App Platform does not run arbitrary commands before the app starts. Committing a migration to `scripts/migrate.js` does **not** apply it to the production database.
+
+**To apply migrations to production:**
+
+1. Ensure `DATABASE_URL` is set in your shell (copy from DO App Platform → Settings → Environment Variables, or use a tunnel):
+   ```
+   export DATABASE_URL="postgres://..."
+   ```
+2. Run the migration runner:
+   ```
+   npm run migrate
+   ```
+3. Verify the migration was recorded:
+   ```sql
+   SELECT name, applied_at FROM schema_migrations ORDER BY applied_at;
+   ```
+4. Verify the target table or column exists:
+   ```sql
+   \d ask_usage          -- for migration 002
+   ```
+
+**Never assume a committed migration has been applied to production.** Always verify via `schema_migrations` after running.
 
 ### Key tables and columns
 
