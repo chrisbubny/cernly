@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { auth } from '@clerk/nextjs/server';
-import { getReport, getRecommendationsByReport, reserveAskSlot } from '@/lib/store';
+import { getReportBySlug, getRecommendationsByReport, reserveAskSlot } from '@/lib/store';
 import { buildScoreLines } from '@/lib/scoring';
 import { estimateCost } from '@/lib/ai-cost';
 
@@ -104,7 +104,10 @@ export async function POST(request) {
   if (reportId) {
     try {
       contextStage = 'getReport';
-      const report = await getReport(reportId);
+      // reportId is the URL slug (UUID string) — use getReportBySlug, not getReport,
+      // which queries by integer PK and would throw "invalid input syntax for integer"
+      // when given a slug, causing the catch block to swallow all context silently.
+      const report = await getReportBySlug(reportId);
 
       if (!report) {
         console.warn(`[Ask API] [${reqId}] getReport(${reportId}) returned null — proceeding without site context`);
