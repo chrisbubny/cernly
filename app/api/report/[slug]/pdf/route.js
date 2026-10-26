@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server';
-import { getReport, getReportBySlug } from '@/lib/store';
+import { auth } from '@clerk/nextjs/server';
+import { getReport, getReportBySlug, getUserSubscription } from '@/lib/store';
+import { isValidPaidStripeSession } from '@/lib/stripe-session';
 import { renderToBuffer, Document, Page, Text, View, StyleSheet, Font } from '@react-pdf/renderer';
 
 // ── Styles ──────────────────────────────────────────────────────────────────
@@ -370,12 +372,52 @@ export async function GET(request, { params }) {
     return NextResponse.json({ error: 'Report not found' }, { status: 404 });
   }
 
-  // Gate behind paid flag (or session_id param for just-purchased reports)
+  // ── Access gate ───────────────────────────────────────────────────────────────
+  // PDF access is granted when any ONE of the following holds:
+  //   1. report.paid is true (single-report purchase confirmed by webhook)
+  //   2. The caller is the report owner AND has an active Pro subscription
+  //   3. A valid Stripe session_id is supplied (post-purchase race window before
+  //      the webhook fires; validated against the Stripe API — arbitrary strings denied)
+  //
+  // Authentication is required for checks 2 and 3. Check 1 (report.paid) is a
+  // property of the report row and does not require the caller to be authenticated,
+  // but without auth there is no ownership verification, so unauthenticated callers
+  // can only access reports that have been explicitly marked paid by the webhook.
   const { searchParams } = new URL(request.url);
   const sessionId = searchParams.get('session_id');
-  const canAccess = report.paid || !!sessionId;
 
-  if (!canAccess) {
+  let viewerUserId = null;
+  try { const { userId } = await auth(); viewerUserId = userId || null; } catch {}
+
+  const isOwner = !!(viewerUserId && report.userId && viewerUserId === report.userId);
+
+  // Check 1: webhook-confirmed purchase
+  if (report.paid) {
+    // Paid flag set — no further checks needed; continue to PDF generation below.
+  } else if (isOwner) {
+    // Check 2: owner with active Pro subscription
+    const subscription = await getUserSubscription(viewerUserId).catch(() => null);
+    if (!subscription) {
+      // Not paid and not Pro — check for a valid post-purchase session_id
+      if (sessionId) {
+        const validSession = await isValidPaidStripeSession(sessionId, report.slug, report.id);
+        if (!validSession) {
+          return NextResponse.json({ error: 'Purchase required to download PDF', purchaseRequired: true }, { status: 403 });
+        }
+        // Valid session — allow; the webhook will set paid=true shortly
+      } else {
+        return NextResponse.json({ error: 'Purchase required to download PDF', purchaseRequired: true }, { status: 403 });
+      }
+    }
+    // Has Pro subscription — allow
+  } else if (sessionId) {
+    // Check 3: non-owner with a session_id (unauthenticated or different user just purchased)
+    const validSession = await isValidPaidStripeSession(sessionId, report.slug, report.id);
+    if (!validSession) {
+      return NextResponse.json({ error: 'Purchase required to download PDF', purchaseRequired: true }, { status: 403 });
+    }
+    // Valid session — allow
+  } else {
     return NextResponse.json({ error: 'Purchase required to download PDF', purchaseRequired: true }, { status: 403 });
   }
 

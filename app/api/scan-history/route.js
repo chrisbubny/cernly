@@ -37,13 +37,22 @@ export async function GET(request) {
     }
   }
 
-  // ── Slim domain-level list (existing, backward compatible) ──────────────
+  // ── Slim domain-level list (auth required — returns only caller's scans) ──
   if (!domain) {
     return NextResponse.json({ error: 'domain is required' }, { status: 400 });
   }
 
+  // Auth required — the caller must be authenticated to see scan history.
+  // This check is done here (after the full=true branch) so the full endpoint
+  // preserves its own auth block and error message.
+  let slimUserId = null;
+  try { const { userId: uid } = await auth(); slimUserId = uid || null; } catch {}
+  if (!slimUserId) {
+    return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
+  }
+
   try {
-    const reports = await getReportsByDomain(domain);
+    const reports = await getReportsByDomain(domain, slimUserId);
     return NextResponse.json({ reports });
   } catch (e) {
     console.error('[scan-history]', e.message);

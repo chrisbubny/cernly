@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { auth } from '@clerk/nextjs/server';
 import { getReport, getReportBySlug, getRecommendationsByReport } from '@/lib/store';
+import { isValidPaidStripeSession } from '@/lib/stripe-session';
 
 // GET /api/report?slug=xxx  (preferred — public UUID)
 // GET /api/report?id=xxx    (legacy integer ID — kept for backward compat)
@@ -25,9 +26,15 @@ export async function GET(request) {
   try { const { userId } = await auth(); viewerUserId = userId || null; } catch {}
 
   const isOwner = !!(viewerUserId && report.userId && viewerUserId === report.userId);
-  const isStripeSession = !!sessionId;
 
-  // Access gate: owner, or report is marked public, or Stripe just completed
+  // Access gate: owner, or report is marked public, or Stripe just completed.
+  // session_id is validated against Stripe — any arbitrary string is rejected.
+  // report.paid is checked first to avoid the Stripe API call on normal owner access.
+  let isStripeSession = false;
+  if (!isOwner && !report.isPublic && sessionId) {
+    isStripeSession = await isValidPaidStripeSession(sessionId, report.slug, report.id);
+  }
+
   if (!isOwner && !report.isPublic && !isStripeSession) {
     return NextResponse.json({ error: 'This report is private.' }, { status: 403 });
   }

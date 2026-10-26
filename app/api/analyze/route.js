@@ -13,9 +13,17 @@ import { generateRecommendations } from '@/lib/recommendations';
 // Body: { url: string }
 // Returns: { scores, aiSummary, issues, reportId }
 export async function POST(request) {
-  // Get auth'd user if signed in (optional — anonymous scans allowed)
+  // Authentication required — anonymous scans are not permitted.
+  // Returning 401 before any URL validation so unauthenticated callers
+  // cannot probe the analyzer at all.
   let userId = null;
   try { const { userId: uid } = await auth(); userId = uid || null; } catch {}
+  if (!userId) {
+    return NextResponse.json(
+      { error: 'Authentication required. Please sign in to scan a website.' },
+      { status: 401 }
+    );
+  }
 
   let body = {};
   try { body = await request.json(); } catch {}
@@ -25,7 +33,7 @@ export async function POST(request) {
   if (!/^https?:\/\//i.test(url)) url = 'https://' + url;
   try { new URL(url); } catch { return NextResponse.json({ error: 'Invalid URL' }, { status: 400 }); }
 
-  // ── Scan limit enforcement (authenticated users only) ────────────────────────
+  // ── Scan limit enforcement ────────────────────────────────────────────────────
   // Free plan: FREE_SCAN_LIMIT scans per calendar month (UTC).
   // Checked here (pre-flight) to fail fast before running analyzers (~15s).
   // A second atomic check happens inside saveReport to handle concurrent requests
@@ -33,7 +41,9 @@ export async function POST(request) {
   //
   // Failed/errored scans do NOT count — the limit only increments on a successful
   // report save. Partially completed scans (some analyzers failed, report saved) DO count.
-  let scanLimit = null; // null = no limit (Pro, anonymous, or admin)
+  //
+  // userId is guaranteed non-null here (auth check above returns 401 before this).
+  let scanLimit = null; // null = no limit (Pro or admin)
 
   if (userId) {
     const [subResult, countResult] = await Promise.allSettled([

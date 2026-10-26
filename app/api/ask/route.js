@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { auth } from '@clerk/nextjs/server';
 import { getReport, getRecommendationsByReport } from '@/lib/store';
 import { buildScoreLines } from '@/lib/scoring';
 
@@ -11,6 +12,13 @@ export async function POST(request) {
   // request can be traced end-to-end in production logs.
   // Search server logs for "[Ask API] [<reqId>]" to follow a request.
   const reqId = Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+
+  // Authentication required — unauthenticated callers cannot trigger AI calls.
+  let userId = null;
+  try { const { userId: uid } = await auth(); userId = uid || null; } catch {}
+  if (!userId) {
+    return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
+  }
 
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {
@@ -319,7 +327,23 @@ When RECOMMENDATION IN FOCUS, FOCUS FINDING, or FOCUS ELEMENT is present in the 
           const data = await res.json();
           const text = data.content?.[0]?.text?.trim();
           if (text) {
-            console.log(`[Ask API] [${reqId}] success model=${model} answerLen=${text.length}`);
+            // ── Token instrumentation ─────────────────────────────────────────
+            // Haiku pricing (approximate, subject to change):
+            //   Input:  $0.80 / 1M tokens  = $0.0000008 per token
+            //   Output: $4.00 / 1M tokens  = $0.0000040 per token
+            // Logged for cost monitoring only — never used for billing decisions.
+            const inTok  = data.usage?.input_tokens  ?? null;
+            const outTok = data.usage?.output_tokens ?? null;
+            const estCostUsd = (inTok != null && outTok != null)
+              ? ((inTok * 0.0000008) + (outTok * 0.000004)).toFixed(6)
+              : null;
+            console.log(
+              `[Ask API] [${reqId}] success model=${model} ` +
+              `answerLen=${text.length} ` +
+              `input_tokens=${inTok ?? 'unknown'} ` +
+              `output_tokens=${outTok ?? 'unknown'}` +
+              (estCostUsd != null ? ` est_cost_usd=${estCostUsd}` : '')
+            );
             return NextResponse.json({ answer: text });
           }
           // 200 OK but empty content — log full response for diagnosis
