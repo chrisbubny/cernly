@@ -1263,20 +1263,6 @@ export default function GuidedFix({
                     </div>
                   )}
 
-                  {/* ── Inline Ask Cernly chat panel ─────────────────────── */}
-                  {chatStep && (
-                    <InlineChatPanel
-                      step={chatStep}
-                      messages={chatMessages}
-                      input={chatInput}
-                      loading={chatLoading}
-                      error={chatError}
-                      inputRef={chatInputRef}
-                      onInputChange={setChatInput}
-                      onSend={sendChatMessage}
-                      onClose={() => { setChatStep(null); setChatMessages([]); setChatInput(''); setChatError(null); }}
-                    />
-                  )}
                 </>
               )}
 
@@ -1346,6 +1332,23 @@ export default function GuidedFix({
                     </div>
                   )}
                 </div>
+              )}
+
+              {/* ── Inline Ask Cernly chat panel ─────────────────────────────
+                  Rendered outside hasAiPlan so it works from both the normal
+                  step list AND the fallback/error path's "Ask Cernly" button. */}
+              {chatStep && (
+                <InlineChatPanel
+                  step={chatStep}
+                  messages={chatMessages}
+                  input={chatInput}
+                  loading={chatLoading}
+                  error={chatError}
+                  inputRef={chatInputRef}
+                  onInputChange={setChatInput}
+                  onSend={sendChatMessage}
+                  onClose={() => { setChatStep(null); setChatMessages([]); setChatInput(''); setChatError(null); }}
+                />
               )}
             </div>
           )}
