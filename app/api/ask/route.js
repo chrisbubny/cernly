@@ -349,7 +349,7 @@ When RECOMMENDATION IN FOCUS, FOCUS FINDING, or FOCUS ELEMENT is present in the 
       },
       body: JSON.stringify({
         model,
-        max_tokens: 600,
+        max_tokens: 1500,
         system: systemPrompt,
         messages: [
           ...priorMessages,
@@ -373,7 +373,9 @@ When RECOMMENDATION IN FOCUS, FOCUS FINDING, or FOCUS ELEMENT is present in the 
 
         if (res.ok) {
           const data = await res.json();
-          const text = data.content?.[0]?.text?.trim();
+          // Newer 5-series models may emit a thinking block before the text block.
+          // Find the first block with type="text" rather than blindly taking [0].
+          const text = (data.content || []).find(b => b.type === 'text')?.text?.trim();
           if (text) {
             // ── Token instrumentation ─────────────────────────────────────────
             // Cost estimate uses the rate for the actual model that responded.
