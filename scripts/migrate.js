@@ -38,6 +38,26 @@ const migrations = [
       WHERE scores ? '_siteType' OR scores ? '_uxInsights';
     `,
   },
+  {
+    name: '002_create_ask_usage',
+    sql: `
+      -- Ask Cernly per-user monthly quota tracking.
+      -- month stores the first day of the UTC month (truncated with date_trunc).
+      -- ask_count is incremented atomically via INSERT … ON CONFLICT DO UPDATE.
+      CREATE TABLE IF NOT EXISTS ask_usage (
+        user_id    TEXT  NOT NULL,
+        month      DATE  NOT NULL,
+        ask_count  INT   NOT NULL DEFAULT 0,
+        PRIMARY KEY (user_id, month)
+      );
+
+      -- Index supporting the monthly count lookup by user_id + month.
+      -- The primary key already covers (user_id, month) exactly, so a separate
+      -- index is redundant on the PK columns; this is here for documentation
+      -- purposes and future partial-index use.
+      -- The unique constraint is the PK itself.
+    `,
+  },
 ];
 
 async function run() {

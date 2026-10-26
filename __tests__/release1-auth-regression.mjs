@@ -137,23 +137,23 @@ function indexOf(src, str) { return src.indexOf(str); }
   console.log('✓ lib/stripe-session: session bound to specific report (slug + id mismatch → rejected)');
 }
 
-// ── Test 9: Ask Cernly usage ceiling wiring ───────────────────────────────────
+// ── Test 9: Ask Cernly atomic quota reservation ───────────────────────────────
 {
-  // ASK_LIMIT must be imported and used in the check
-  assert.ok(askRoute.includes('ASK_LIMIT'),
-    'ask route must import and use ASK_LIMIT');
-  assert.ok(askRoute.includes('getMonthlyAskCount'),
-    'ask route must call getMonthlyAskCount');
-  assert.ok(askRoute.includes('incrementAskCount'),
-    'ask route must call incrementAskCount on success');
+  // reserveAskSlot must be imported — it's the single atomic entrypoint
+  assert.ok(askRoute.includes('reserveAskSlot'),
+    'ask route must call reserveAskSlot (atomic check+increment)');
   assert.ok(askRoute.includes('ask_limit_reached'),
     'ask route must return ask_limit_reached error when ceiling hit');
-  // Increment must happen AFTER successful response, not before
-  const limitCheckIdx = indexOf(askRoute, 'ask_limit_reached');
-  const incrementIdx  = indexOf(askRoute, 'incrementAskCount(userId)');
-  assert.ok(incrementIdx > limitCheckIdx,
-    'incrementAskCount must be called after the limit check (not before)');
-  console.log('✓ /api/ask: ASK_LIMIT ceiling enforced; counter incremented after success');
+  // reserveAskSlot must be called BEFORE the Anthropic API call
+  const reserveIdx  = indexOf(askRoute, 'reserveAskSlot(userId)');
+  const apiCallIdx  = indexOf(askRoute, 'tryModel(model)');
+  assert.ok(reserveIdx !== -1, 'reserveAskSlot must be present in ask route');
+  assert.ok(reserveIdx < apiCallIdx,
+    'reserveAskSlot must be called before the Anthropic API call');
+  // No post-success increment — slot consumed at reservation time
+  assert.ok(!askRoute.includes('incrementAskCount'),
+    'ask route must NOT call incrementAskCount (replaced by reserveAskSlot)');
+  console.log('✓ /api/ask: atomic quota reservation (reserveAskSlot) enforced before AI call');
 }
 
 // ── Test 10: Store exports limit constants ───────────────────────────────────
@@ -195,7 +195,7 @@ function indexOf(src, str) { return src.indexOf(str); }
     assert.ok(src.includes('output_tokens'),
       `${label} must log output_tokens`);
     assert.ok(src.includes('est_cost_usd'),
-      `${label} must log est_cost_usd`);
+      `${label} must log est_cost_usd or est_cost_usd_estimate`);
   }
   // Verify API keys are never logged
   for (const [label, src] of [

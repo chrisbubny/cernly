@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { auth } from '@clerk/nextjs/server';
-import { getReport, getRecommendationsByReport, getMonthlyAskCount, incrementAskCount, ASK_LIMIT } from '@/lib/store';
+import { getReport, getRecommendationsByReport, reserveAskSlot } from '@/lib/store';
 import { buildScoreLines } from '@/lib/scoring';
 
 // POST /api/ask
@@ -21,24 +21,46 @@ export async function POST(request) {
   }
 
   // ── Ask usage ceiling (all plans) ────────────────────────────────────────────
-  // Hard ceiling of ASK_LIMIT requests per user per calendar month.
-  // Checked pre-flight; incremented atomically on success (after the AI responds).
-  // This is a safety ceiling — not a per-plan entitlement system (that is Release 2).
-  const bypassAskLimit = process.env.BYPASS_SCAN_LIMIT === 'true'; // reuse dev bypass
+  // Atomic quota reservation: increment the counter first, then check whether
+  // the new value exceeds the ceiling.  Both steps happen in a single DB
+  // round-trip (INSERT … ON CONFLICT DO UPDATE … RETURNING), eliminating the
+  // race window that existed between a pre-flight read and a post-success write.
+  //
+  // Failed AI calls are NOT refunded — the slot is consumed on reservation.
+  // This prevents unlimited free retries from hammering the Anthropic API.
+  //
+  // BYPASS_SCAN_LIMIT=true skips enforcement for dev/test; must never be set
+  // in production.
+  const bypassAskLimit = process.env.BYPASS_SCAN_LIMIT === 'true';
+  let askSlotReserved = false;
   if (!bypassAskLimit) {
-    const askCount = await getMonthlyAskCount(userId).catch(() => 0);
-    if (askCount >= ASK_LIMIT) {
-      console.warn(`[Ask API] [${reqId}] ask_limit_reached userId=${userId} count=${askCount}`);
+    let reservation;
+    try {
+      reservation = await reserveAskSlot(userId);
+    } catch (e) {
+      // DB unavailable — fail open (don't block the user) but log loudly
+      console.error(`[Ask API] [${reqId}] reserveAskSlot DB error — proceeding without quota check: ${e.message}`);
+      reservation = null;
+    }
+    if (reservation && !reservation.allowed) {
+      console.warn(
+        `[Ask API] [${reqId}] ask_limit_reached userId=${userId} ` +
+        `count=${reservation.count} limit=${reservation.limit}`
+      );
       return NextResponse.json(
         {
           error: 'ask_limit_reached',
-          message: `You've reached the ${ASK_LIMIT} Ask Cernly requests allowed this month.`,
-          used: askCount,
-          limit: ASK_LIMIT,
+          message: `You've reached the ${reservation.limit} Ask Cernly requests allowed this month.`,
+          used: reservation.count,
+          limit: reservation.limit,
         },
         { status: 429 }
       );
     }
+    askSlotReserved = true;
+    console.log(
+      `[Ask API] [${reqId}] ask_slot_reserved count=${reservation?.count ?? '?'}/${reservation?.limit ?? '?'}`
+    );
   }
   // ── End Ask usage ceiling ────────────────────────────────────────────────────
 
@@ -309,6 +331,16 @@ When RECOMMENDATION IN FOCUS, FOCUS FINDING, or FOCUS ELEMENT is present in the 
     'claude-3-haiku-20240307',    // Claude 3 Haiku — final fallback
   ];
 
+  // Per-model token cost rates (USD per token, approximate — for monitoring only,
+  // NOT for billing decisions).  Rates sourced from Anthropic pricing page.
+  // Models not in this table fall back to the generic Haiku rate.
+  const MODEL_COST_RATES = {
+    'claude-haiku-5-5':          { input: 0.0000008, output: 0.000004 },
+    'claude-3-5-haiku-20241022': { input: 0.0000008, output: 0.000004 },
+    'claude-3-haiku-20240307':   { input: 0.00000025, output: 0.00000125 },
+  };
+  const DEFAULT_RATE = { input: 0.0000008, output: 0.000004 };
+
   // Statuses that are transient — worth trying the next model in the list.
   // 400/404 mean model unavailable for this key; 429/503/529 are server-side load issues.
   const RETRIABLE_STATUSES = new Set([400, 404, 429, 503, 529]);
@@ -350,29 +382,24 @@ When RECOMMENDATION IN FOCUS, FOCUS FINDING, or FOCUS ELEMENT is present in the 
           const text = data.content?.[0]?.text?.trim();
           if (text) {
             // ── Token instrumentation ─────────────────────────────────────────
-            // Haiku pricing (approximate, subject to change):
-            //   Input:  $0.80 / 1M tokens  = $0.0000008 per token
-            //   Output: $4.00 / 1M tokens  = $0.0000040 per token
-            // Logged for cost monitoring only — never used for billing decisions.
+            // Cost estimate uses the rate for the actual model that responded.
+            // Rates are approximate and for monitoring only — not billing records.
             const inTok  = data.usage?.input_tokens  ?? null;
             const outTok = data.usage?.output_tokens ?? null;
+            const rate   = MODEL_COST_RATES[model] ?? DEFAULT_RATE;
             const estCostUsd = (inTok != null && outTok != null)
-              ? ((inTok * 0.0000008) + (outTok * 0.000004)).toFixed(6)
+              ? ((inTok * rate.input) + (outTok * rate.output)).toFixed(6)
               : null;
             console.log(
-              `[Ask API] [${reqId}] success model=${model} ` +
+              `[Ask API] [${reqId}] ai_success model=${model} ` +
               `answerLen=${text.length} ` +
               `input_tokens=${inTok ?? 'unknown'} ` +
               `output_tokens=${outTok ?? 'unknown'}` +
-              (estCostUsd != null ? ` est_cost_usd=${estCostUsd}` : '')
+              (estCostUsd != null ? ` est_cost_usd_estimate=${estCostUsd}` : '') +
+              (askSlotReserved ? ' quota_slot=consumed' : ' quota_slot=bypassed')
             );
-            // Increment ask counter after successful response — fail open (never
-            // block the user if the counter write fails, but do log the failure).
-            if (!bypassAskLimit) {
-              incrementAskCount(userId).catch(e =>
-                console.error(`[Ask API] [${reqId}] ask_count increment failed:`, e.message)
-              );
-            }
+            // Quota slot was already consumed atomically by reserveAskSlot() above.
+            // No further counter write needed here.
             return NextResponse.json({ answer: text });
           }
           // 200 OK but empty content — log full response for diagnosis
