@@ -355,6 +355,7 @@ const SUGGESTED_PROMPTS = [
 
 function InlineChatPanel({ step, messages, input, loading, error, inputRef, onInputChange, onSend, onClose }) {
   const messagesEndRef = useRef(null);
+  const [expanded, setExpanded] = useState(false);
 
   // Scroll to bottom when messages update
   useEffect(() => {
@@ -395,24 +396,38 @@ function InlineChatPanel({ step, messages, input, loading, error, inputRef, onIn
           </div>
           <div>
             <div style={{ fontSize: 11, fontWeight: 800, color: PURPLE }}>Ask Cernly</div>
-            <div style={{ fontSize: 10, color: TEXT_TERTIARY, maxWidth: 260,
+            <div style={{ fontSize: 10, color: TEXT_TERTIARY, maxWidth: 220,
               overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               About: {step.title}
             </div>
           </div>
         </div>
-        <button onClick={onClose} aria-label="Close chat"
-          style={{ background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: 6,
-            width: 26, height: 26, cursor: 'pointer', display: 'grid', placeItems: 'center',
-            color: TEXT_SECONDARY }}>
-          <svg width="9" height="9" viewBox="0 0 12 12" fill="none">
-            <path d="M1 1l10 10M11 1 1 11" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/>
-          </svg>
-        </button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          {/* Expand / collapse */}
+          <button onClick={() => setExpanded(e => !e)} aria-label={expanded ? 'Collapse chat' : 'Expand chat'}
+            title={expanded ? 'Collapse' : 'Expand'}
+            style={{ background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: 6,
+              width: 26, height: 26, cursor: 'pointer', display: 'grid', placeItems: 'center',
+              color: TEXT_SECONDARY }}>
+            {expanded
+              ? <svg width="9" height="9" viewBox="0 0 12 12" fill="none"><path d="M2 7H10M2 5h8" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/></svg>
+              : <svg width="9" height="9" viewBox="0 0 12 12" fill="none"><path d="M2 6H4M8 6h2M6 2v2M6 8v2" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/></svg>
+            }
+          </button>
+          {/* Close */}
+          <button onClick={onClose} aria-label="Close chat"
+            style={{ background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: 6,
+              width: 26, height: 26, cursor: 'pointer', display: 'grid', placeItems: 'center',
+              color: TEXT_SECONDARY }}>
+            <svg width="9" height="9" viewBox="0 0 12 12" fill="none">
+              <path d="M1 1l10 10M11 1 1 11" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/>
+            </svg>
+          </button>
+        </div>
       </div>
 
       {/* Message history */}
-      <div style={{ maxHeight: 240, overflowY: 'auto', padding: '10px 14px', display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <div style={{ maxHeight: expanded ? 520 : 240, overflowY: 'auto', padding: '10px 14px', display: 'flex', flexDirection: 'column', gap: 8 }}>
         {messages.length === 0 && (
           <p style={{ fontSize: 12, color: TEXT_TERTIARY, margin: 0, textAlign: 'center', padding: '8px 0' }}>
             Ask a question about this step, or choose a suggested prompt below.

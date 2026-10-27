@@ -2576,7 +2576,7 @@ export default function ReportClient({ isPro, userName, userAvatar }) {
                   const resolved = findingOutcomes.filter(f => f.outcome === 'likely_resolved');
                   const detected = findingOutcomes.filter(f => f.outcome === 'still_detected');
                   return (
-                    <div style={{ margin: '0 0 20px', padding: '14px 16px', borderRadius: 10,
+                    <div style={{ margin: '12px 0 20px', padding: '14px 16px', borderRadius: 10,
                       background: cfg.bg, border: `1.5px solid ${cfg.border}`, position: 'relative' }}>
                       <button onClick={() => setVerifyResult(null)}
                         aria-label="Dismiss"
