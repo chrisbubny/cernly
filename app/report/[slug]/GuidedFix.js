@@ -638,10 +638,12 @@ function FixStepCard({ step, index, role, completedSteps, onToggleComplete, onAs
 export default function GuidedFix({
   rec,
   reportId,
+  reportIntegerId,   // integer PK of the current report — needed for verify prevReportId
   pageUrl,
   workItem,
   onClose,
   onStatusChange,
+  onRescan,          // handleRescan(verifyFp) from ReportClient — triggers scan + navigate + verify
   onAskCernly,
 }) {
   const [currentStep,    setCurrentStep]    = useState(0);
@@ -837,9 +839,18 @@ export default function GuidedFix({
   }, [chatLoading, chatMessages, chatStep, rec?.fingerprint, reportId]);
 
   const handleRescan = useCallback(() => {
-    if (onStatusChange) onStatusChange(rec?.fingerprint, 'verify');
-    onClose();
-  }, [onStatusChange, rec?.fingerprint, onClose]);
+    const fp = rec?.fingerprint;
+    if (onRescan && typeof onRescan === 'function') {
+      // Delegate to ReportClient.handleRescan(verifyFp) — this triggers the full
+      // scan → navigate → auto-verify flow, including persisting user_status='verify'.
+      onRescan(fp || null);
+    } else {
+      // Fallback: no rescan handler wired (e.g. in tests or older prop usage).
+      // Mark status and close so the user can initiate rescan from the report view.
+      if (onStatusChange) onStatusChange(fp, 'verify');
+      onClose();
+    }
+  }, [onRescan, onStatusChange, rec?.fingerprint, onClose]);
 
   // ── derived evidence ───────────────────────────────────────────────────────
   const evidence = rec?.evidence || {};

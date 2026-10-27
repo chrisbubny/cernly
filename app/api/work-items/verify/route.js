@@ -129,6 +129,9 @@ export async function POST(request) {
  * Map the comparison engine's recommendation outcome for recFingerprint
  * to a verified_status enum value.
  *
+ * compareRecommendations() returns items shaped { rec: { fingerprint, ... }, ... }.
+ * The fingerprint is at r.rec.fingerprint — NOT r.fingerprint (which is always undefined).
+ *
  * @param {string} recFingerprint
  * @param {object} comparison  - result of compareScans()
  * @returns {'likely_resolved'|'still_detected'|'partially_resolved'|'unable_to_verify'}
@@ -139,14 +142,16 @@ function deriveVerifiedStatus(recFingerprint, comparison) {
   const { likely_resolved, still_open, partially_resolved, unable_to_verify } =
     comparison.recommendations;
 
-  // Each array contains objects with { fingerprint, ... }
-  if (likely_resolved?.some(r => r.fingerprint === recFingerprint)) return 'likely_resolved';
-  if (still_open?.some(r => r.fingerprint === recFingerprint))       return 'still_detected';
-  if (partially_resolved?.some(r => r.fingerprint === recFingerprint)) return 'partially_resolved';
-  if (unable_to_verify?.some(r => r.fingerprint === recFingerprint)) return 'unable_to_verify';
+  // Each array item is { rec: { fingerprint, ... }, resolvedFindings, total, ... }
+  // from compareRecommendations() in lib/comparison.js.
+  if (likely_resolved?.some(r => r.rec?.fingerprint === recFingerprint))   return 'likely_resolved';
+  if (still_open?.some(r => r.rec?.fingerprint === recFingerprint))         return 'still_detected';
+  if (partially_resolved?.some(r => r.rec?.fingerprint === recFingerprint)) return 'partially_resolved';
+  if (unable_to_verify?.some(r => r.rec?.fingerprint === recFingerprint))   return 'unable_to_verify';
 
-  // Recommendation not found in current scan: treat as resolved if audit ran
-  if (comparison.isComparable && comparison.comparabilityLevel !== 'incompatible') {
+  // Recommendation not found in any bucket: treat as resolved ONLY when a full
+  // comparable audit ran. Limited or incompatible comparability cannot confirm.
+  if (comparison.isComparable && comparison.comparabilityLevel === 'full') {
     return 'likely_resolved';
   }
 
@@ -156,20 +161,39 @@ function deriveVerifiedStatus(recFingerprint, comparison) {
 /**
  * Extract individual finding outcomes relevant to a recommendation fingerprint.
  * Returns a summary array the client can use to display evidence.
+ *
+ * Recommendation fingerprints (e.g. 'image-optimization') and finding
+ * fingerprints (e.g. 'lh:uses-optimized-images') share NO common prefix.
+ * We must look up the rec's finding_fingerprints list from the comparison data.
+ *
+ * @param {string} recFingerprint
+ * @param {object} comparison       - result of compareScans()
  */
 function extractFindingOutcomes(recFingerprint, comparison) {
   if (!comparison?.findings) return [];
-  const all = [
-    ...( comparison.findings.likely_resolved   || []).map(f => ({ ...f, outcome: 'likely_resolved' })),
-    ...( comparison.findings.still_detected    || []).map(f => ({ ...f, outcome: 'still_detected' })),
-    ...( comparison.findings.unable_to_verify  || []).map(f => ({ ...f, outcome: 'unable_to_verify' })),
-    ...( comparison.findings.new_since         || []).map(f => ({ ...f, outcome: 'new_since' })),
+
+  // Locate the rec item in any recommendation bucket to get its finding_fingerprints.
+  const allRecItems = [
+    ...(comparison.recommendations?.likely_resolved    || []),
+    ...(comparison.recommendations?.still_open         || []),
+    ...(comparison.recommendations?.partially_resolved || []),
+    ...(comparison.recommendations?.unable_to_verify   || []),
   ];
-  // Filter to findings associated with this recommendation's fingerprint prefix
-  // (recommendation fingerprint is a group key like 'image-optimization';
-  //  finding fingerprints start with the same prefix, e.g. 'image-optimization.lcp-image')
-  return all.filter(f =>
-    f.fingerprintId?.startsWith(recFingerprint + '.') ||
-    f.fingerprintId === recFingerprint
-  );
+  const matchedItem = allRecItems.find(r => r.rec?.fingerprint === recFingerprint);
+  const findingFps = new Set([
+    ...(matchedItem?.rec?.finding_fingerprints || []),
+    ...((matchedItem?.rec?.supporting_findings || []).map(f => f?.fingerprintId).filter(Boolean)),
+  ]);
+
+  const all = [
+    ...(comparison.findings.likely_resolved   || []).map(f => ({ ...f, outcome: 'likely_resolved' })),
+    ...(comparison.findings.still_detected    || []).map(f => ({ ...f, outcome: 'still_detected' })),
+    ...(comparison.findings.unable_to_verify  || []).map(f => ({ ...f, outcome: 'unable_to_verify' })),
+    ...(comparison.findings.new_since         || []).map(f => ({ ...f, outcome: 'new_since' })),
+  ];
+
+  // Filter to findings whose fingerprintId is in this recommendation's finding set.
+  // If no finding fingerprints are available, return empty (no guessing).
+  if (findingFps.size === 0) return [];
+  return all.filter(f => findingFps.has(f.fingerprintId));
 }

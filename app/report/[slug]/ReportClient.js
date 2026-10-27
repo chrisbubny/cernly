@@ -1280,6 +1280,8 @@ export default function ReportClient({ isPro, userName, userAvatar }) {
   const [workItemsLoaded, setWorkItemsLoaded] = useState(false);
   const [workItemError, setWorkItemError] = useState(null); // { fingerprint, message } for visible error
   const [verifyingFingerprint, setVerifyingFingerprint] = useState(null); // fingerprint being verified
+  // Verification result for post-rescan display: { fp, verifiedStatus, findingOutcomes, comparabilityLevel }
+  const [verifyResult, setVerifyResult]   = useState(null);
   const [highlightedFp, setHighlightedFp]   = useState(null);            // pre-selected rec from ?rec= param
   // Stage 6: guided fix panel — null = closed, rec object = open
   const [guidedFixRec, setGuidedFixRec]     = useState(null);
@@ -1477,6 +1479,13 @@ export default function ReportClient({ isPro, userName, userAvatar }) {
               verifiedReportId: d.currentReportId,
             },
           }));
+          // Store the result so the VerificationResultBanner can display it
+          setVerifyResult({
+            fp,
+            verifiedStatus: d.verifiedStatus,
+            findingOutcomes: d.findingOutcomes || [],
+            comparabilityLevel: d.comparabilityLevel || 'full',
+          });
         }
       })
       .catch(() => {}); // verification failure is non-fatal; result shown in UI on next load
@@ -2178,6 +2187,7 @@ export default function ReportClient({ isPro, userName, userAvatar }) {
         <GuidedFix
           rec={guidedFixRec}
           reportId={id}
+          reportIntegerId={report.id}
           pageUrl={report.url}
           workItem={workItems[guidedFixRec.fingerprint] || null}
           onClose={() => setGuidedFixRec(null)}
@@ -2185,6 +2195,7 @@ export default function ReportClient({ isPro, userName, userAvatar }) {
             // Adapt fingerprint-based call to issue-based handleStatusChange
             handleStatusChange({ fingerprintId: recFp, fingerprint: recFp }, newStatus);
           }}
+          onRescan={handleRescan}
           onAskCernly={({ title, category, detail, recFingerprint, activeStep }) => {
             setDrawerContext({
               title, category, detail,
@@ -2535,6 +2546,72 @@ export default function ReportClient({ isPro, userName, userAvatar }) {
                     onClose={() => setTileModal(null)}
                   />
                 )}
+
+                {/* Verification result banner — shown after a rescan + auto-verify flow */}
+                {verifyResult && (() => {
+                  const { fp, verifiedStatus, findingOutcomes, comparabilityLevel } = verifyResult;
+                  const recTitle = recMap[fp]?.title || fp;
+                  const STATUS_CONFIG = {
+                    likely_resolved:    { label: 'Likely resolved',     bg: '#f0faf4', border: '#22c55e', icon: '✓', color: '#166534' },
+                    partially_resolved: { label: 'Partially resolved',  bg: '#fffbeb', border: '#f59e0b', icon: '◑', color: '#92400e' },
+                    still_detected:     { label: 'Still detected',      bg: '#fef2f2', border: '#ef4444', icon: '✗', color: '#991b1b' },
+                    unable_to_verify:   { label: 'Unable to verify',    bg: '#f8fafc', border: '#94a3b8', icon: '?', color: '#475569' },
+                  };
+                  const cfg = STATUS_CONFIG[verifiedStatus] || STATUS_CONFIG.unable_to_verify;
+                  const isInconclusive = verifiedStatus === 'unable_to_verify' || verifiedStatus === 'partially_resolved';
+                  const resolved = findingOutcomes.filter(f => f.outcome === 'likely_resolved');
+                  const detected = findingOutcomes.filter(f => f.outcome === 'still_detected');
+                  return (
+                    <div style={{ margin: '0 0 20px', padding: '14px 16px', borderRadius: 10,
+                      background: cfg.bg, border: `1.5px solid ${cfg.border}`, position: 'relative' }}>
+                      <button onClick={() => setVerifyResult(null)}
+                        aria-label="Dismiss"
+                        style={{ position: 'absolute', top: 10, right: 12, background: 'none',
+                          border: 'none', cursor: 'pointer', fontSize: 16, color: '#94a3b8', lineHeight: 1 }}>×</button>
+                      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+                        <span style={{ fontSize: 18, lineHeight: '20px', color: cfg.color }}>{cfg.icon}</span>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontSize: 13, fontWeight: 700, color: cfg.color, marginBottom: 2 }}>
+                            {cfg.label}
+                          </div>
+                          <div style={{ fontSize: 13, color: '#374151', marginBottom: 6 }}>
+                            <strong>{recTitle}</strong>
+                          </div>
+                          {isInconclusive && (
+                            <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 6 }}>
+                              {verifiedStatus === 'unable_to_verify'
+                                ? comparabilityLevel === 'limited'
+                                  ? 'The new scan did not have full audit coverage to confirm this fix. Check the Progress tab for details.'
+                                  : 'Verification could not be completed with the available scan data.'
+                                : 'Some issues from this recommendation were fixed, but others were still detected.'}
+                            </div>
+                          )}
+                          {(resolved.length > 0 || detected.length > 0) && (
+                            <div style={{ fontSize: 12, display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 6 }}>
+                              {resolved.slice(0, 3).map(f => (
+                                <span key={f.fingerprintId} style={{ background: '#dcfce7', color: '#166534',
+                                  borderRadius: 4, padding: '2px 7px', fontWeight: 600 }}>
+                                  ✓ {f.title || f.fingerprintId}
+                                </span>
+                              ))}
+                              {detected.slice(0, 3).map(f => (
+                                <span key={f.fingerprintId} style={{ background: '#fee2e2', color: '#991b1b',
+                                  borderRadius: 4, padding: '2px 7px', fontWeight: 600 }}>
+                                  ✗ {f.title || f.fingerprintId}
+                                </span>
+                              ))}
+                            </div>
+                          )}
+                          <button onClick={() => setActiveTab('progress')}
+                            style={{ fontSize: 12, fontWeight: 600, color: '#7948f6', background: 'none',
+                              border: 'none', padding: 0, cursor: 'pointer', textDecoration: 'underline' }}>
+                            View full comparison in Progress tab →
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })()}
 
                 {/* Tabs */}
                 <div style={{ display: 'flex', gap: 0, borderBottom: '1px solid #e9eaf2',
