@@ -925,6 +925,7 @@ function UxCard({ uxScore, uxInsights, uxAnnotations, visionStatus, siteType, ur
 
 /* ─── Ask Cernly drawer ─── */
 function AskCernlyDrawer({ reportId, domain, onClose, initialContext, initialMessage, recFingerprint, findingFingerprintId, activeStep, elementContext }) {
+  const [expanded, setExpanded] = useState(false);
   const openingMsg = initialContext
     ? `I'm looking at the **${initialContext.category || 'finding'}** issue: **${initialContext.title}**.\n\n${initialContext.detail ? initialContext.detail.replace(/\[([^\]]+)\]\([^)]+\)/g, '$1').slice(0, 200) : 'What would you like to know about this finding?'}`
     : `Hi! I've analyzed **${domain || 'this site'}** and I'm ready to help. Ask me what a finding means, how to fix it, or where to start.`;
@@ -984,11 +985,13 @@ function AskCernlyDrawer({ reportId, domain, onClose, initialContext, initialMes
       {/* Backdrop */}
       <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: '#0d102040', zIndex: 49 }} />
 
-      {/* Drawer */}
-      <div style={{ position: 'fixed', top: 0, right: 0, bottom: 0, width: 380, maxWidth: '92vw',
+      {/* Drawer — width expands on toggle; transition keeps it smooth */}
+      <div style={{ position: 'fixed', top: 0, right: 0, bottom: 0,
+        width: expanded ? 'min(90vw, 680px)' : 380, maxWidth: '92vw',
         background: '#fff', borderLeft: '1px solid #e9eaf2',
         boxShadow: '-8px 0 40px #1b1d3215', zIndex: 50,
-        display: 'flex', flexDirection: 'column', animation: 'slideIn .22s ease' }}>
+        display: 'flex', flexDirection: 'column', animation: 'slideIn .22s ease',
+        transition: 'width .2s ease' }}>
 
         {/* Header */}
         <div style={{ padding: '16px 18px', borderBottom: '1px solid #f0f1f8',
@@ -1005,6 +1008,15 @@ function AskCernlyDrawer({ reportId, domain, onClose, initialContext, initialMes
               {initialContext ? `About: ${initialContext.title?.slice(0, 32)}…` : 'Knows this report'}
             </div>
           </div>
+          {/* Expand/collapse toggle — widens drawer for longer technical responses */}
+          <button onClick={() => setExpanded(e => !e)}
+            title={expanded ? 'Collapse panel' : 'Expand panel'}
+            aria-label={expanded ? 'Collapse panel' : 'Expand panel'}
+            style={{ border: 0, background: '#f4f5fb', color: '#83899c',
+              borderRadius: 8, width: 30, height: 30, display: 'grid', placeItems: 'center',
+              cursor: 'pointer', fontSize: 13, lineHeight: 1 }}>
+            {expanded ? '⟩' : '⟨'}
+          </button>
           <button onClick={onClose} style={{ border: 0, background: '#f4f5fb', color: '#83899c',
             borderRadius: 8, width: 30, height: 30, display: 'grid', placeItems: 'center',
             cursor: 'pointer', fontSize: 16, lineHeight: 1 }}>✕</button>
@@ -2547,8 +2559,10 @@ export default function ReportClient({ isPro, userName, userAvatar }) {
                   />
                 )}
 
-                {/* Verification result banner — shown after a rescan + auto-verify flow */}
-                {verifyResult && (() => {
+                {/* Verification result banner — shown after a rescan + auto-verify flow.
+                    Hidden when user is already on the Progress tab, which shows the
+                    full RescanBanner with the same information. */}
+                {verifyResult && activeTab !== 'progress' && (() => {
                   const { fp, verifiedStatus, findingOutcomes, comparabilityLevel } = verifyResult;
                   const recTitle = recMap[fp]?.title || fp;
                   const STATUS_CONFIG = {
@@ -2587,7 +2601,7 @@ export default function ReportClient({ isPro, userName, userAvatar }) {
                             </div>
                           )}
                           {(resolved.length > 0 || detected.length > 0) && (
-                            <div style={{ fontSize: 12, display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 6 }}>
+                            <div style={{ fontSize: 12, display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
                               {resolved.slice(0, 3).map(f => (
                                 <span key={f.fingerprintId} style={{ background: '#dcfce7', color: '#166534',
                                   borderRadius: 4, padding: '2px 7px', fontWeight: 600 }}>
@@ -2602,11 +2616,22 @@ export default function ReportClient({ isPro, userName, userAvatar }) {
                               ))}
                             </div>
                           )}
-                          <button onClick={() => setActiveTab('progress')}
-                            style={{ fontSize: 12, fontWeight: 600, color: '#7948f6', background: 'none',
-                              border: 'none', padding: 0, cursor: 'pointer', textDecoration: 'underline' }}>
-                            View full comparison in Progress tab →
-                          </button>
+                          <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+                            <button onClick={() => setActiveTab('progress')}
+                              style={{ fontSize: 12, fontWeight: 600, color: '#7948f6', background: 'none',
+                                border: 'none', padding: 0, cursor: 'pointer', textDecoration: 'underline' }}>
+                              View full comparison →
+                            </button>
+                            {/* When partially resolved, offer a direct path to continue fixing remaining issues */}
+                            {verifiedStatus === 'partially_resolved' && detected.length > 0 && (
+                              <button onClick={() => setActiveTab('action')}
+                                style={{ fontSize: 12, fontWeight: 600, color: '#374151', background: '#f3f4f6',
+                                  border: '1px solid #d1d5db', borderRadius: 5, padding: '3px 10px',
+                                  cursor: 'pointer' }}>
+                                Continue fixing remaining issues →
+                              </button>
+                            )}
+                          </div>
                         </div>
                       </div>
                     </div>

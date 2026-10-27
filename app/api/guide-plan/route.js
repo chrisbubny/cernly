@@ -89,8 +89,9 @@ export async function POST(request) {
   }
 
   // ── Generate ────────────────────────────────────────────────────────────────
-  const domain = extractDomain(rec.page_url || rec.url || '');
-  const plan   = await generateGuidancePlan(rec, domain, persona);
+  const domain   = extractDomain(rec.page_url || rec.url || '');
+  const siteType = report.siteType || report.site_type || null;
+  const plan     = await generateGuidancePlan(rec, domain, persona, siteType);
 
   // generateGuidancePlan never returns an empty plan — it always falls back to
   // static guidance. The only case where fallback: true remains is an unknown
