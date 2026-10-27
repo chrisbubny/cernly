@@ -1200,7 +1200,7 @@ export default function GuidedFix({
                   <ul style={{ margin:0, paddingLeft:16, color:TEXT_SECONDARY,
                     fontSize:12, lineHeight:1.7 }}>
                     <li>Back up your site or the files you plan to edit.</li>
-                    <li>Use the "Ask Cernly" button at any step if you need context.</li>
+                    <li>Use the &ldquo;Ask Cernly&rdquo; button at any step if you need context.</li>
                     {rec.actions.length > 3 && (
                       <li>This fix has {rec.actions.length} steps — you can spread them across sessions.</li>
                     )}

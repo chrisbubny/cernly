@@ -114,7 +114,7 @@ export default function AffectedElements({ items, totalDetected, checkId, auditI
             communicates in context (not just the filename).{' '}
             <strong>Purely decorative images</strong> — spacers, borders, backgrounds — should use{' '}
             <code style={{ fontFamily: 'monospace', background: '#fef3c7',
-              padding: '0 3px', borderRadius: 3, fontSize: 10 }}>alt=""</code>{' '}
+              padding: '0 3px', borderRadius: 3, fontSize: 10 }}>{'alt=""'}</code>{' '}
             so screen readers skip them entirely.
           </p>
         </div>

@@ -2540,7 +2540,7 @@ export default function ReportClient({ isPro, userName, userAvatar }) {
                       <path d="M12 2L2 19h20L12 2zm0 7v5m0 3h.01"/>
                     </svg>
                     <div style={{ fontSize: 12, color: '#92400e', lineHeight: 1.5 }}>
-                      <strong>Some checks couldn't be completed.</strong>{' '}
+                      <strong>Some checks couldn&apos;t be completed.</strong>{' '}
                       {Object.entries(auditStatuses)
                         .filter(([k, s]) => s.status !== 'completed' && k !== 'ux')
                         .map(([k]) => k.charAt(0).toUpperCase() + k.slice(1))

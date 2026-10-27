@@ -544,7 +544,7 @@ function AnalyzeContent() {
 
         {/* Upgrade CTA */}
         <div className="upgrade-cta">
-          <h3>Ready to fix what's holding your site back?</h3>
+          <h3>Ready to fix what&apos;s holding your site back?</h3>
           <p>The full report covers up to 50 pages — with UX &amp; conversion analysis, prioritized fixes, detailed AI recommendations, and a shareable PDF.</p>
           <a href={`/checkout?reportId=${reportRef}`} className="btn-gradient">
             Get full report — $4.99

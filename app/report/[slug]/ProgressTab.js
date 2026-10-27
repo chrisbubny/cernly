@@ -714,7 +714,7 @@ function FixVerification({ comparison, onSwitchTab }) {
               fontSize: 11, color: '#83899c', marginBottom: 8, lineHeight: 1.55,
             }}>
               These appear in the current scan with no prior tracking record.
-              Limited audit data means "new" cannot be confirmed — they may have been present before.
+              Limited audit data means &ldquo;new&rdquo; cannot be confirmed — they may have been present before.
             </div>
           )}
           {recs.new_high_priority.map((m, i) => (
