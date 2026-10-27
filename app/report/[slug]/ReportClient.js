@@ -924,13 +924,15 @@ function UxCard({ uxScore, uxInsights, uxAnnotations, visionStatus, siteType, ur
 }
 
 /* ─── Ask Cernly drawer ─── */
-function AskCernlyDrawer({ reportId, domain, onClose, initialContext, initialMessage, recFingerprint, findingFingerprintId, activeStep, elementContext }) {
+function AskCernlyDrawer({ reportId, domain, onClose, initialContext, initialMessage, recFingerprint, findingFingerprintId, activeStep, elementContext, seedMessages }) {
   const [expanded, setExpanded] = useState(false);
   const openingMsg = initialContext
     ? `I'm looking at the **${initialContext.category || 'finding'}** issue: **${initialContext.title}**.\n\n${initialContext.detail ? initialContext.detail.replace(/\[([^\]]+)\]\([^)]+\)/g, '$1').slice(0, 200) : 'What would you like to know about this finding?'}`
     : `Hi! I've analyzed **${domain || 'this site'}** and I'm ready to help. Ask me what a finding means, how to fix it, or where to start.`;
 
-  const [messages, setMessages] = useState([{ role: 'assistant', content: openingMsg }]);
+  const [messages, setMessages] = useState(
+    seedMessages?.length ? seedMessages : [{ role: 'assistant', content: openingMsg }]
+  );
 
   // Auto-send initialMessage (from the overview input box) on mount
   useEffect(() => {
@@ -1014,8 +1016,11 @@ function AskCernlyDrawer({ reportId, domain, onClose, initialContext, initialMes
             aria-label={expanded ? 'Collapse panel' : 'Expand panel'}
             style={{ border: 0, background: '#f4f5fb', color: '#83899c',
               borderRadius: 8, width: 30, height: 30, display: 'grid', placeItems: 'center',
-              cursor: 'pointer', fontSize: 13, lineHeight: 1 }}>
-            {expanded ? '⟩' : '⟨'}
+              cursor: 'pointer' }}>
+            {expanded
+              ? <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="4 14 10 14 10 20"/><polyline points="20 10 14 10 14 4"/><line x1="10" y1="14" x2="3" y2="21"/><line x1="21" y1="3" x2="14" y2="10"/></svg>
+              : <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg>
+            }
           </button>
           <button onClick={onClose} style={{ border: 0, background: '#f4f5fb', color: '#83899c',
             borderRadius: 8, width: 30, height: 30, display: 'grid', placeItems: 'center',
@@ -2191,6 +2196,7 @@ export default function ReportClient({ isPro, userName, userAvatar }) {
           recFingerprint={drawerContext?._recFingerprint || null}
           activeStep={drawerContext?._activeStep || null}
           elementContext={drawerContext?._elementContext || null}
+          seedMessages={drawerContext?._seedMessages || null}
           onClose={() => { setDrawerOpen(false); setDrawerContext(null); }} />
       )}
 
@@ -2213,6 +2219,19 @@ export default function ReportClient({ isPro, userName, userAvatar }) {
               title, category, detail,
               _recFingerprint: recFingerprint,
               _activeStep: activeStep,
+            });
+            setDrawerOpen(true);
+          }}
+          onExpandChat={(messages, step) => {
+            // Open the main Ask Cernly drawer seeded with the inline chat's conversation.
+            // GuidedFix stays open; closing the drawer returns to the same step.
+            setDrawerContext({
+              title: step?.title || 'Guided Fix',
+              category: 'Guided Fix',
+              detail: step?.description || null,
+              _recFingerprint: guidedFixRec?.fingerprint || null,
+              _activeStep: step?.title || null,
+              _seedMessages: messages,
             });
             setDrawerOpen(true);
           }}

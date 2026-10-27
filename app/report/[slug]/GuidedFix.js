@@ -353,9 +353,8 @@ const SUGGESTED_PROMPTS = [
   'I tried this and need help troubleshooting',
 ];
 
-function InlineChatPanel({ step, messages, input, loading, error, inputRef, onInputChange, onSend, onClose }) {
+function InlineChatPanel({ step, messages, input, loading, error, inputRef, onInputChange, onSend, onClose, onExpand }) {
   const messagesEndRef = useRef(null);
-  const [expanded, setExpanded] = useState(false);
 
   // Scroll to bottom when messages update
   useEffect(() => {
@@ -403,17 +402,19 @@ function InlineChatPanel({ step, messages, input, loading, error, inputRef, onIn
           </div>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          {/* Expand / collapse */}
-          <button onClick={() => setExpanded(e => !e)} aria-label={expanded ? 'Collapse chat' : 'Expand chat'}
-            title={expanded ? 'Collapse' : 'Expand'}
-            style={{ background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: 6,
-              width: 26, height: 26, cursor: 'pointer', display: 'grid', placeItems: 'center',
-              color: TEXT_SECONDARY }}>
-            {expanded
-              ? <svg width="9" height="9" viewBox="0 0 12 12" fill="none"><path d="M2 7H10M2 5h8" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/></svg>
-              : <svg width="9" height="9" viewBox="0 0 12 12" fill="none"><path d="M2 6H4M8 6h2M6 2v2M6 8v2" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/></svg>
-            }
-          </button>
+          {/* Expand — opens main Ask Cernly drawer with this conversation seeded */}
+          {onExpand && (
+            <button onClick={onExpand} aria-label="Open in Ask Cernly"
+              title="Open in Ask Cernly"
+              style={{ background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: 6,
+                width: 26, height: 26, cursor: 'pointer', display: 'grid', placeItems: 'center',
+                color: TEXT_SECONDARY }}>
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/>
+                <line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/>
+              </svg>
+            </button>
+          )}
           {/* Close */}
           <button onClick={onClose} aria-label="Close chat"
             style={{ background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: 6,
@@ -427,7 +428,7 @@ function InlineChatPanel({ step, messages, input, loading, error, inputRef, onIn
       </div>
 
       {/* Message history */}
-      <div style={{ maxHeight: expanded ? 520 : 240, overflowY: 'auto', padding: '10px 14px', display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <div style={{ maxHeight: 240, overflowY: 'auto', padding: '10px 14px', display: 'flex', flexDirection: 'column', gap: 8 }}>
         {messages.length === 0 && (
           <p style={{ fontSize: 12, color: TEXT_TERTIARY, margin: 0, textAlign: 'center', padding: '8px 0' }}>
             Ask a question about this step, or choose a suggested prompt below.
@@ -660,6 +661,7 @@ export default function GuidedFix({
   onStatusChange,
   onRescan,          // handleRescan(verifyFp) from ReportClient — triggers scan + navigate + verify
   onAskCernly,
+  onExpandChat,      // (messages, step) => void — opens the main Ask Cernly drawer seeded with inline history
 }) {
   const [currentStep,    setCurrentStep]    = useState(0);
   const [selectedRole,   setSelectedRole]   = useState(null);
@@ -1377,6 +1379,7 @@ export default function GuidedFix({
                   onInputChange={setChatInput}
                   onSend={sendChatMessage}
                   onClose={() => { setChatStep(null); setChatMessages([]); setChatInput(''); setChatError(null); }}
+                  onExpand={onExpandChat ? () => onExpandChat(chatMessages, chatStep) : null}
                 />
               )}
             </div>
