@@ -5,6 +5,7 @@ import {
   getGuidancePlan,
   setGuidancePlan,
   getRecommendationsByReport,
+  getReportBySlug,
 } from '@/lib/store';
 import { generateGuidancePlan, derivePlanFingerprint } from '@/lib/guidance';
 
@@ -45,13 +46,28 @@ export async function POST(request) {
   // Ensure DB columns exist (idempotent — safe to call on every request)
   await ensureGuidanceColumns();
 
+  // reportId from the client is the URL slug (UUID string). Resolve it to the
+  // integer PK so getRecommendationsByReport — which queries report_id INTEGER —
+  // does not throw "invalid input syntax for type integer" and silently return [].
+  // This is the same pattern used in /api/ask/route.js.
+  let report = null;
+  try {
+    report = await getReportBySlug(reportId);
+  } catch (e) {
+    console.error('[guide-plan] failed to resolve slug to report:', e.message);
+  }
+  if (!report) {
+    return NextResponse.json({ error: 'Report not found' }, { status: 404 });
+  }
+
   // Load the recommendation row for this user + report
-  const recs = await getRecommendationsByReport(reportId).catch(() => []);
+  const recs = await getRecommendationsByReport(report.id).catch(() => []);
   const rec  = recs.find(r => r.fingerprint === recFingerprint);
 
   if (!rec) {
     console.error('[guide-plan] rec not found | fingerprint:', recFingerprint,
-      '| reportId:', reportId, '| recs loaded:', recs.length,
+      '| reportId:', reportId, '| report.id:', report.id,
+      '| recs loaded:', recs.length,
       '| fingerprints:', recs.map(r => r.fingerprint).join(','));
     return NextResponse.json(
       { error: 'Recommendation not found for this user and report' },
