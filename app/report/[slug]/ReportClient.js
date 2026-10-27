@@ -229,6 +229,16 @@ function CategorySection({ label, accent, issues, auditStatus, sectionSummary, r
  * Build a fingerprint → recommendation lookup map from a report's recommendations array.
  * Called once per render in the main component and passed down to FixCard.
  */
+/**
+ * Fingerprints that were mis-grouped in reports scanned before the Oct 2026
+ * lib/recommendations.js correction.  Key = finding fingerprint that was wrong;
+ * value = the rec fingerprint it should resolve to.  Applied after the DB-driven
+ * loop so that OLD reports are corrected without requiring a rescan.
+ */
+const FINGERPRINT_GROUP_CORRECTIONS = {
+  'seo:images_missing_alt': 'accessibility-barriers',
+};
+
 function buildRecMap(recommendations) {
   const map = {};
   if (!Array.isArray(recommendations)) return map;
@@ -240,6 +250,11 @@ function buildRecMap(recommendations) {
         if (!map[fp]) map[fp] = rec;
       }
     }
+  }
+  // Apply known corrections — always overrides stale DB data.
+  for (const [fp, correctGroupFp] of Object.entries(FINGERPRINT_GROUP_CORRECTIONS)) {
+    const correctRec = recommendations.find(r => r.fingerprint === correctGroupFp);
+    if (correctRec) map[fp] = correctRec;
   }
   return map;
 }
@@ -924,8 +939,8 @@ function UxCard({ uxScore, uxInsights, uxAnnotations, visionStatus, siteType, ur
 }
 
 /* ─── Ask Cernly drawer ─── */
-function AskCernlyDrawer({ reportId, domain, onClose, initialContext, initialMessage, recFingerprint, findingFingerprintId, activeStep, elementContext, seedMessages }) {
-  const [expanded, setExpanded] = useState(false);
+function AskCernlyDrawer({ reportId, domain, onClose, initialContext, initialMessage, recFingerprint, findingFingerprintId, activeStep, elementContext, seedMessages, initialExpanded }) {
+  const [expanded, setExpanded] = useState(!!initialExpanded);
   const openingMsg = initialContext
     ? `I'm looking at the **${initialContext.category || 'finding'}** issue: **${initialContext.title}**.\n\n${initialContext.detail ? initialContext.detail.replace(/\[([^\]]+)\]\([^)]+\)/g, '$1').slice(0, 200) : 'What would you like to know about this finding?'}`
     : `Hi! I've analyzed **${domain || 'this site'}** and I'm ready to help. Ask me what a finding means, how to fix it, or where to start.`;
@@ -1284,6 +1299,7 @@ export default function ReportClient({ isPro, userName, userAvatar }) {
   const [findingsFilter, setFindingsFilter] = useState(null); // null = All
   const [drawerOpen, setDrawerOpen]       = useState(false);
   const [drawerContext, setDrawerContext] = useState(null); // { title, category, detail }
+  const [guidedFixHidden, setGuidedFixHidden] = useState(false); // hide GuidedFix while expanded drawer is open
   const [tileModal, setTileModal]         = useState(null); // key of tile with unavailable audit
   const [shareToggling, setShareToggling] = useState(false); // in-flight for share toggle
   const [shareOpen, setShareOpen]         = useState(false); // share popover open
@@ -2197,11 +2213,17 @@ export default function ReportClient({ isPro, userName, userAvatar }) {
           activeStep={drawerContext?._activeStep || null}
           elementContext={drawerContext?._elementContext || null}
           seedMessages={drawerContext?._seedMessages || null}
-          onClose={() => { setDrawerOpen(false); setDrawerContext(null); }} />
+          initialExpanded={drawerContext?._initialExpanded || false}
+          onClose={() => {
+            if (drawerContext?._fromGuidedFix) setGuidedFixHidden(false);
+            setDrawerOpen(false);
+            setDrawerContext(null);
+          }} />
       )}
 
-      {/* Guided Fix panel — PoC: image-optimization group only */}
+      {/* Guided Fix panel — hidden (not unmounted) while expanded Ask Cernly drawer is open */}
       {guidedFixRec && report && (
+        <div style={guidedFixHidden ? { visibility: 'hidden', pointerEvents: 'none' } : undefined}>
         <GuidedFix
           rec={guidedFixRec}
           reportId={id}
@@ -2224,7 +2246,8 @@ export default function ReportClient({ isPro, userName, userAvatar }) {
           }}
           onExpandChat={(messages, step) => {
             // Open the main Ask Cernly drawer seeded with the inline chat's conversation.
-            // GuidedFix stays open; closing the drawer returns to the same step.
+            // Hide GuidedFix (keep it mounted) so the drawer is not obscured by its z-index:1000.
+            // Closing the drawer restores GuidedFix at the same step.
             setDrawerContext({
               title: step?.title || 'Guided Fix',
               category: 'Guided Fix',
@@ -2232,10 +2255,14 @@ export default function ReportClient({ isPro, userName, userAvatar }) {
               _recFingerprint: guidedFixRec?.fingerprint || null,
               _activeStep: step?.title || null,
               _seedMessages: messages,
+              _initialExpanded: true,
+              _fromGuidedFix: true,
             });
+            setGuidedFixHidden(true);
             setDrawerOpen(true);
           }}
         />
+        </div>
       )}
 
       <div style={{ display: 'grid', gridTemplateColumns: '244px minmax(0,1fr)', minHeight: '100vh' }}

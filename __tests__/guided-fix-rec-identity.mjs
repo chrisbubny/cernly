@@ -57,17 +57,23 @@ assert.ok(
 );
 console.log('  ✓ seo:images_missing_alt IS in accessibility-barriers');
 
-// --- Test 3: buildRecMap routing (inline the same first-writer-wins logic as ReportClient) ---
+// --- Test 3: buildRecMap routing with correction table (mirrors ReportClient.js logic) ---
+const FINGERPRINT_GROUP_CORRECTIONS = {
+  'seo:images_missing_alt': 'accessibility-barriers',
+};
 function buildRecMap(recs) {
   const map = {};
   for (const rec of recs) {
-    // Map by rec fingerprint
     if (rec.fingerprint && !map[rec.fingerprint]) map[rec.fingerprint] = rec;
-    // Map by each finding fingerprint
     const fps = rec.finding_fingerprints || [];
     for (const fp of fps) {
       if (!map[fp]) map[fp] = rec;
     }
+  }
+  // Apply known corrections — always overrides stale DB data.
+  for (const [fp, correctGroupFp] of Object.entries(FINGERPRINT_GROUP_CORRECTIONS)) {
+    const correctRec = recs.find(r => r.fingerprint === correctGroupFp);
+    if (correctRec) map[fp] = correctRec;
   }
   return map;
 }
@@ -118,5 +124,27 @@ assert.equal(recMap['a11y:images_missing_alt']?.fingerprint, 'accessibility-barr
 assert.equal(recMap['lh:image-alt']?.fingerprint, 'accessibility-barriers',
   'lh:image-alt must map to accessibility-barriers');
 console.log('  ✓ a11y:images_missing_alt and lh:image-alt still map to accessibility-barriers');
+
+// --- Test 6: Correction table overrides stale DB data ---
+// Simulates an old report where seo:images_missing_alt is still in seo-signals.finding_fingerprints
+const staleRecs = [
+  {
+    fingerprint: 'seo-signals',
+    title: 'Improve crawlability and search signals',
+    finding_fingerprints: ['seo:canonical_missing', 'seo:robots_noindex', 'seo:images_missing_alt'],
+  },
+  {
+    fingerprint: 'accessibility-barriers',
+    title: 'Fix accessibility barriers',
+    finding_fingerprints: ['a11y:images_missing_alt', 'lh:image-alt'],
+  },
+];
+const staleMap = buildRecMap(staleRecs);
+assert.equal(
+  staleMap['seo:images_missing_alt']?.fingerprint,
+  'accessibility-barriers',
+  `Correction table must override stale DB: seo:images_missing_alt must map to accessibility-barriers even when DB has it under seo-signals. Got: ${staleMap['seo:images_missing_alt']?.fingerprint}`
+);
+console.log('  ✓ Correction table overrides stale DB — seo:images_missing_alt routes correctly even for old reports');
 
 console.log('\nAll guided-fix-rec-identity tests passed ✓');
