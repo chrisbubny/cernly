@@ -121,7 +121,8 @@ test('WordPress hint does not claim plugins guarantee every header', () => {
 });
 
 test('buildPrompt signature accepts siteType parameter', () => {
-  assert.match(guidance, /function buildPrompt\s*\(\s*rec\s*,\s*domain\s*,\s*persona\s*,\s*siteType\s*\)/,
+  // Allow optional additional parameters after siteType (e.g. focusIssue)
+  assert.match(guidance, /function buildPrompt\s*\(\s*rec\s*,\s*domain\s*,\s*persona\s*,\s*siteType/,
     'buildPrompt must accept siteType as 4th parameter');
 });
 

@@ -353,7 +353,7 @@ const SUGGESTED_PROMPTS = [
   'I tried this and need help troubleshooting',
 ];
 
-function InlineChatPanel({ step, messages, input, loading, error, inputRef, onInputChange, onSend, onClose, onExpand }) {
+function InlineChatPanel({ step, messages, input, loading, error, inputRef, onInputChange, onSend, onClose }) {
   const messagesEndRef = useRef(null);
 
   // Scroll to bottom when messages update
@@ -402,19 +402,6 @@ function InlineChatPanel({ step, messages, input, loading, error, inputRef, onIn
           </div>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          {/* Expand — opens main Ask Cernly drawer with this conversation seeded */}
-          {onExpand && (
-            <button onClick={onExpand} aria-label="Open in Ask Cernly"
-              title="Open in Ask Cernly"
-              style={{ background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: 6,
-                width: 26, height: 26, cursor: 'pointer', display: 'grid', placeItems: 'center',
-                color: TEXT_SECONDARY }}>
-              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/>
-                <line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/>
-              </svg>
-            </button>
-          )}
           {/* Close */}
           <button onClick={onClose} aria-label="Close chat"
             style={{ background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: 6,
@@ -653,6 +640,7 @@ function FixStepCard({ step, index, role, completedSteps, onToggleComplete, onAs
 
 export default function GuidedFix({
   rec,
+  issue,             // the specific issue that triggered GuidedFix (optional) — drives heading + chat context
   reportId,
   reportIntegerId,   // integer PK of the current report — needed for verify prevReportId
   pageUrl,
@@ -661,8 +649,8 @@ export default function GuidedFix({
   onStatusChange,
   onRescan,          // handleRescan(verifyFp) from ReportClient — triggers scan + navigate + verify
   onAskCernly,
-  onExpandChat,      // (messages, step) => void — opens the main Ask Cernly drawer seeded with inline history
 }) {
+  const [expanded, setExpanded] = useState(false);
   const [currentStep,    setCurrentStep]    = useState(0);
   const [selectedRole,   setSelectedRole]   = useState(null);
   const [completedSteps, setCompletedSteps] = useState([]);
@@ -708,7 +696,20 @@ export default function GuidedFix({
     fetch('/api/guide-plan', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ recFingerprint: rec.fingerprint, reportId, persona }),
+      body: JSON.stringify({
+        recFingerprint: rec.fingerprint,
+        reportId,
+        persona,
+        // Pass the specific issue so guidance is grounded in the selected finding
+        ...(issue ? {
+          focusIssue: {
+            message:       issue.message       || undefined,
+            fingerprintId: issue.fingerprintId || undefined,
+            description:   issue.description   || undefined,
+            detail:        issue.detail        || undefined,
+          },
+        } : {}),
+      }),
     })
       .then(r => {
         if (!r.ok) {
@@ -786,7 +787,19 @@ export default function GuidedFix({
     fetch('/api/guide-plan', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ recFingerprint: rec.fingerprint, reportId, persona }),
+      body: JSON.stringify({
+        recFingerprint: rec.fingerprint,
+        reportId,
+        persona,
+        ...(issue ? {
+          focusIssue: {
+            message:       issue.message       || undefined,
+            fingerprintId: issue.fingerprintId || undefined,
+            description:   issue.description   || undefined,
+            detail:        issue.detail        || undefined,
+          },
+        } : {}),
+      }),
     })
       .then(r => r.ok ? r.json() : { _httpError: r.status })
       .then(data => {
@@ -809,7 +822,7 @@ export default function GuidedFix({
         setFallbackActions(rec?.actions || []);
         setPlanStatus('error');
       });
-  }, [selectedRole, rec?.fingerprint, rec?.actions, reportId]);
+  }, [issue, selectedRole, rec?.fingerprint, rec?.actions, reportId]);
 
   // Open inline chat for a specific step
   const handleAskStep = useCallback((step) => {
@@ -839,6 +852,9 @@ export default function GuidedFix({
           question: q,
           reportId,
           recFingerprint: rec?.fingerprint,
+          // Forward the specific issue fingerprint so /api/ask builds context grounded
+          // in the selected finding, not just the parent recommendation group.
+          ...(issue?.fingerprintId ? { findingFingerprintId: issue.fingerprintId } : {}),
           activeStep: chatStep,
           messages: chatMessages.slice(-6),
           ...(opts.elementContext ? { elementContext: opts.elementContext } : {}),
@@ -853,7 +869,7 @@ export default function GuidedFix({
     } finally {
       setChatLoading(false);
     }
-  }, [chatLoading, chatMessages, chatStep, rec?.fingerprint, reportId]);
+  }, [chatLoading, chatMessages, chatStep, issue?.fingerprintId, rec?.fingerprint, reportId]);
 
   const handleRescan = useCallback(() => {
     const fp = rec?.fingerprint;
@@ -915,7 +931,8 @@ export default function GuidedFix({
         onClick={e => e.stopPropagation()}
         style={{
           position:'relative', zIndex:1,
-          width:'100%', maxWidth:540,
+          width:'100%', maxWidth: expanded ? 680 : 540,
+          transition: 'max-width 0.2s ease',
           background: BG,
           boxShadow:'-2px 0 0 1px ' + BORDER + ', -4px 0 40px rgba(0,0,0,.12)',
           display:'flex', flexDirection:'column',
@@ -928,33 +945,56 @@ export default function GuidedFix({
           borderBottom:`1px solid ${BORDER}`,
           flexShrink:0, background:BG,
         }}>
-          {/* Top row: label + close */}
+          {/* Top row: label + expand + close */}
           <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between',
             marginBottom:10 }}>
             <span style={{ fontSize:9, fontWeight:900, letterSpacing:'.15em',
               textTransform:'uppercase', color:TEXT_TERTIARY }}>
               Cernly Guided Fix
             </span>
-            <button
-              onClick={onClose}
-              aria-label="Close guided fix"
-              style={{ background:SURFACE, border:`1px solid ${BORDER}`,
-                borderRadius:6, width:28, height:28, cursor:'pointer',
-                display:'grid', placeItems:'center', color:TEXT_SECONDARY }}
-            >
-              <svg width="11" height="11" viewBox="0 0 12 12" fill="none">
-                <path d="M1 1l10 10M11 1 1 11" stroke="currentColor" strokeWidth="1.8"
-                  strokeLinecap="round"/>
-              </svg>
-            </button>
+            <div style={{ display:'flex', alignItems:'center', gap:6 }}>
+              {/* Expand / collapse the panel width */}
+              <button
+                onClick={() => setExpanded(e => !e)}
+                aria-label={expanded ? 'Collapse guided fix panel' : 'Expand guided fix panel'}
+                title={expanded ? 'Collapse' : 'Expand'}
+                style={{ background:SURFACE, border:`1px solid ${BORDER}`,
+                  borderRadius:6, width:28, height:28, cursor:'pointer',
+                  display:'grid', placeItems:'center', color:TEXT_SECONDARY }}
+              >
+                {expanded ? (
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <polyline points="15 3 9 3 9 9"/><polyline points="9 21 15 21 15 15"/>
+                    <line x1="9" y1="3" x2="3" y2="9"/><line x1="15" y1="21" x2="21" y2="15"/>
+                  </svg>
+                ) : (
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/>
+                    <line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/>
+                  </svg>
+                )}
+              </button>
+              <button
+                onClick={onClose}
+                aria-label="Close guided fix"
+                style={{ background:SURFACE, border:`1px solid ${BORDER}`,
+                  borderRadius:6, width:28, height:28, cursor:'pointer',
+                  display:'grid', placeItems:'center', color:TEXT_SECONDARY }}
+              >
+                <svg width="11" height="11" viewBox="0 0 12 12" fill="none">
+                  <path d="M1 1l10 10M11 1 1 11" stroke="currentColor" strokeWidth="1.8"
+                    strokeLinecap="round"/>
+                </svg>
+              </button>
+            </div>
           </div>
 
-          {/* Rec title + category badge */}
+          {/* Issue title (specific) or rec title (group) + category badge */}
           <div style={{ display:'flex', alignItems:'flex-start', gap:10,
             flexWrap:'wrap', marginBottom:16 }}>
             <h2 style={{ fontSize:16, fontWeight:800, color:TEXT_PRIMARY, margin:0,
               flex:'1 1 200px', lineHeight:1.3 }}>
-              {rec?.title || 'Improve your site'}
+              {issue?.message || rec?.title || 'Improve your site'}
             </h2>
             {rec?.category && (
               <span style={{
@@ -1379,7 +1419,6 @@ export default function GuidedFix({
                   onInputChange={setChatInput}
                   onSend={sendChatMessage}
                   onClose={() => { setChatStep(null); setChatMessages([]); setChatInput(''); setChatError(null); }}
-                  onExpand={onExpandChat ? () => onExpandChat(chatMessages, chatStep) : null}
                 />
               )}
             </div>

@@ -29,7 +29,9 @@ export async function POST(request) {
   let body = {};
   try { body = await request.json(); } catch {}
 
-  const { recFingerprint, reportId } = body;
+  const { recFingerprint, reportId, focusIssue } = body;
+  // focusIssue is optional: { message, fingerprintId, description?, detail? }
+  // When present, guidance generation is grounded in the specific selected finding.
   // Normalise persona — 'cms' is a legacy alias for 'cms-admin'; default to 'owner'
   const rawPersona = body.persona;
   const persona = VALID_PERSONAS.has(rawPersona)
@@ -91,7 +93,14 @@ export async function POST(request) {
   // ── Generate ────────────────────────────────────────────────────────────────
   const domain   = extractDomain(rec.page_url || rec.url || '');
   const siteType = report.siteType || report.site_type || null;
-  const plan     = await generateGuidancePlan(rec, domain, persona, siteType);
+  // Sanitise focusIssue — only pass through safe string fields, never raw user input
+  const safeFocusIssue = focusIssue && typeof focusIssue === 'object' ? {
+    message:       typeof focusIssue.message       === 'string' ? focusIssue.message.slice(0, 300)       : undefined,
+    fingerprintId: typeof focusIssue.fingerprintId === 'string' ? focusIssue.fingerprintId.slice(0, 100)  : undefined,
+    description:   typeof focusIssue.description   === 'string' ? focusIssue.description.slice(0, 500)   : undefined,
+    detail:        typeof focusIssue.detail        === 'string' ? focusIssue.detail.slice(0, 500)        : undefined,
+  } : null;
+  const plan     = await generateGuidancePlan(rec, domain, persona, siteType, safeFocusIssue);
 
   // generateGuidancePlan never returns an empty plan — it always falls back to
   // static guidance. The only case where fallback: true remains is an unknown

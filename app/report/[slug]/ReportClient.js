@@ -121,7 +121,7 @@ function FindingRow({ issue, rec, onGuide }) {
       {rec && onGuide && (sev === 'critical' || sev === 'warning') && (
         <div style={{ padding: '0 18px 12px 37px' }}>
           <button
-            onClick={() => onGuide(rec)}
+            onClick={() => onGuide(rec, issue)}
             style={{
               display: 'inline-flex', alignItems: 'center', gap: 6,
               background: 'linear-gradient(135deg,#8a46f8,#3687fa)', color: '#fff',
@@ -229,16 +229,6 @@ function CategorySection({ label, accent, issues, auditStatus, sectionSummary, r
  * Build a fingerprint → recommendation lookup map from a report's recommendations array.
  * Called once per render in the main component and passed down to FixCard.
  */
-/**
- * Fingerprints that were mis-grouped in reports scanned before the Oct 2026
- * lib/recommendations.js correction.  Key = finding fingerprint that was wrong;
- * value = the rec fingerprint it should resolve to.  Applied after the DB-driven
- * loop so that OLD reports are corrected without requiring a rescan.
- */
-const FINGERPRINT_GROUP_CORRECTIONS = {
-  'seo:images_missing_alt': 'accessibility-barriers',
-};
-
 function buildRecMap(recommendations) {
   const map = {};
   if (!Array.isArray(recommendations)) return map;
@@ -250,11 +240,6 @@ function buildRecMap(recommendations) {
         if (!map[fp]) map[fp] = rec;
       }
     }
-  }
-  // Apply known corrections — always overrides stale DB data.
-  for (const [fp, correctGroupFp] of Object.entries(FINGERPRINT_GROUP_CORRECTIONS)) {
-    const correctRec = recommendations.find(r => r.fingerprint === correctGroupFp);
-    if (correctRec) map[fp] = correctRec;
   }
   return map;
 }
@@ -487,7 +472,7 @@ function FixCard({ issue, n, impact, rec, workItem, onStatusChange, onAskCernly,
                 <button key={i} onClick={() => {
                   // "How do I fix?" opens Guided Fix directly when a rec is available
                   if (chip.startsWith('How do I fix') && rec && onGuide) {
-                    onGuide(rec);
+                    onGuide(rec, issue);
                   } else {
                     onAskCernly(issue, chip, rec);
                   }
@@ -504,7 +489,7 @@ function FixCard({ issue, n, impact, rec, workItem, onStatusChange, onAskCernly,
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
               {/* Guided fix CTA — all recommendation groups */}
               {onGuide && rec && (
-                <button onClick={() => onGuide(rec)}
+                <button onClick={() => onGuide(rec, issue)}
                   style={{ display: 'inline-flex', alignItems: 'center', gap: 6,
                     background: 'linear-gradient(135deg,#8a46f8,#3687fa)', color: '#fff',
                     border: 0, borderRadius: 9, padding: '7px 13px', fontSize: 12,
@@ -1299,7 +1284,7 @@ export default function ReportClient({ isPro, userName, userAvatar }) {
   const [findingsFilter, setFindingsFilter] = useState(null); // null = All
   const [drawerOpen, setDrawerOpen]       = useState(false);
   const [drawerContext, setDrawerContext] = useState(null); // { title, category, detail }
-  const [guidedFixHidden, setGuidedFixHidden] = useState(false); // hide GuidedFix while expanded drawer is open
+  const [guidedFixIssue, setGuidedFixIssue]   = useState(null);  // the specific issue that triggered GuidedFix
   const [tileModal, setTileModal]         = useState(null); // key of tile with unavailable audit
   const [shareToggling, setShareToggling] = useState(false); // in-flight for share toggle
   const [shareOpen, setShareOpen]         = useState(false); // share popover open
@@ -2118,7 +2103,7 @@ export default function ReportClient({ isPro, userName, userAvatar }) {
               workItem={workItem}
               highlighted={!!fp && fp === highlightedFp}
               onStatusChange={handleStatusChange}
-              onGuide={(r) => setGuidedFixRec(r)}
+              onGuide={(r, iss) => { setGuidedFixRec(r); setGuidedFixIssue(iss || null); }}
               onAskCernly={(iss, suggestedQ, matchedRec, extra) => {
                 setDrawerContext({
                   title: iss.message,
@@ -2185,7 +2170,7 @@ export default function ReportClient({ isPro, userName, userAvatar }) {
               auditStatus={auditStatuses[auditKey]}
               sectionSummary={sectionSummaries?.[summaryKey] || null}
               recMap={recMap}
-              onGuide={(r) => setGuidedFixRec(r)} />
+              onGuide={(r, iss) => { setGuidedFixRec(r); setGuidedFixIssue(iss || null); }} />
           ))
         }
       </div>
@@ -2212,25 +2197,22 @@ export default function ReportClient({ isPro, userName, userAvatar }) {
           recFingerprint={drawerContext?._recFingerprint || null}
           activeStep={drawerContext?._activeStep || null}
           elementContext={drawerContext?._elementContext || null}
-          seedMessages={drawerContext?._seedMessages || null}
-          initialExpanded={drawerContext?._initialExpanded || false}
           onClose={() => {
-            if (drawerContext?._fromGuidedFix) setGuidedFixHidden(false);
             setDrawerOpen(false);
             setDrawerContext(null);
           }} />
       )}
 
-      {/* Guided Fix panel — hidden (not unmounted) while expanded Ask Cernly drawer is open */}
+      {/* Guided Fix panel */}
       {guidedFixRec && report && (
-        <div style={guidedFixHidden ? { visibility: 'hidden', pointerEvents: 'none' } : undefined}>
         <GuidedFix
           rec={guidedFixRec}
+          issue={guidedFixIssue}
           reportId={id}
           reportIntegerId={report.id}
           pageUrl={report.url}
           workItem={workItems[guidedFixRec.fingerprint] || null}
-          onClose={() => setGuidedFixRec(null)}
+          onClose={() => { setGuidedFixRec(null); setGuidedFixIssue(null); }}
           onStatusChange={(recFp, newStatus) => {
             // Adapt fingerprint-based call to issue-based handleStatusChange
             handleStatusChange({ fingerprintId: recFp, fingerprint: recFp }, newStatus);
@@ -2244,25 +2226,7 @@ export default function ReportClient({ isPro, userName, userAvatar }) {
             });
             setDrawerOpen(true);
           }}
-          onExpandChat={(messages, step) => {
-            // Open the main Ask Cernly drawer seeded with the inline chat's conversation.
-            // Hide GuidedFix (keep it mounted) so the drawer is not obscured by its z-index:1000.
-            // Closing the drawer restores GuidedFix at the same step.
-            setDrawerContext({
-              title: step?.title || 'Guided Fix',
-              category: 'Guided Fix',
-              detail: step?.description || null,
-              _recFingerprint: guidedFixRec?.fingerprint || null,
-              _activeStep: step?.title || null,
-              _seedMessages: messages,
-              _initialExpanded: true,
-              _fromGuidedFix: true,
-            });
-            setGuidedFixHidden(true);
-            setDrawerOpen(true);
-          }}
         />
-        </div>
       )}
 
       <div style={{ display: 'grid', gridTemplateColumns: '244px minmax(0,1fr)', minHeight: '100vh' }}

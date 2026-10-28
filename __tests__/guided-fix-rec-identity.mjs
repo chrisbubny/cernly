@@ -1,12 +1,8 @@
 /**
- * Regression test: GuidedFix opens the correct recommendation for image alt-text findings.
+ * Regression tests: GuidedFix issue identity threading.
  *
- * Bug: seo:images_missing_alt was in seo-signals.findingPrefixes, causing buildRecMap
- * to map that fingerprint to "Improve crawlability and search signals" instead of
- * "Fix accessibility barriers". Clicking "Guide me through this fix" on an alt-text
- * finding would open GuidedFix with SEO content (H1, meta description, viewport).
- *
- * Fix: moved seo:images_missing_alt to accessibility-barriers.findingPrefixes.
+ * These tests verify the structural fix that ensures the selected issue remains
+ * the authoritative context throughout the GuidedFix workflow.
  *
  * Run with: node __tests__/guided-fix-rec-identity.mjs
  */
@@ -17,134 +13,152 @@ import { fileURLToPath } from 'url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-// ── Read RECOMMENDATION_GROUPS from source (avoid @/ alias issues) ─────────
-// We read the source and extract RECOMMENDATION_GROUPS by parsing findingPrefixes
-// from the static definition, so this test works without a full Next.js module setup.
-const recSrc = readFileSync(path.resolve(__dirname, '../lib/recommendations.js'), 'utf8');
+const recClientSrc  = readFileSync(path.resolve(__dirname, '../app/report/[slug]/ReportClient.js'), 'utf8');
+const guidedFixSrc  = readFileSync(path.resolve(__dirname, '../app/report/[slug]/GuidedFix.js'), 'utf8');
+const guidePlanSrc  = readFileSync(path.resolve(__dirname, '../app/api/guide-plan/route.js'), 'utf8');
+const guidanceSrc   = readFileSync(path.resolve(__dirname, '../lib/guidance.js'), 'utf8');
 
-// Extract which groups contain which finding prefixes, using regex on the static source
-function extractGroupPrefixes(src) {
-  const groups = {};
-  // Match each group block: 'key': { fingerprint: '...', ..., findingPrefixes: [ ... ] }
-  const groupRe = /'([a-z-]+)':\s*\{[^}]*fingerprint:\s*'([^']+)'[^}]*findingPrefixes:\s*\[([^\]]*)\]/gs;
-  for (const m of src.matchAll(groupRe)) {
-    const key = m[1];
-    const prefixes = [...m[3].matchAll(/'([^']+)'/g)].map(p => p[1]);
-    groups[key] = prefixes;
-  }
-  return groups;
-}
+console.log('Running guided-fix-rec-identity regression tests...\n');
 
-const groupPrefixes = extractGroupPrefixes(recSrc);
-
-console.log('Testing seo:images_missing_alt recommendation routing...');
-
-// --- Test 1: seo-signals must NOT contain seo:images_missing_alt ---
-assert.ok(groupPrefixes['seo-signals'], 'seo-signals group must exist in source');
+// ---------------------------------------------------------------------------
+// Test 1: buildRecMap does NOT contain FINGERPRINT_GROUP_CORRECTIONS
+// The workaround table must be removed — issue identity must be preserved
+// via the issue prop, not by remapping fingerprints.
+// ---------------------------------------------------------------------------
 assert.ok(
-  !groupPrefixes['seo-signals'].includes('seo:images_missing_alt'),
-  `seo-signals must NOT contain 'seo:images_missing_alt' (it belongs in accessibility-barriers). ` +
-  `Current seo-signals prefixes: ${JSON.stringify(groupPrefixes['seo-signals'])}`
+  !recClientSrc.includes('FINGERPRINT_GROUP_CORRECTIONS'),
+  'MUST remove FINGERPRINT_GROUP_CORRECTIONS — workaround remaps fingerprints and loses issue identity'
 );
-console.log('  ✓ seo:images_missing_alt is NOT in seo-signals');
+console.log('  ✓ FINGERPRINT_GROUP_CORRECTIONS removed from ReportClient.js');
 
-// --- Test 2: accessibility-barriers MUST contain seo:images_missing_alt ---
-assert.ok(groupPrefixes['accessibility-barriers'], 'accessibility-barriers group must exist in source');
+// ---------------------------------------------------------------------------
+// Test 2: guidedFixIssue state exists and onGuide passes issue at all call sites
+// ---------------------------------------------------------------------------
 assert.ok(
-  groupPrefixes['accessibility-barriers'].includes('seo:images_missing_alt'),
-  `accessibility-barriers MUST contain 'seo:images_missing_alt'. ` +
-  `Current accessibility-barriers prefixes: ${JSON.stringify(groupPrefixes['accessibility-barriers'])}`
+  recClientSrc.includes('guidedFixIssue'),
+  'ReportClient.js must have guidedFixIssue state for the selected issue'
 );
-console.log('  ✓ seo:images_missing_alt IS in accessibility-barriers');
+assert.ok(
+  recClientSrc.includes("setGuidedFixIssue"),
+  'ReportClient.js must call setGuidedFixIssue when opening GuidedFix'
+);
 
-// --- Test 3: buildRecMap routing with correction table (mirrors ReportClient.js logic) ---
-const FINGERPRINT_GROUP_CORRECTIONS = {
-  'seo:images_missing_alt': 'accessibility-barriers',
-};
-function buildRecMap(recs) {
-  const map = {};
-  for (const rec of recs) {
-    if (rec.fingerprint && !map[rec.fingerprint]) map[rec.fingerprint] = rec;
-    const fps = rec.finding_fingerprints || [];
-    for (const fp of fps) {
-      if (!map[fp]) map[fp] = rec;
-    }
-  }
-  // Apply known corrections — always overrides stale DB data.
-  for (const [fp, correctGroupFp] of Object.entries(FINGERPRINT_GROUP_CORRECTIONS)) {
-    const correctRec = recs.find(r => r.fingerprint === correctGroupFp);
-    if (correctRec) map[fp] = correctRec;
-  }
-  return map;
-}
-
-const fakeRecs = [
-  {
-    fingerprint: 'seo-signals',
-    title: 'Improve crawlability and search signals',
-    finding_fingerprints: ['seo:canonical_missing', 'seo:robots_noindex', 'seo:viewport_missing'],
-  },
-  {
-    fingerprint: 'accessibility-barriers',
-    title: 'Fix accessibility barriers',
-    finding_fingerprints: [
-      'a11y:images_missing_alt',
-      'seo:images_missing_alt',
-      'lh:image-alt',
-    ],
-  },
-];
-
-const recMap = buildRecMap(fakeRecs);
-
-const altRec = recMap['seo:images_missing_alt'];
-assert.ok(altRec, 'seo:images_missing_alt must be found in recMap');
+// Count how many times onGuide(rec, issue) or onGuide(rec, iss) is called vs onGuide(rec) alone
+const onGuideWithIssueMatches = [...recClientSrc.matchAll(/onGuide\s*\([^)]*,\s*iss/g)];
+const onGuideRecOnly = [...recClientSrc.matchAll(/onGuide\s*\(\s*(?:rec|r)\s*\)/g)];
+assert.ok(
+  onGuideWithIssueMatches.length >= 2,
+  `onGuide must be called with (rec, issue) at multiple call sites; found ${onGuideWithIssueMatches.length}`
+);
 assert.equal(
-  altRec.fingerprint,
-  'accessibility-barriers',
-  `seo:images_missing_alt must map to accessibility-barriers, got: ${altRec?.fingerprint}`
+  onGuideRecOnly.length, 0,
+  `All onGuide call sites must pass issue; found ${onGuideRecOnly.length} call(s) with rec only:\n` +
+  onGuideRecOnly.map(m => m[0]).join('\n')
 );
-assert.notEqual(
-  altRec.fingerprint,
-  'seo-signals',
-  'seo:images_missing_alt must NOT map to seo-signals'
+console.log('  ✓ guidedFixIssue state added; all onGuide call sites pass issue');
+
+// ---------------------------------------------------------------------------
+// Test 3: GuidedFix accepts issue prop and uses it for heading and chat context
+// ---------------------------------------------------------------------------
+assert.ok(
+  guidedFixSrc.includes('issue,') || guidedFixSrc.includes('issue\n') || guidedFixSrc.match(/\{\s*rec,\s*issue/),
+  'GuidedFix must accept an `issue` prop in its function signature'
 );
-console.log('  ✓ buildRecMap maps seo:images_missing_alt → accessibility-barriers');
-
-// --- Test 4: Existing SEO signals still route correctly ---
-assert.equal(recMap['seo:canonical_missing']?.fingerprint, 'seo-signals',
-  'seo:canonical_missing must still map to seo-signals');
-assert.equal(recMap['seo:robots_noindex']?.fingerprint, 'seo-signals',
-  'seo:robots_noindex must still map to seo-signals');
-console.log('  ✓ seo:canonical_missing and seo:robots_noindex still map to seo-signals');
-
-// --- Test 5: a11y alt-text fingerprints still route correctly ---
-assert.equal(recMap['a11y:images_missing_alt']?.fingerprint, 'accessibility-barriers',
-  'a11y:images_missing_alt must map to accessibility-barriers');
-assert.equal(recMap['lh:image-alt']?.fingerprint, 'accessibility-barriers',
-  'lh:image-alt must map to accessibility-barriers');
-console.log('  ✓ a11y:images_missing_alt and lh:image-alt still map to accessibility-barriers');
-
-// --- Test 6: Correction table overrides stale DB data ---
-// Simulates an old report where seo:images_missing_alt is still in seo-signals.finding_fingerprints
-const staleRecs = [
-  {
-    fingerprint: 'seo-signals',
-    title: 'Improve crawlability and search signals',
-    finding_fingerprints: ['seo:canonical_missing', 'seo:robots_noindex', 'seo:images_missing_alt'],
-  },
-  {
-    fingerprint: 'accessibility-barriers',
-    title: 'Fix accessibility barriers',
-    finding_fingerprints: ['a11y:images_missing_alt', 'lh:image-alt'],
-  },
-];
-const staleMap = buildRecMap(staleRecs);
-assert.equal(
-  staleMap['seo:images_missing_alt']?.fingerprint,
-  'accessibility-barriers',
-  `Correction table must override stale DB: seo:images_missing_alt must map to accessibility-barriers even when DB has it under seo-signals. Got: ${staleMap['seo:images_missing_alt']?.fingerprint}`
+assert.ok(
+  guidedFixSrc.includes('issue?.message'),
+  'GuidedFix heading must use issue?.message when available'
 );
-console.log('  ✓ Correction table overrides stale DB — seo:images_missing_alt routes correctly even for old reports');
+assert.ok(
+  guidedFixSrc.includes('issue?.fingerprintId') || guidedFixSrc.includes("issue.fingerprintId"),
+  'GuidedFix sendChatMessage must forward issue.fingerprintId as findingFingerprintId'
+);
+assert.ok(
+  guidedFixSrc.includes('findingFingerprintId'),
+  'GuidedFix must pass findingFingerprintId to /api/ask'
+);
+console.log('  ✓ GuidedFix accepts issue prop; heading uses issue.message; chat uses issue.fingerprintId');
+
+// ---------------------------------------------------------------------------
+// Test 4: Expanding GuidedFix only changes width — no drawer opened, no state reset
+// The old onExpandChat approach must be removed.
+// ---------------------------------------------------------------------------
+assert.ok(
+  !guidedFixSrc.includes('onExpandChat'),
+  'GuidedFix must NOT have onExpandChat prop — expansion must only change sidebar width'
+);
+assert.ok(
+  guidedFixSrc.includes('expanded') && guidedFixSrc.includes('setExpanded'),
+  'GuidedFix must have expanded state for panel width control'
+);
+assert.ok(
+  guidedFixSrc.includes('maxWidth: expanded ?') || guidedFixSrc.includes('maxWidth:expanded ?'),
+  'GuidedFix panel maxWidth must respond to expanded state'
+);
+// Expand button must be in the header, not in InlineChatPanel
+const inlineChatPanelFn = guidedFixSrc.match(/function InlineChatPanel\s*\([^)]*\)[^}]+(?:\{[^}]*\}[^}]*)*}/s)?.[0] || '';
+assert.ok(
+  !inlineChatPanelFn.includes('onExpand') || !inlineChatPanelFn.includes('Open in Ask Cernly'),
+  'InlineChatPanel must NOT have an expand button'
+);
+console.log('  ✓ Expansion handled by expanded state in GuidedFix header; onExpandChat removed');
+
+// ---------------------------------------------------------------------------
+// Test 5: Closing GuidedFix clears both rec and issue state (no stale issue on reopen)
+// ---------------------------------------------------------------------------
+const onCloseClearsBoth = recClientSrc.includes('setGuidedFixRec(null)') &&
+  recClientSrc.includes('setGuidedFixIssue(null)');
+assert.ok(
+  onCloseClearsBoth,
+  'onClose handler must clear both guidedFixRec and guidedFixIssue to prevent stale issue on reopen'
+);
+// Also verify they appear together in the same onClose context (arrow with braces)
+const onClosePattern = /onClose\s*=\s*\{[^}]*setGuidedFixRec\(null\)[^}]*setGuidedFixIssue\(null\)[^}]*\}|onClose\s*=>\s*\([^)]*\)[^}]*setGuidedFixRec\(null\)[^)]*setGuidedFixIssue\(null\)|onClose\s*=>\s*\{[^}]*setGuidedFixRec[^}]*setGuidedFixIssue[^}]*\}/;
+assert.ok(
+  onClosePattern.test(recClientSrc),
+  'onClose must clear guidedFixRec and guidedFixIssue in the same handler'
+);
+console.log('  ✓ onClose clears both guidedFixRec and guidedFixIssue — no stale issue on reopen');
+
+// ---------------------------------------------------------------------------
+// Test 6 (bonus): guide-plan API accepts focusIssue and sanitises it
+// ---------------------------------------------------------------------------
+assert.ok(
+  guidePlanSrc.includes('focusIssue'),
+  'guide-plan route must accept focusIssue from request body'
+);
+assert.ok(
+  guidePlanSrc.includes('safeFocusIssue'),
+  'guide-plan route must sanitise focusIssue before passing to generateGuidancePlan'
+);
+assert.ok(
+  guidanceSrc.includes('focusIssue') && guidanceSrc.includes('SELECTED FINDING'),
+  'guidance.js buildPrompt must inject a SELECTED FINDING block when focusIssue is present'
+);
+console.log('  ✓ guide-plan API accepts and sanitises focusIssue; guidance.js injects it into prompt');
+
+// ---------------------------------------------------------------------------
+// Test 7 (bonus): guidedFixHidden and all visibility:hidden workarounds removed
+// ---------------------------------------------------------------------------
+assert.ok(
+  !recClientSrc.includes('guidedFixHidden'),
+  'guidedFixHidden state must be removed from ReportClient.js'
+);
+assert.ok(
+  !recClientSrc.includes('visibility: \'hidden\'') && !recClientSrc.includes('visibility:\'hidden\''),
+  'visibility:hidden wrapper around GuidedFix must be removed'
+);
+assert.ok(
+  !recClientSrc.includes('_fromGuidedFix'),
+  '_fromGuidedFix drawer context flag must be removed'
+);
+assert.ok(
+  !recClientSrc.includes('_seedMessages'),
+  '_seedMessages drawer context flag must be removed'
+);
+assert.ok(
+  !recClientSrc.includes('_initialExpanded'),
+  '_initialExpanded drawer context flag must be removed'
+);
+console.log('  ✓ All visibility:hidden / drawer-seeding workarounds removed');
 
 console.log('\nAll guided-fix-rec-identity tests passed ✓');
