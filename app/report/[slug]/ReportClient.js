@@ -2585,24 +2585,37 @@ export default function ReportClient({ isPro, userName, userAvatar }) {
                   const isInconclusive = verifiedStatus === 'unable_to_verify' || verifiedStatus === 'partially_resolved';
                   const resolved = findingOutcomes.filter(f => f.outcome === 'likely_resolved');
                   const detected = findingOutcomes.filter(f => f.outcome === 'still_detected');
+                  // Human-readable label: prefer message, then title, then strip source prefix from fingerprintId
+                  const findingLabel = (f) => {
+                    if (f.message && f.message.length > 2) return f.message;
+                    if (f.title  && f.title.length  > 2) return f.title;
+                    // strip "seo:", "lh:", "a11y:", etc. and replace underscores
+                    const raw = f.fingerprintId || '';
+                    return raw.replace(/^[a-z0-9_-]+:/, '').replace(/_/g, ' ');
+                  };
                   return (
-                    <div style={{ margin: '12px 0 20px', padding: '14px 16px', borderRadius: 10,
-                      background: cfg.bg, border: `1.5px solid ${cfg.border}`, position: 'relative' }}>
+                    <div style={{ margin: '8px 0 16px', padding: '12px 14px 14px', borderRadius: 8,
+                      background: cfg.bg, border: `1px solid ${cfg.border}`, position: 'relative' }}>
                       <button onClick={() => setVerifyResult(null)}
                         aria-label="Dismiss"
-                        style={{ position: 'absolute', top: 10, right: 12, background: 'none',
-                          border: 'none', cursor: 'pointer', fontSize: 16, color: '#94a3b8', lineHeight: 1 }}>×</button>
-                      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
-                        <span style={{ fontSize: 18, lineHeight: '20px', color: cfg.color }}>{cfg.icon}</span>
+                        style={{ position: 'absolute', top: 8, right: 10, background: 'none',
+                          border: 'none', cursor: 'pointer', fontSize: 15, color: '#94a3b8', lineHeight: 1,
+                          padding: '2px 4px' }}>×</button>
+                      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+                        <span style={{ fontSize: 15, lineHeight: '18px', color: cfg.color, marginTop: 1 }}>{cfg.icon}</span>
                         <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ fontSize: 13, fontWeight: 700, color: cfg.color, marginBottom: 2 }}>
+                          {/* Status label */}
+                          <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.04em',
+                            textTransform: 'uppercase', color: cfg.color, marginBottom: 3 }}>
                             {cfg.label}
                           </div>
-                          <div style={{ fontSize: 13, color: '#374151', marginBottom: 6 }}>
-                            <strong>{recTitle}</strong>
+                          {/* Recommendation title */}
+                          <div style={{ fontSize: 13, fontWeight: 600, color: '#1f2937', marginBottom: 4, lineHeight: '1.35' }}>
+                            {recTitle}
                           </div>
+                          {/* Explanatory note */}
                           {isInconclusive && (
-                            <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 6 }}>
+                            <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 8, lineHeight: '1.45' }}>
                               {verifiedStatus === 'unable_to_verify'
                                 ? comparabilityLevel === 'limited'
                                   ? 'The new scan did not have full audit coverage to confirm this fix. Check the Progress tab for details.'
@@ -2610,37 +2623,41 @@ export default function ReportClient({ isPro, userName, userAvatar }) {
                                 : 'Some issues from this recommendation were fixed, but others were still detected.'}
                             </div>
                           )}
+                          {/* Finding chips */}
                           {(resolved.length > 0 || detected.length > 0) && (
-                            <div style={{ fontSize: 12, display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
+                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, marginBottom: 10 }}>
                               {resolved.slice(0, 3).map(f => (
                                 <span key={f.fingerprintId} style={{ background: '#dcfce7', color: '#166534',
-                                  borderRadius: 4, padding: '2px 7px', fontWeight: 600 }}>
-                                  ✓ {f.title || f.fingerprintId}
+                                  borderRadius: 4, padding: '2px 8px', fontSize: 11, fontWeight: 600, lineHeight: '18px' }}>
+                                  ✓ {findingLabel(f)}
                                 </span>
                               ))}
                               {detected.slice(0, 3).map(f => (
                                 <span key={f.fingerprintId} style={{ background: '#fee2e2', color: '#991b1b',
-                                  borderRadius: 4, padding: '2px 7px', fontWeight: 600 }}>
-                                  ✗ {f.title || f.fingerprintId}
+                                  borderRadius: 4, padding: '2px 8px', fontSize: 11, fontWeight: 600, lineHeight: '18px' }}>
+                                  ✗ {findingLabel(f)}
                                 </span>
                               ))}
                             </div>
                           )}
-                          <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-                            <button onClick={() => setActiveTab('progress')}
-                              style={{ fontSize: 12, fontWeight: 600, color: '#7948f6', background: 'none',
-                                border: 'none', padding: 0, cursor: 'pointer', textDecoration: 'underline' }}>
-                              View full comparison →
-                            </button>
-                            {/* When partially resolved, offer a direct path to continue fixing remaining issues */}
+                          {/* Actions */}
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                            {/* Primary CTA — purple button when partially resolved */}
                             {verifiedStatus === 'partially_resolved' && detected.length > 0 && (
                               <button onClick={() => setActiveTab('action')}
-                                style={{ fontSize: 12, fontWeight: 600, color: '#374151', background: '#f3f4f6',
-                                  border: '1px solid #d1d5db', borderRadius: 5, padding: '3px 10px',
-                                  cursor: 'pointer' }}>
-                                Continue fixing remaining issues →
+                                style={{ fontSize: 12, fontWeight: 600, color: '#fff',
+                                  background: '#7948f6', border: 'none', borderRadius: 6,
+                                  padding: '5px 12px', cursor: 'pointer', lineHeight: '1.4' }}>
+                                Fix remaining {detected.length === 1 ? 'issue' : 'issues'} →
                               </button>
                             )}
+                            {/* Secondary link */}
+                            <button onClick={() => setActiveTab('progress')}
+                              style={{ fontSize: 12, fontWeight: 500, color: '#7948f6', background: 'none',
+                                border: 'none', padding: 0, cursor: 'pointer', textDecoration: 'underline',
+                                textUnderlineOffset: 2 }}>
+                              View full comparison →
+                            </button>
                           </div>
                         </div>
                       </div>

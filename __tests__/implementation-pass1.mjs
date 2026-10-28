@@ -170,27 +170,26 @@ test('Banner suppression is linked to verifyResult condition', () => {
     'verifyResult must be combined with activeTab guard');
 });
 
-test('"Continue fixing remaining issues" button appears for partially_resolved', () => {
-  assert.match(reportClient, /Continue fixing remaining issues/,
-    'Must have "Continue fixing remaining issues" button');
+test('"Fix remaining issue(s)" button appears for partially_resolved', () => {
+  assert.match(reportClient, /Fix remaining.*issue/,
+    'Must have "Fix remaining issue(s)" button for partially_resolved');
 });
 
-test('Continue button only appears when verifiedStatus is partially_resolved', () => {
-  const btnIdx = reportClient.indexOf('Continue fixing remaining issues');
+test('Fix remaining button only appears when verifiedStatus is partially_resolved', () => {
+  const btnIdx = reportClient.search(/Fix remaining.*issue/);
   assert.ok(btnIdx >= 0, 'Button text not found');
-  // Scan backwards 500 chars for the condition
+  // Scan backwards for the condition
   const before = reportClient.slice(Math.max(0, btnIdx - 600), btnIdx);
   assert.match(before, /partially_resolved/,
-    'Continue button must be guarded by partially_resolved check');
+    'Fix remaining button must be guarded by partially_resolved check');
 });
 
-test('Continue button navigates to action tab', () => {
-  const btnIdx = reportClient.indexOf('Continue fixing remaining issues');
+test('Fix remaining button navigates to action tab', () => {
+  const btnIdx = reportClient.search(/Fix remaining.*issue/);
   assert.ok(btnIdx >= 0, 'Button text not found');
-  // Check within 600 chars before and after (the onClick is on the <button> tag above)
   const around = reportClient.slice(Math.max(0, btnIdx - 600), btnIdx + 200);
   assert.match(around, /setActiveTab\(['"]action['"]\)/,
-    'Continue button must call setActiveTab("action")');
+    'Fix remaining button must call setActiveTab("action")');
 });
 
 test('"View full comparison" button label does not say "in Progress tab"', () => {

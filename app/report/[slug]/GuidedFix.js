@@ -920,6 +920,8 @@ export default function GuidedFix({
       display:'flex', alignItems:'stretch', justifyContent:'flex-end',
       zIndex:1000, fontFamily:FONT,
     }}>
+      {/* Focus-visible style for icon buttons — suppresses default outline, restores on keyboard nav */}
+      <style>{`.gf-icon-btn:focus-visible{outline:2px solid #7948f6;outline-offset:2px}.gf-icon-btn:hover{opacity:.8}`}</style>
       {/* Backdrop */}
       <div
         onClick={onClose}
@@ -953,24 +955,32 @@ export default function GuidedFix({
               Cernly Guided Fix
             </span>
             <div style={{ display:'flex', alignItems:'center', gap:6 }}>
-              {/* Expand / collapse the panel width */}
+              {/* Expand / collapse the panel width — Lucide Maximize2 / Minimize2 */}
               <button
                 onClick={() => setExpanded(e => !e)}
                 aria-label={expanded ? 'Collapse guided fix panel' : 'Expand guided fix panel'}
                 title={expanded ? 'Collapse' : 'Expand'}
+                className="gf-icon-btn"
                 style={{ background:SURFACE, border:`1px solid ${BORDER}`,
                   borderRadius:6, width:28, height:28, cursor:'pointer',
-                  display:'grid', placeItems:'center', color:TEXT_SECONDARY }}
+                  display:'grid', placeItems:'center', color:TEXT_SECONDARY,
+                  outline:'none' }}
               >
                 {expanded ? (
-                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <polyline points="15 3 9 3 9 9"/><polyline points="9 21 15 21 15 15"/>
-                    <line x1="9" y1="3" x2="3" y2="9"/><line x1="15" y1="21" x2="21" y2="15"/>
+                  /* Minimize2 — arrows pointing inward */
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <polyline points="4 14 10 14 10 20"/>
+                    <polyline points="20 10 14 10 14 4"/>
+                    <line x1="10" y1="14" x2="3" y2="21"/>
+                    <line x1="21" y1="3" x2="14" y2="10"/>
                   </svg>
                 ) : (
-                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/>
-                    <line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/>
+                  /* Maximize2 — arrows pointing outward */
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <polyline points="15 3 21 3 21 9"/>
+                    <polyline points="9 21 3 21 3 15"/>
+                    <line x1="21" y1="3" x2="14" y2="10"/>
+                    <line x1="3" y1="21" x2="10" y2="14"/>
                   </svg>
                 )}
               </button>
