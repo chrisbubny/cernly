@@ -6,6 +6,17 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { useClerk } from '@clerk/nextjs';
 import { avgScore } from '@/lib/scoring';
 
+/* ─── Onboarding analytics ─── */
+function trackEvent(name) {
+  const key = `cernly_evt_${name}`;
+  try {
+    if (typeof localStorage === 'undefined' || localStorage.getItem(key)) return;
+    localStorage.setItem(key, '1');
+    // Replace with real analytics provider as needed, e.g. analytics.track(name)
+    console.log(`[Cernly] onboarding event: ${name}`);
+  } catch {}
+}
+
 /* ─── SVG icon helpers ─── */
 const strokeAttrs = { fill: 'none', stroke: 'currentColor', strokeWidth: 1.8, strokeLinecap: 'round', strokeLinejoin: 'round' };
 
@@ -289,6 +300,7 @@ export default function DashboardClient({ reports: initialReports = [], isPro, u
   const [deletingId, setDeletingId] = useState(null); // id currently showing confirm
   const [selectedDomain, setSelectedDomain] = useState(null); // null | hostname string — for per-domain drill-down
   const [takeIdx, setTakeIdx] = useState(0); // which opportunity is showing in Cernly's Take card
+  const [showWelcomeReplay, setShowWelcomeReplay] = useState(false);
   const router = useRouter();
   const { signOut } = useClerk();
 
@@ -333,6 +345,8 @@ export default function DashboardClient({ reports: initialReports = [], isPro, u
     if (!url.trim()) return;
     let target = url.trim();
     if (!/^https?:\/\//i.test(target)) target = 'https://' + target;
+    if (localReports.length === 0) trackEvent('first_scan_started');
+    setShowWelcomeReplay(false);
     setScanning(true);
     setScanStage(0);
     let stageIdx = 0;
@@ -349,6 +363,7 @@ export default function DashboardClient({ reports: initialReports = [], isPro, u
       clearInterval(stageTimer);
       const data = await res.json();
       if (data.reportSlug || data.reportId) {
+        if (localReports.length === 0) trackEvent('first_scan_completed');
         router.push(`/report/${data.reportSlug || data.reportId}`);
       } else {
         notify(data.error || 'Scan failed. Please try again.');
@@ -534,6 +549,29 @@ export default function DashboardClient({ reports: initialReports = [], isPro, u
             ))}
           </nav>
 
+          {/* Nav — Help */}
+          <div style={{ fontSize: 10, letterSpacing: '.13em', textTransform: 'uppercase',
+            color: '#a3a7b4', fontWeight: 800, padding: '0 15px', margin: '30px 0 12px' }}>Help</div>
+          <nav style={{ display: 'grid', gap: 4 }}>
+            <button
+              onClick={() => {
+                setView('overview');
+                setSidebarOpen(false);
+                setSelectedDomain(null);
+                setShowWelcomeReplay(true);
+                setTimeout(() => document.getElementById('scan-url')?.focus(), 150);
+              }}
+              style={{
+                border: 0, background: 'transparent', color: '#707688',
+                display: 'flex', alignItems: 'center', gap: 13,
+                textAlign: 'left', padding: '13px 14px', borderRadius: 10,
+                fontWeight: 700, fontSize: 12, width: '100%', cursor: 'pointer',
+                fontFamily: 'inherit',
+              }}>
+              <Icons.Spark /> Getting started
+            </button>
+          </nav>
+
           {/* Bottom: upgrade + profile */}
           <div style={{ marginTop: 'auto' }}>
             {!isPro && (
@@ -663,10 +701,14 @@ export default function DashboardClient({ reports: initialReports = [], isPro, u
                       <div style={{ position: 'relative', zIndex: 1 }}>
                         <h2 style={{ fontFamily: 'var(--font-manrope, Manrope, sans-serif)',
                           fontSize: 18, fontWeight: 800, letterSpacing: '-.04em', margin: 0 }}>
-                          What should we check today?
+                          {(localReports.length === 0 || showWelcomeReplay)
+                            ? 'Welcome to Cernly — let\'s check your site'
+                            : 'What should we check today?'}
                         </h2>
                         <p style={{ fontSize: 12, color: '#83899c', margin: '7px 0 20px' }}>
-                          Enter any publicly accessible website. No installation needed.
+                          {(localReports.length === 0 || showWelcomeReplay)
+                            ? 'Paste your URL below to run a free audit — performance, SEO, security, and accessibility in one go.'
+                            : 'Enter any publicly accessible website. No installation needed.'}
                         </p>
                         <form onSubmit={handleScan} style={{ display: 'flex', gap: 10 }}>
                           <div style={{ border: '1px solid #e4e6f0', background: '#fff', borderRadius: 10,

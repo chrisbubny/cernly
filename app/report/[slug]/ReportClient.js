@@ -1297,6 +1297,10 @@ export default function ReportClient({ isPro, userName, userAvatar }) {
   const [workItems, setWorkItems]         = useState({}); // fingerprint → DB row
   const [workItemsLoaded, setWorkItemsLoaded] = useState(false);
   const [workItemError, setWorkItemError] = useState(null); // { fingerprint, message } for visible error
+  // Onboarding: first-report tip
+  const [tipDismissed, setTipDismissed] = useState(() => {
+    try { return !!localStorage.getItem('cernly_tip_dismissed'); } catch { return true; }
+  });
   const [verifyingFingerprint, setVerifyingFingerprint] = useState(null); // fingerprint being verified
   // Verification result for post-rescan display: { fp, verifiedStatus, findingOutcomes, comparabilityLevel }
   const [verifyResult, setVerifyResult]   = useState(null);
@@ -1313,6 +1317,17 @@ export default function ReportClient({ isPro, userName, userAvatar }) {
     'Identifying site type & UX…',
     'Writing AI insights…',
   ];
+
+  // Onboarding: track first report viewed (once per account)
+  useEffect(() => {
+    try {
+      const key = 'cernly_evt_first_report_viewed';
+      if (!localStorage.getItem(key)) {
+        localStorage.setItem(key, '1');
+        console.log('[Cernly] onboarding event: first_report_viewed');
+      }
+    } catch {}
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Load work items for authenticated users when the report URL is known
   useEffect(() => {
@@ -2665,6 +2680,51 @@ export default function ReportClient({ isPro, userName, userAvatar }) {
                   );
                 })()}
 
+                {/* First-report tip — shown once, dismissed via localStorage */}
+                {!tipDismissed && (
+                  <div style={{
+                    display: 'flex', alignItems: 'center', gap: 12,
+                    background: '#f5f2ff', border: '1px solid #e0d8ff', borderRadius: 10,
+                    padding: '10px 14px', marginBottom: 14, marginTop: 4,
+                  }}>
+                    <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="#7948f6"
+                      strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+                      <path d="m5 12 4 4 10-10"/>
+                    </svg>
+                    <span style={{ fontSize: 12, color: '#4b3a8a', flex: 1 }}>
+                      Your <strong style={{ color: '#7948f6' }}>Action plan</strong> is ready — see prioritized fixes and step-by-step instructions.
+                    </span>
+                    <button
+                      onClick={() => {
+                        setActiveTab('action');
+                        try {
+                          const evtKey = 'cernly_evt_first_action_plan_interaction';
+                          if (!localStorage.getItem(evtKey)) {
+                            localStorage.setItem(evtKey, '1');
+                            console.log('[Cernly] onboarding event: first_action_plan_interaction');
+                          }
+                        } catch {}
+                      }}
+                      style={{ fontSize: 11, fontWeight: 800, color: '#7948f6',
+                        background: '#ede8ff', border: 0, borderRadius: 7,
+                        padding: '5px 10px', cursor: 'pointer', whiteSpace: 'nowrap',
+                        fontFamily: 'inherit' }}>
+                      View plan →
+                    </button>
+                    <button
+                      onClick={() => {
+                        setTipDismissed(true);
+                        try { localStorage.setItem('cernly_tip_dismissed', '1'); } catch {}
+                      }}
+                      aria-label="Dismiss tip"
+                      style={{ border: 0, background: 'transparent', color: '#a08cc0',
+                        fontSize: 16, lineHeight: 1, cursor: 'pointer',
+                        padding: '0 2px', flexShrink: 0 }}>
+                      ×
+                    </button>
+                  </div>
+                )}
+
                 {/* Tabs */}
                 <div style={{ display: 'flex', gap: 0, borderBottom: '1px solid #e9eaf2',
                   marginBottom: 24, marginTop: 6 }}>
@@ -2677,7 +2737,19 @@ export default function ReportClient({ isPro, userName, userAvatar }) {
                     const isActive = activeTab === t.key;
                     return (
                       <button key={t.key}
-                        onClick={() => { setActiveTab(t.key); if (t.key !== 'findings') setFindingsFilter(null); }}
+                        onClick={() => {
+                          setActiveTab(t.key);
+                          if (t.key !== 'findings') setFindingsFilter(null);
+                          if (t.key === 'action') {
+                            try {
+                              const evtKey = 'cernly_evt_first_action_plan_interaction';
+                              if (!localStorage.getItem(evtKey)) {
+                                localStorage.setItem(evtKey, '1');
+                                console.log('[Cernly] onboarding event: first_action_plan_interaction');
+                              }
+                            } catch {}
+                          }
+                        }}
                         className="tab-btn"
                         style={{ display: 'flex', alignItems: 'center', gap: 6,
                           padding: '11px 18px 11px', marginBottom: -1,
