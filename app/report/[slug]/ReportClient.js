@@ -1493,6 +1493,19 @@ export default function ReportClient({ isPro, userName, userAvatar }) {
     }
   }, []);
 
+  // When arriving from a rescan (?from=rescan&prevReportId=<id>), auto-select the
+  // previous scan in comparisonScans so that liveComparison is computed correctly
+  // and RescanBanner renders with real before/after data.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('from') !== 'rescan') return;
+    const prevId = Number(params.get('prevReportId'));
+    if (!prevId || !Array.isArray(comparisonScans) || comparisonScans.length < 2) return;
+    const idx = comparisonScans.findIndex(s => s.id === prevId);
+    if (idx > 0) setSelectedPrevIdx(idx);
+  }, [comparisonScans]);
+
   // When a ?verify=<fingerprint>&prevReportId=<id> arrives on a freshly loaded report,
   // call the server-side verification API and update work item state.
   useEffect(() => {

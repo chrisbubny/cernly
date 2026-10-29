@@ -78,20 +78,26 @@ export async function POST(request) {
   }
 
   // ── Cache check ─────────────────────────────────────────────────────────────
-  // The stored guidance_plan is a map keyed by persona:
-  //   { owner: { planFingerprint, steps, ... }, developer: { ... }, ... }
-  // This allows all three personas to be cached in one DB row.
+  // The stored guidance_plan is a map keyed by persona (or persona::focusFingerprintId
+  // when a specific finding was selected, so different findings in the same
+  // recommendation group get distinct focused plans).
+  //   { owner: { ... }, 'developer::lh:unused-css-rules': { ... }, ... }
+  const focusFingerprintId = safeFocusIssue?.fingerprintId || null;
+  const personaKey = focusFingerprintId ? `${persona}::${focusFingerprintId}` : persona;
+
   const cached      = await getGuidancePlan(recFingerprint, userId);
   const currentFp   = derivePlanFingerprint(rec);
-  const cachedForPersona = cached?.plan?.[persona];
+  const cachedForPersona = cached?.plan?.[personaKey];
 
   if (cachedForPersona && cachedForPersona.planFingerprint === currentFp) {
-    // Cache hit for this persona — content has not changed since generation
+    // Cache hit for this persona/focus combination — content has not changed
     return NextResponse.json({ plan: cachedForPersona, cached: true, persona });
   }
 
   // ── Generate ────────────────────────────────────────────────────────────────
-  const domain   = extractDomain(rec.page_url || rec.url || '');
+  const rawUrl   = rec.page_url || rec.url || '';
+  const domain   = extractDomain(rawUrl);
+  const siteUrl  = extractSiteUrl(rawUrl);
   const siteType = report.siteType || report.site_type || null;
   // Sanitise focusIssue — only pass through safe string fields, never raw user input
   const safeFocusIssue = focusIssue && typeof focusIssue === 'object' ? {
@@ -100,7 +106,7 @@ export async function POST(request) {
     description:   typeof focusIssue.description   === 'string' ? focusIssue.description.slice(0, 500)   : undefined,
     detail:        typeof focusIssue.detail        === 'string' ? focusIssue.detail.slice(0, 500)        : undefined,
   } : null;
-  const plan     = await generateGuidancePlan(rec, domain, persona, siteType, safeFocusIssue);
+  const plan     = await generateGuidancePlan(rec, domain, persona, siteType, safeFocusIssue, siteUrl);
 
   // generateGuidancePlan never returns an empty plan — it always falls back to
   // static guidance. The only case where fallback: true remains is an unknown
@@ -127,7 +133,7 @@ export async function POST(request) {
     for (const [p, pPlan] of Object.entries(existing)) {
       if (pPlan?.planFingerprint === currentFp) freshPersonas[p] = pPlan;
     }
-    const updatedMap = { ...freshPersonas, [persona]: plan };
+    const updatedMap = { ...freshPersonas, [personaKey]: plan };
     await setGuidancePlan(recFingerprint, userId, updatedMap);
   } catch (e) {
     console.error('[guide-plan] failed to cache plan:', e.message);
@@ -140,6 +146,17 @@ export async function POST(request) {
 function extractDomain(url) {
   try {
     return new URL(url).hostname.replace(/^www\./, '');
+  } catch {
+    return '';
+  }
+}
+
+/** Returns the canonical origin+path of the scanned URL, safe for display in guidance steps. */
+function extractSiteUrl(url) {
+  try {
+    const u = new URL(url);
+    // Return origin only (protocol + hostname, no auth) — path omitted unless non-trivial
+    return u.origin;
   } catch {
     return '';
   }

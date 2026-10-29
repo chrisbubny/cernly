@@ -1352,11 +1352,11 @@ export default function GuidedFix({
                         </p>
                         <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
                           <button
-                            onClick={() => onRescan && onRescan(rec.fingerprint)}
+                            onClick={() => goTo(3)}
                             style={{ fontSize:12, fontWeight:700, background:'#1a7a4a', color:'#fff',
                               border:0, borderRadius:7, padding:'7px 14px', cursor:'pointer',
                               fontFamily:'inherit' }}>
-                            Verify my changes
+                            Continue to verification
                           </button>
                           <button
                             onClick={() => onSwitchTab && onSwitchTab('action')}
