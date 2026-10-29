@@ -649,6 +649,7 @@ export default function GuidedFix({
   onStatusChange,
   onRescan,          // handleRescan(verifyFp) from ReportClient — triggers scan + navigate + verify
   onAskCernly,
+  onSwitchTab,       // (tabKey: string) => void — closes GuidedFix and switches report tab
 }) {
   const [expanded, setExpanded] = useState(false);
   const [currentStep,    setCurrentStep]    = useState(0);
@@ -1338,10 +1339,40 @@ export default function GuidedFix({
                     />
                   ))}
                   {completedSteps.length > 0 && (
-                    <div style={{ textAlign:'center', padding:'8px 0',
-                      fontSize:12, color:TEXT_TERTIARY }}>
-                      {completedSteps.length} of {plan.steps.length} steps marked complete
-                    </div>
+                    completedSteps.length === plan.steps.length ? (
+                      /* All steps done — prompt to verify or view action plan */
+                      <div style={{ background:'#f0faf5', border:'1px solid #bbf0d6',
+                        borderRadius:10, padding:'12px 14px', marginTop:10 }}>
+                        <div style={{ fontSize:13, fontWeight:700, color:'#1a7a4a', marginBottom:5 }}>
+                          You&apos;ve completed the guidance steps.
+                        </div>
+                        <p style={{ fontSize:12, color:'#2d6a4f', margin:'0 0 10px', lineHeight:1.6 }}>
+                          Run a verification scan to confirm your changes are live on the site.
+                          Scan allowances apply to your current plan.
+                        </p>
+                        <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
+                          <button
+                            onClick={() => onRescan && onRescan(rec.fingerprint)}
+                            style={{ fontSize:12, fontWeight:700, background:'#1a7a4a', color:'#fff',
+                              border:0, borderRadius:7, padding:'7px 14px', cursor:'pointer',
+                              fontFamily:'inherit' }}>
+                            Verify my changes
+                          </button>
+                          <button
+                            onClick={() => onSwitchTab && onSwitchTab('action')}
+                            style={{ fontSize:12, fontWeight:600, background:'none',
+                              color:'#2d6a4f', border:'1px solid #bbf0d6', borderRadius:7,
+                              padding:'7px 14px', cursor:'pointer', fontFamily:'inherit' }}>
+                            View Action Plan
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div style={{ textAlign:'center', padding:'8px 0',
+                        fontSize:12, color:TEXT_TERTIARY }}>
+                        {completedSteps.length} of {plan.steps.length} steps marked complete
+                      </div>
+                    )
                   )}
 
                 </>

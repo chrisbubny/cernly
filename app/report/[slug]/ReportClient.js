@@ -1301,6 +1301,8 @@ export default function ReportClient({ isPro, userName, userAvatar }) {
   const [tipDismissed, setTipDismissed] = useState(() => {
     try { return !!localStorage.getItem('cernly_tip_dismissed'); } catch { return true; }
   });
+  // Resume banner: session-scoped dismissal per report so returning visits re-show it
+  const [resumeDismissed, setResumeDismissed] = useState(false);
   const [verifyingFingerprint, setVerifyingFingerprint] = useState(null); // fingerprint being verified
   // Verification result for post-rescan display: { fp, verifiedStatus, findingOutcomes, comparabilityLevel }
   const [verifyResult, setVerifyResult]   = useState(null);
@@ -1338,6 +1340,16 @@ export default function ReportClient({ isPro, userName, userAvatar }) {
       .then(d => { if (d?.workItems) setWorkItems(d.workItems); })
       .catch(() => {}); // silent — anon users or load failure: client state still usable
   }, [report?.url, workItemsLoaded]);
+
+  // Resume banner: read sessionStorage dismissal once we know the report id
+  useEffect(() => {
+    if (!report?.id) return;
+    try {
+      if (sessionStorage.getItem(`cernly_resume_dismissed_${report.id}`)) {
+        setResumeDismissed(true);
+      }
+    } catch {}
+  }, [report?.id]);
 
   // Load slim scan history (for Progress tab history list + trend chart)
   // Derive domain inline to avoid TDZ — domain const is declared later in render.
@@ -2098,6 +2110,52 @@ export default function ReportClient({ isPro, userName, userAvatar }) {
         </div>
       )}
 
+      {/* Resume banner — shown when user has an in-progress GuidedFix plan for this report */}
+      {(() => {
+        if (resumeDismissed || !workItemsLoaded) return null;
+        const recs = report?.recommendations || [];
+        const inProgressRec = recs.find(rec => {
+          const fp = rec.fingerprintId || rec.fingerprint;
+          if (!fp) return false;
+          const wi = workItems[fp];
+          return wi?.guideProgress?.completedSteps?.length > 0;
+        });
+        if (!inProgressRec) return null;
+        const fp = inProgressRec.fingerprintId || inProgressRec.fingerprint;
+        const doneCount = workItems[fp]?.guideProgress?.completedSteps?.length || 0;
+        return (
+          <div style={{ display:'flex', alignItems:'center', gap:12,
+            background:'#f5f2ff', border:'1px solid #e0d8ff', borderRadius:10,
+            padding:'10px 14px', marginBottom:16 }}>
+            <svg width={15} height={15} viewBox="0 0 24 24" fill="none" stroke="#7948f6"
+              strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink:0 }}>
+              <path d="M12 2L2 19h20L12 2zm0 7v5m0 3h.01"/>
+            </svg>
+            <span style={{ fontSize:12, color:'#4b3a8a', flex:1 }}>
+              <strong style={{ color:'#7948f6' }}>Fix in progress</strong> — {doneCount} step{doneCount !== 1 ? 's' : ''} completed for &ldquo;{inProgressRec.title}&rdquo;.
+            </span>
+            <button
+              onClick={() => setGuidedFixRec(inProgressRec)}
+              style={{ fontSize:11, fontWeight:800, color:'#7948f6',
+                background:'#ede8ff', border:0, borderRadius:7,
+                padding:'5px 10px', cursor:'pointer', whiteSpace:'nowrap',
+                fontFamily:'inherit' }}>
+              Continue →
+            </button>
+            <button
+              onClick={() => {
+                setResumeDismissed(true);
+                try { sessionStorage.setItem(`cernly_resume_dismissed_${report.id}`, '1'); } catch {}
+              }}
+              aria-label="Dismiss"
+              style={{ border:0, background:'transparent', color:'#a08cc0',
+                fontSize:16, lineHeight:1, cursor:'pointer', padding:'0 2px', flexShrink:0 }}>
+              ×
+            </button>
+          </div>
+        );
+      })()}
+
       {priorities.length === 0 ? (
         <div style={{ background: '#edf9f4', borderRadius: 14, padding: '22px 20px', textAlign: 'center' }}>
           <div style={{ fontSize: 28, marginBottom: 8 }}>🎉</div>
@@ -2233,6 +2291,7 @@ export default function ReportClient({ isPro, userName, userAvatar }) {
             handleStatusChange({ fingerprintId: recFp, fingerprint: recFp }, newStatus);
           }}
           onRescan={handleRescan}
+          onSwitchTab={(key) => { setGuidedFixRec(null); setGuidedFixIssue(null); setActiveTab(key); }}
           onAskCernly={({ title, category, detail, recFingerprint, activeStep }) => {
             setDrawerContext({
               title, category, detail,
@@ -2680,8 +2739,10 @@ export default function ReportClient({ isPro, userName, userAvatar }) {
                   );
                 })()}
 
-                {/* First-report tip — shown once, dismissed via localStorage */}
-                {!tipDismissed && (
+                {/* First-report tip — shown once, dismissed via localStorage.
+                    Suppressed when Cernly's Take already has a completed assessment
+                    with a top_opportunity CTA (avoids duplicating that nudge). */}
+                {!tipDismissed && !(report?.assessmentStatus === 'completed' && report?.assessment?.top_opportunity) && (
                   <div style={{
                     display: 'flex', alignItems: 'center', gap: 12,
                     background: '#f5f2ff', border: '1px solid #e0d8ff', borderRadius: 10,
