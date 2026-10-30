@@ -199,30 +199,35 @@ function buildPlainEnglishSummary(rec) {
 
   // Use AI-generated evidenceSummary if already present in a cached plan — handled by caller
 
-  // Performance-specific interpretation
-  const lcp  = normaliseMetricValue('lcp',  evidence.lcp);
-  const fcp  = normaliseMetricValue('fcp',  evidence.fcp);
-  const tbt  = normaliseMetricValue('tbt',  evidence.tbt);
-  const cls  = normaliseMetricValue('cls',  evidence.cls);
-  const ttfb = normaliseMetricValue('ttfb', evidence.ttfb);
+  // Performance-specific interpretation — only for performance-category recs.
+  // Do not substitute broad perf metrics as evidence for non-perf findings
+  // (e.g. unused CSS, render-blocking resources, image delivery).
+  const isPerformanceRec = category === 'performance' || category === 'speed';
+  if (isPerformanceRec) {
+    const lcp  = normaliseMetricValue('lcp',  evidence.lcp);
+    const fcp  = normaliseMetricValue('fcp',  evidence.fcp);
+    const tbt  = normaliseMetricValue('tbt',  evidence.tbt);
+    const cls  = normaliseMetricValue('cls',  evidence.cls);
+    const ttfb = normaliseMetricValue('ttfb', evidence.ttfb);
 
-  if (lcp != null && lcp > 2500) {
-    const secs = (lcp / 1000).toFixed(1);
-    lines.push(`Your largest content element takes ${secs}s to load — ${lcp > 4000 ? 'well above' : 'above'} the 2.5s target.`);
-  }
-  if (tbt != null && tbt > 200) {
-    lines.push(`JavaScript is blocking the main thread for ${tbt.toLocaleString()} ms, delaying interactivity.`);
-  }
-  if (cls != null && cls > 0.1) {
-    lines.push(`Layout shifts (CLS ${cls.toFixed(3)}) indicate elements are moving around after page load.`);
-  }
-  if (ttfb != null && ttfb > 800) {
-    const secs = (ttfb / 1000).toFixed(1);
-    lines.push(`The server took ${secs}s to respond — a slow start that delays everything else.`);
-  }
-  if (fcp != null && fcp > 1800 && lines.length === 0) {
-    const secs = (fcp / 1000).toFixed(1);
-    lines.push(`Visitors see your first content after ${secs}s — faster than ${(fcp / 1000).toFixed(1) > 3 ? 'most' : 'ideal'} but room to improve.`);
+    if (lcp != null && lcp > 2500) {
+      const secs = (lcp / 1000).toFixed(1);
+      lines.push(`Your largest content element takes ${secs}s to load — ${lcp > 4000 ? 'well above' : 'above'} the 2.5s target.`);
+    }
+    if (tbt != null && tbt > 200) {
+      lines.push(`JavaScript is blocking the main thread for ${tbt.toLocaleString()} ms, delaying interactivity.`);
+    }
+    if (cls != null && cls > 0.1) {
+      lines.push(`Layout shifts (CLS ${cls.toFixed(3)}) indicate elements are moving around after page load.`);
+    }
+    if (ttfb != null && ttfb > 800) {
+      const secs = (ttfb / 1000).toFixed(1);
+      lines.push(`The server took ${secs}s to respond — a slow start that delays everything else.`);
+    }
+    if (fcp != null && fcp > 1800 && lines.length === 0) {
+      const secs = (fcp / 1000).toFixed(1);
+      lines.push(`Visitors see your first content after ${secs}s — faster than ${(fcp / 1000).toFixed(1) > 3 ? 'most' : 'ideal'} but room to improve.`);
+    }
   }
 
   // Image-specific
@@ -899,10 +904,17 @@ export default function GuidedFix({
            - (order[metricStatus(b.key, evidence[b.key])] || 3);
     });
 
-  // Non-perf evidence fields
-  const otherEvidence = Object.entries(evidence).filter(
-    ([k]) => !perfKeys.has(k) && evidence[k] != null
-  );
+  // Non-perf evidence fields — exclude arrays-of-objects (e.g. `items`) because
+  // they render as "[object Object]" when stringified. String arrays (imageUrls)
+  // are kept and rendered with the existing slice(0,2).join(', ') logic.
+  // Object-valued arrays are already surfaced in the affected-elements section.
+  const otherEvidence = Object.entries(evidence).filter(([k, v]) => {
+    if (perfKeys.has(k)) return false;
+    if (v == null) return false;
+    // Skip arrays whose first element is an object (e.g. items:[{label,url,...}])
+    if (Array.isArray(v) && v.length > 0 && typeof v[0] === 'object' && v[0] !== null) return false;
+    return true;
+  });
   const primaryOtherEvidence  = otherEvidence.slice(0, 3);
   const expandedOtherEvidence = otherEvidence.slice(3);
 

@@ -98,6 +98,7 @@ export async function POST(request) {
 
   // ── Build report context ──────────────────────────────────────────────────
   let reportContext = '';
+  let detectedSiteType = null; // hoisted so system prompt can reference it
   let effectiveRecFingerprint = recFingerprint || null; // may be overridden below
   let contextStage = 'init';
 
@@ -282,7 +283,8 @@ ${activeStep.developer?.notes ? `Notes: ${activeStep.developer.notes}` : ''}
         }
 
         // Include detected platform/CMS type when available
-        const siteTypeLine = report.siteType ? `Platform/CMS: ${report.siteType}` : '';
+        detectedSiteType = report.siteType || null;
+        const siteTypeLine = detectedSiteType ? `Platform/CMS: ${detectedSiteType}` : '';
 
         reportContext = `
 SITE CONTEXT:
@@ -307,7 +309,10 @@ Be concise, practical, and friendly. Use plain English. When explaining a fix, g
 
 IMPORTANT: Never describe, infer, or speculate about the site's purpose, content, the owner's profession, expertise, services, writing style, or business details unless those details appear explicitly in the scan data provided. The scan captures technical metrics only — page structure, load times, code patterns — not the site's written content or what the site is about. If a question requires knowing what the site does and that information is absent from the scan data, say so and answer based only on what was measured.
 
-When the Platform/CMS is known, tailor advice to that platform. For WordPress sites: never recommend blindly removing or deferring jQuery or other shared scripts — themes and plugins may depend on them. Instead, advise the user to check what depends on the resource first (using browser DevTools or Query Monitor) before deferring or removing it. Distinguish confirmed scan findings from steps that require manual investigation.${hasFocusContext ? `
+${detectedSiteType
+  ? `DETECTED PLATFORM: The scan identified this site as running ${detectedSiteType}. When answering, refer to this as the confirmed platform — do not say the platform is unknown. Tailor all advice to ${detectedSiteType}-specific tools, plugins, and workflows. For WordPress specifically: never recommend blindly removing or deferring jQuery or other shared scripts — themes and plugins may depend on them. Instead, advise the user to check what depends on the resource first (using browser DevTools or Query Monitor) before deferring or removing it.`
+  : `PLATFORM: The scan did not identify the CMS or hosting platform for this site. Do not assume WordPress or any specific platform. Provide platform-neutral instructions. If platform-specific examples would help, label them clearly as conditional (e.g. "If you use WordPress: …") and always provide a generic alternative.`
+} Distinguish confirmed scan findings from steps that require manual investigation.${hasFocusContext ? `
 
 When RECOMMENDATION IN FOCUS, FOCUS FINDING, or FOCUS ELEMENT is present in the context, answer specifically about that finding or recommendation. Stay grounded in its supporting evidence and do not drift to other recommendations.` : ` When the assessment identifies a top opportunity, treat it as the established priority unless the user asks about something else specifically.`}${reportContext ? `\n${reportContext}` : ''}`;
 
