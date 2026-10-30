@@ -241,14 +241,6 @@ function buildRecMap(recommendations) {
       }
     }
   }
-  // Diagnostic: log map keys vs issue fingerprints to help diagnose missing Guide buttons.
-  // Remove once root cause of 6/7 missing buttons is confirmed.
-  if (process.env.NODE_ENV !== 'production') {
-    console.debug('[buildRecMap] keys:', Object.keys(map),
-      '| recs:', recommendations.length,
-      '| recs with finding_fingerprints:',
-      recommendations.filter(r => Array.isArray(r.finding_fingerprints) && r.finding_fingerprints.length > 0).length);
-  }
   return map;
 }
 
