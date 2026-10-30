@@ -241,6 +241,14 @@ function buildRecMap(recommendations) {
       }
     }
   }
+  // Diagnostic: log map keys vs issue fingerprints to help diagnose missing Guide buttons.
+  // Remove once root cause of 6/7 missing buttons is confirmed.
+  if (process.env.NODE_ENV !== 'production') {
+    console.debug('[buildRecMap] keys:', Object.keys(map),
+      '| recs:', recommendations.length,
+      '| recs with finding_fingerprints:',
+      recommendations.filter(r => Array.isArray(r.finding_fingerprints) && r.finding_fingerprints.length > 0).length);
+  }
   return map;
 }
 
@@ -1735,7 +1743,7 @@ export default function ReportClient({ isPro, userName, userAvatar }) {
         // Top opportunity from assessment, linked to the actual saved recommendation
         const topOpportunity = hasAssessment ? assessment.top_opportunity : null;
         const linkedRec = topOpportunity?.recommendation_fingerprints?.length
-          ? recs.find(r => topOpportunity.recommendation_fingerprints.includes(r.fingerprintId)) || topRec
+          ? recs.find(r => topOpportunity.recommendation_fingerprints.includes(r.fingerprint)) || topRec
           : topRec;
         const displayRec = hasAssessment ? linkedRec : topRec;
         const firstAction = displayRec?.actions?.[0] || null;

@@ -77,6 +77,15 @@ export async function POST(request) {
     );
   }
 
+  // ── Sanitise focusIssue (must happen before cache check so focusFingerprintId is available)
+  // Only pass through safe string fields, never raw user input.
+  const safeFocusIssue = focusIssue && typeof focusIssue === 'object' ? {
+    message:       typeof focusIssue.message       === 'string' ? focusIssue.message.slice(0, 300)       : undefined,
+    fingerprintId: typeof focusIssue.fingerprintId === 'string' ? focusIssue.fingerprintId.slice(0, 100)  : undefined,
+    description:   typeof focusIssue.description   === 'string' ? focusIssue.description.slice(0, 500)   : undefined,
+    detail:        typeof focusIssue.detail        === 'string' ? focusIssue.detail.slice(0, 500)        : undefined,
+  } : null;
+
   // ── Cache check ─────────────────────────────────────────────────────────────
   // The stored guidance_plan is a map keyed by persona (or persona::focusFingerprintId
   // when a specific finding was selected, so different findings in the same
@@ -99,13 +108,6 @@ export async function POST(request) {
   const domain   = extractDomain(rawUrl);
   const siteUrl  = extractSiteUrl(rawUrl);
   const siteType = report.siteType || report.site_type || null;
-  // Sanitise focusIssue — only pass through safe string fields, never raw user input
-  const safeFocusIssue = focusIssue && typeof focusIssue === 'object' ? {
-    message:       typeof focusIssue.message       === 'string' ? focusIssue.message.slice(0, 300)       : undefined,
-    fingerprintId: typeof focusIssue.fingerprintId === 'string' ? focusIssue.fingerprintId.slice(0, 100)  : undefined,
-    description:   typeof focusIssue.description   === 'string' ? focusIssue.description.slice(0, 500)   : undefined,
-    detail:        typeof focusIssue.detail        === 'string' ? focusIssue.detail.slice(0, 500)        : undefined,
-  } : null;
   const plan     = await generateGuidancePlan(rec, domain, persona, siteType, safeFocusIssue, siteUrl);
 
   // generateGuidancePlan never returns an empty plan — it always falls back to

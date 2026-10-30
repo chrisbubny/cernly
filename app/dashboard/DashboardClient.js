@@ -1641,6 +1641,12 @@ export default function DashboardClient({ reports: initialReports = [], isPro, u
           .sites-grid{ grid-template-columns: 1fr !important; }
           .admin-grid{ grid-template-columns: 1fr 1fr !important; }
         }
+        /* Scoped scrollbar override for the white sidebar.
+           The global ::-webkit-scrollbar-track rule sets background: var(--bg) (#080C14),
+           which is near-black and visible against the sidebar's white background.
+           Override it here to transparent so the sidebar track blends in. */
+        .dash-sidebar::-webkit-scrollbar-track { background: transparent; }
+        .dash-sidebar { scrollbar-color: #d1d5db transparent; }
       `}</style>
     </div>
   );
