@@ -106,7 +106,9 @@ export async function POST(request) {
   }
 
   // ── Generate ────────────────────────────────────────────────────────────────
-  const rawUrl   = rec.page_url || rec.url || '';
+  // rec.page_url / rec.url are not populated by getRecommendationsByReport.
+  // The canonical site URL lives on the already-loaded report object.
+  const rawUrl   = report.url || '';
   const domain   = extractDomain(rawUrl);
   const siteUrl  = extractSiteUrl(rawUrl);
   const siteType = report.siteType || report.site_type || null;

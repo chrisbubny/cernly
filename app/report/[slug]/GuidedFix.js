@@ -675,6 +675,9 @@ export default function GuidedFix({
   const [chatLoading,  setChatLoading]  = useState(false);
   const [chatError,    setChatError]    = useState(null);
   const chatInputRef = useRef(null);
+  // Holds a pending { question, opts } to auto-send once chatStep has settled.
+  // Populated by onFixElement and consumed by the useEffect below.
+  const pendingAutoSendRef = useRef(null);
 
   // ── restore persisted progress ────────────────────────────────────────────
   useEffect(() => {
@@ -839,6 +842,19 @@ export default function GuidedFix({
     // Focus input after next paint
     setTimeout(() => chatInputRef.current?.focus(), 80);
   }, []);
+
+  // Deterministic auto-send: when chatStep has settled (i.e. after the render
+  // triggered by handleAskStep), consume any pending auto-send from onFixElement.
+  // This avoids the closure-capture problem of setTimeout(fn, 0) — by the time
+  // this effect runs, sendChatMessage's closure includes the updated chatStep.
+  useEffect(() => {
+    if (chatStep && pendingAutoSendRef.current) {
+      const { question, opts } = pendingAutoSendRef.current;
+      pendingAutoSendRef.current = null;
+      sendChatMessage(question, opts);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chatStep]); // sendChatMessage is intentionally excluded — runs on step change only
 
   // Send a message to /api/ask with full step context.
   // opts.elementContext — optional item object for per-element targeted questions.
@@ -1182,11 +1198,11 @@ export default function GuidedFix({
                 </div>
               )}
 
-              {/* Affected elements — scoped to the selected finding when available,
-                  otherwise deduplicated across all supporting findings.
+              {/* Affected elements — scoped to the selected finding when available.
                   When a specific issue is selected (e.g. the user clicked a finding chip),
-                  we filter supporting_findings to those matching that finding's fingerprint
-                  so unrelated resources from sibling findings in the same group don't appear. */}
+                  we filter supporting_findings to those matching that finding's fingerprint.
+                  If no match is found we show an explicit empty-evidence state rather than
+                  falling back to unrelated findings from sibling issues in the same group. */}
               {(() => {
                 const allItems = [];
                 const seen = new Set();
@@ -1194,23 +1210,40 @@ export default function GuidedFix({
                 let firstCheckId = null;
                 let firstAuditId = null;
 
-                // When a specific issue is selected, scope evidence to that finding only.
-                // Match on auditId (e.g. 'unused-css-rules') or fingerprintId (e.g. 'lh:unused-css-rules').
-                const selectedFp = issue?.fingerprintId || issue?.fingerprint || null;
-                const allFindings = rec?.supporting_findings || [];
-                const scopedFindings = selectedFp
+                // Derive the canonical fingerprint for the selected issue.
+                // canonicalFingerprintId is the stable unsuffixed form (e.g. 'lh:uses-optimized-images');
+                // fingerprintId may carry a ':2' suffix for duplicated findings.
+                const selectedFp       = issue?.fingerprintId || issue?.fingerprint || null;
+                const selectedCanonFp  = issue?.canonicalFingerprintId || selectedFp;
+                const allFindings      = rec?.supporting_findings || [];
+
+                const findingsToShow = selectedFp
                   ? allFindings.filter(f => {
-                      if (f.fingerprintId === selectedFp) return true;
-                      if (f.fingerprint   === selectedFp) return true;
-                      // Also match when the finding fingerprint is the auditId portion (lh:<auditId>)
+                      if (f.fingerprintId         === selectedFp)      return true;
+                      if (f.fingerprintId         === selectedCanonFp) return true;
+                      if (f.canonicalFingerprintId === selectedFp)     return true;
+                      if (f.canonicalFingerprintId === selectedCanonFp) return true;
+                      if (f.fingerprint            === selectedFp)     return true;
+                      if (f.fingerprint            === selectedCanonFp) return true;
+                      // Match the bare audit ID portion: 'lh:<auditId>'
                       const auditFp = f.auditId ? `lh:${f.auditId}` : null;
-                      if (auditFp && auditFp === selectedFp) return true;
+                      if (auditFp && (auditFp === selectedFp || auditFp === selectedCanonFp)) return true;
                       return false;
                     })
                   : allFindings;
 
-                // Fall back to all findings if the selected finding produced no items
-                const findingsToShow = (scopedFindings.length > 0 ? scopedFindings : allFindings);
+                // If a finding was selected but no matching evidence exists, show a clear
+                // empty-evidence state rather than falling back to unrelated elements.
+                if (selectedFp && findingsToShow.length === 0) {
+                  return (
+                    <div style={{ background: SURFACE, border: `1px solid ${BORDER}`,
+                      borderRadius: 10, padding: '11px 14px', marginBottom: 12 }}>
+                      <p style={{ fontSize: 13, color: TEXT_TERTIARY, lineHeight: 1.7, margin: 0 }}>
+                        No specific affected elements were recorded for this finding.
+                      </p>
+                    </div>
+                  );
+                }
 
                 for (const f of findingsToShow) {
                   if (!firstCheckId && f.checkId) firstCheckId = f.checkId;
@@ -1221,6 +1254,7 @@ export default function GuidedFix({
                     if (!seen.has(key)) { seen.add(key); allItems.push(item); }
                   }
                 }
+                // No items found across the (already-scoped) findings — nothing to render.
                 if (!allItems.length) return null;
                 return (
                   <AffectedElements
@@ -1232,19 +1266,18 @@ export default function GuidedFix({
                       const name = item.label || item.selector
                         || (item.url ? item.url.split('/').pop().split('?')[0] : null)
                         || 'this element';
-                      // Open the inline chat panel first (chatStep must be non-null for
-                      // InlineChatPanel to render), then send the question automatically.
-                      // handleAskStep clears prior messages so the new question starts fresh.
+                      // Queue the auto-send BEFORE calling handleAskStep so it is
+                      // ready when the chatStep useEffect fires after the state settles.
+                      pendingAutoSendRef.current = {
+                        question: `How do I fix the issue with "${name}"?`,
+                        opts: { elementContext: item },
+                      };
+                      // Open the chat panel — triggers a re-render, which causes the
+                      // useEffect above to run and consume pendingAutoSendRef.
                       handleAskStep({
                         title: name,
                         owner: { action: `Fix the issue with "${name}"` },
                       });
-                      // Use setTimeout so the state update from handleAskStep has settled
-                      // before sendChatMessage reads chatMessages from its closure.
-                      setTimeout(() => sendChatMessage(
-                        `How do I fix the issue with "${name}"?`,
-                        { elementContext: item },
-                      ), 0);
                     }}
                   />
                 );

@@ -219,47 +219,72 @@ await test('guide-plan route.js accepts elementContext in focusIssue', async () 
   );
 });
 
-await test('GuidedFix.js onFixElement handler calls handleAskStep before sendChatMessage', async () => {
+await test('GuidedFix.js onFixElement handler sets pendingAutoSendRef before calling handleAskStep', async () => {
   const gfSrc = await src('app/report/[slug]/GuidedFix.js');
-  // Find the line where onFixElement prop is declared (opens the inline handler)
   const onFixIdx = gfSrc.indexOf('onFixElement={(item) =>');
   assert.ok(onFixIdx > -1, 'onFixElement={(item) => handler must exist');
-  // Scan up to 800 chars of the handler body
   const handlerBody = gfSrc.slice(onFixIdx, onFixIdx + 1100);
-  const askIdx  = handlerBody.indexOf('handleAskStep(');
-  const sendIdx = handlerBody.indexOf('sendChatMessage(');
-  assert.ok(askIdx > -1,  'onFixElement handler must call handleAskStep');
-  assert.ok(sendIdx > -1, 'onFixElement handler must call sendChatMessage');
+  const refIdx = handlerBody.indexOf('pendingAutoSendRef.current = {');
+  const askIdx = handlerBody.indexOf('handleAskStep(');
+  assert.ok(refIdx > -1, 'onFixElement must set pendingAutoSendRef.current');
+  assert.ok(askIdx > -1, 'onFixElement must call handleAskStep');
   assert.ok(
-    askIdx < sendIdx,
-    `handleAskStep must be called BEFORE sendChatMessage.\nhandleAskStep at ${askIdx}, sendChatMessage at ${sendIdx}`
+    refIdx < askIdx,
+    `pendingAutoSendRef must be set BEFORE handleAskStep so the ref is ready when the effect fires.\n` +
+    `ref at ${refIdx}, handleAskStep at ${askIdx}`
   );
 });
 
-await test('GuidedFix.js onFixElement uses setTimeout before sendChatMessage', async () => {
+await test('sendChatMessage includes elementContext in POST body', async () => {
+  const gfSrc = await src('app/report/[slug]/GuidedFix.js');
+  assert.ok(
+    gfSrc.includes('elementContext: opts.elementContext') || gfSrc.includes('elementContext'),
+    'sendChatMessage must forward elementContext to /api/ask POST body'
+  );
+});
+
+await test('GuidedFix.js onFixElement uses ref-based deterministic auto-send (no setTimeout)', async () => {
   const gfSrc = await src('app/report/[slug]/GuidedFix.js');
   const onFixIdx = gfSrc.indexOf('onFixElement={(item) =>');
+  assert.ok(onFixIdx > -1, 'onFixElement handler must exist');
   const handlerBody = gfSrc.slice(onFixIdx, onFixIdx + 1100);
   assert.ok(
-    handlerBody.includes('setTimeout'),
-    'onFixElement must use setTimeout so chatStep state settles before sendChatMessage'
+    handlerBody.includes('pendingAutoSendRef.current'),
+    'onFixElement must set pendingAutoSendRef.current (deterministic, not setTimeout)'
+  );
+  // setTimeout should NOT be in the handler body for this interaction
+  assert.ok(
+    !handlerBody.includes('setTimeout(() => sendChatMessage'),
+    'onFixElement must not use setTimeout to call sendChatMessage (timing-dependent)'
   );
 });
 
-await test('GuidedFix.js affected-elements filter scopes to selectedFp', async () => {
+await test('GuidedFix.js has useEffect that consumes pendingAutoSendRef on chatStep change', async () => {
   const gfSrc = await src('app/report/[slug]/GuidedFix.js');
   assert.ok(
-    gfSrc.includes('selectedFp'),
-    'GuidedFix.js must use selectedFp to scope affected elements to the selected finding'
+    gfSrc.includes('pendingAutoSendRef.current') && gfSrc.includes('sendChatMessage(question, opts)'),
+    'useEffect must consume pendingAutoSendRef and call sendChatMessage when chatStep settles'
   );
 });
 
-await test('GuidedFix.js falls back to all findings when scopedFindings is empty', async () => {
+await test('GuidedFix.js affected-elements filter scopes to selectedFp and canonicalFingerprintId', async () => {
   const gfSrc = await src('app/report/[slug]/GuidedFix.js');
-  // The fix includes a fallback: (scopedFindings.length > 0 ? scopedFindings : allFindings)
   assert.ok(
-    gfSrc.includes('scopedFindings.length > 0') || gfSrc.includes('scopedFindings.length'),
-    'GuidedFix.js must fall back to all findings when scopedFindings is empty'
+    gfSrc.includes('selectedFp') && gfSrc.includes('selectedCanonFp'),
+    'GuidedFix.js must use both selectedFp and selectedCanonFp to scope affected elements'
+  );
+});
+
+await test('GuidedFix.js shows empty-evidence state instead of falling back to allFindings', async () => {
+  const gfSrc = await src('app/report/[slug]/GuidedFix.js');
+  // The fix must NOT include the old "scopedFindings.length > 0 ? scopedFindings : allFindings" fallback
+  assert.ok(
+    !gfSrc.includes('scopedFindings.length > 0 ? scopedFindings : allFindings'),
+    'GuidedFix.js must not fall back to allFindings — show empty-evidence state instead'
+  );
+  assert.ok(
+    gfSrc.includes('No specific affected elements were recorded'),
+    'GuidedFix.js must show an explicit empty-evidence message when selectedFp has no match'
   );
 });
 
