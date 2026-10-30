@@ -213,7 +213,8 @@ function CategorySection({ label, accent, issues, auditStatus, sectionSummary, r
                   )}
                   {issues.map((issue, i) => {
                     const fp = issue.fingerprintId || issue.fingerprint || '';
-                    const issueRec = recMap ? (recMap[fp] || null) : null;
+                    const cid = issue.canonicalFingerprintId || fp;
+                    const issueRec = recMap ? (recMap[fp] || recMap[cid] || null) : null;
                     return <FindingRow key={i} issue={issue} rec={issueRec} onGuide={onGuide} />;
                   })}
                 </>
@@ -2178,10 +2179,13 @@ export default function ReportClient({ isPro, userName, userAvatar }) {
         </div>
       ) : (
         priorities.map((issue, i) => {
-          // Resolve rec from the fingerprint map using issue's own fingerprint or fingerprintId
-          const fp = issue.fingerprintId || issue.fingerprint || '';
-          // Find the matched rec: try exact fingerprint, then check each rec's finding_fingerprints
-          const matchedRec = recMap[fp] || null;
+          // Resolve rec from the fingerprint map using issue's own fingerprint or fingerprintId.
+          // Also try canonicalFingerprintId so finding-level recs (keyed by canonical ID) are
+          // found even when the issue has an ordinal suffix like :2.
+          const fp  = issue.fingerprintId || issue.fingerprint || '';
+          const cid = issue.canonicalFingerprintId || fp;
+          // Find the matched rec: try exact fingerprint first, then canonical (for finding recs)
+          const matchedRec = recMap[fp] || recMap[cid] || null;
           const workItem = workItems[fp] || null;
           return (
             <FixCard key={i} issue={issue} n={i + 1} impact={getImpact(issue, i)}

@@ -94,7 +94,9 @@ export async function POST(request) {
   const focusFingerprintId = safeFocusIssue?.fingerprintId || null;
   const personaKey = focusFingerprintId ? `${persona}::${focusFingerprintId}` : persona;
 
-  const cached      = await getGuidancePlan(recFingerprint, userId);
+  // Pass report.id (integer PK) so the cache is isolated per-report.
+  // Same fingerprint on two different sites never shares a cached plan.
+  const cached      = await getGuidancePlan(recFingerprint, userId, report.id);
   const currentFp   = derivePlanFingerprint(rec);
   const cachedForPersona = cached?.plan?.[personaKey];
 
@@ -116,10 +118,17 @@ export async function POST(request) {
   if (plan.fallback) {
     console.error('[guide-plan] bare fallback (no static template) | reason:',
       plan.reason || 'unknown', '| rec:', recFingerprint, '| report:', reportId);
+    // Return honest unavailable state with the rec's own evidence so the UI can
+    // display real finding context rather than "instructions are being generated".
+    // supporting_findings holds the actual issue objects (message, displayValue,
+    // affected items) that the FixCard can surface while offering a Retry action.
     return NextResponse.json({
       plan: null,
       fallback: true,
-      actions: plan.actions || [],
+      actions: plan.actions || rec.actions || [],
+      supporting_findings: rec.supporting_findings || null,
+      evidence: rec.evidence || null,
+      what_we_found: rec.what_we_found || rec.explanation || null,
       reason: plan.reason || 'unknown',
       persona,
     });
@@ -136,7 +145,7 @@ export async function POST(request) {
       if (pPlan?.planFingerprint === currentFp) freshPersonas[p] = pPlan;
     }
     const updatedMap = { ...freshPersonas, [personaKey]: plan };
-    await setGuidancePlan(recFingerprint, userId, updatedMap);
+    await setGuidancePlan(recFingerprint, userId, report.id, updatedMap);
   } catch (e) {
     console.error('[guide-plan] failed to cache plan:', e.message);
     // Return the plan even if caching fails

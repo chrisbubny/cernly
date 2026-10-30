@@ -58,6 +58,23 @@ const migrations = [
       -- The unique constraint is the PK itself.
     `,
   },
+  {
+    name: '003_add_rec_type_column',
+    sql: `
+      -- Distinguish group-level recommendations (one rec covering multiple related
+      -- findings) from finding-level recommendations (one rec per unmatched finding).
+      --
+      -- 'group'   — existing behavior: fingerprint = RECOMMENDATION_GROUP key
+      --             (e.g. 'js-overhead'), may cover multiple findings.
+      -- 'finding' — new: fingerprint = canonicalFingerprintId of the finding
+      --             (e.g. 'lh:critical-request-chains'), covers exactly one audit.
+      --
+      -- All existing rows are 'group' (correct; default handles backfill).
+      ALTER TABLE recommendations
+        ADD COLUMN IF NOT EXISTS rec_type TEXT NOT NULL DEFAULT 'group'
+          CHECK (rec_type IN ('group', 'finding'));
+    `,
+  },
 ];
 
 async function run() {
