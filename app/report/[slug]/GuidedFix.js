@@ -911,14 +911,20 @@ export default function GuidedFix({
   const evidence = rec?.evidence || {};
   const perfKeys = new Set(PERF_METRICS.map(m => m.key));
 
-  // Metrics that have actual values, sorted: poor first, then needs-work, then good
-  const measuredMetrics = PERF_METRICS
-    .filter(m => evidence[m.key] != null)
-    .sort((a, b) => {
-      const order = { poor:0, 'needs-work':1, good:2, neutral:3 };
-      return (order[metricStatus(a.key, evidence[a.key])] || 3)
-           - (order[metricStatus(b.key, evidence[b.key])] || 3);
-    });
+  // Metrics that have actual values, sorted: poor first, then needs-work, then good.
+  // When a specific finding (issue) is selected, suppress group-level perf tiles —
+  // those are site-wide aggregates unrelated to the selected finding. The finding's
+  // own evidence (affected items, displayValue) is already shown via AffectedElements
+  // and the what_we_found / plainText fields.
+  const measuredMetrics = issue
+    ? []
+    : PERF_METRICS
+        .filter(m => evidence[m.key] != null)
+        .sort((a, b) => {
+          const order = { poor:0, 'needs-work':1, good:2, neutral:3 };
+          return (order[metricStatus(a.key, evidence[a.key])] || 3)
+               - (order[metricStatus(b.key, evidence[b.key])] || 3);
+        });
 
   // Non-perf evidence fields — exclude arrays-of-objects (e.g. `items`) because
   // they render as "[object Object]" when stringified. String arrays (imageUrls)
@@ -1269,14 +1275,15 @@ export default function GuidedFix({
                       // Queue the auto-send BEFORE calling handleAskStep so it is
                       // ready when the chatStep useEffect fires after the state settles.
                       pendingAutoSendRef.current = {
-                        question: `How do I fix the issue with "${name}"?`,
+                        question: `Tell me about the "${name}" issue from my scan: what's the problem and how should I address it?`,
                         opts: { elementContext: item },
                       };
-                      // Open the chat panel — triggers a re-render, which causes the
-                      // useEffect above to run and consume pendingAutoSendRef.
+                      // Open the chat panel within the Understand step — triggers a
+                      // re-render, which causes the useEffect above to run and
+                      // consume pendingAutoSendRef. No step navigation needed.
                       handleAskStep({
                         title: name,
-                        owner: { action: `Fix the issue with "${name}"` },
+                        owner: { action: `Ask about the issue with "${name}"` },
                       });
                     }}
                   />
@@ -1307,6 +1314,24 @@ export default function GuidedFix({
                     you through investigating and resolving it.
                   </p>
                 </div>
+              )}
+
+              {/* ── Inline Ask Cernly chat — for "Ask about this" resource questions.
+                  Shares the same state as the Fix-step panel so conversations persist
+                  across step navigation. Renders here (step 0) only — the Fix step
+                  (currentStep === 2) has its own identical panel below. */}
+              {chatStep && (
+                <InlineChatPanel
+                  step={chatStep}
+                  messages={chatMessages}
+                  input={chatInput}
+                  loading={chatLoading}
+                  error={chatError}
+                  inputRef={chatInputRef}
+                  onInputChange={setChatInput}
+                  onSend={sendChatMessage}
+                  onClose={() => { setChatStep(null); setChatMessages([]); setChatInput(''); setChatError(null); }}
+                />
               )}
             </div>
           )}

@@ -40,7 +40,7 @@ function shortUrl(url) {
 //   totalDetected  — total count from the scanner (may be > items.length)
 //   checkId        — a11y analyzer check id (e.g. "images_missing_alt")
 //   auditId        — Lighthouse audit id (e.g. "image-alt")
-//   onFixElement   — optional (item) => void; shows "Fix this →" per item
+//   onFixElement   — optional (item) => void; shows "Ask about this" per item
 export default function AffectedElements({ items, totalDetected, checkId, auditId, onFixElement }) {
   const [expanded, setExpanded] = useState(false);
   if (!items?.length) return null;
@@ -198,7 +198,7 @@ function ItemRow({ item, itemType, onFix }) {
           )}
         </div>
 
-        {/* Per-element Fix button */}
+        {/* Per-element Ask button */}
         {onFix && (
           <button
             onClick={onFix}
@@ -207,7 +207,7 @@ function ItemRow({ item, itemType, onFix }) {
               borderRadius: 7, padding: '4px 8px', cursor: 'pointer',
               fontFamily: 'inherit', whiteSpace: 'nowrap', marginTop: 1 }}
           >
-            Fix this →
+            Ask about this
           </button>
         )}
       </div>
