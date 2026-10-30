@@ -2139,22 +2139,23 @@ export default function ReportClient({ isPro, userName, userAvatar }) {
         const doneCount = workItems[fp]?.guideProgress?.completedSteps?.length || 0;
         return (
           <div style={{ display:'flex', alignItems:'center', gap:12,
-            background:'#f5f2ff', border:'1px solid #e0d8ff', borderRadius:10,
-            padding:'10px 14px', marginBottom:16 }}>
-            <svg width={15} height={15} viewBox="0 0 24 24" fill="none" stroke="#7948f6"
+            background:'linear-gradient(135deg, rgb(138, 70, 248), rgb(54, 135, 250))',
+            border:'none', borderRadius:8,
+            padding:'10px 14px', marginTop:15, marginBottom:14 }}>
+            <svg width={15} height={15} viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.9)"
               strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink:0 }}>
               <path d="M12 2L2 19h20L12 2zm0 7v5m0 3h.01"/>
             </svg>
-            <span style={{ fontSize:12, color:'#4b3a8a', flex:1 }}>
-              <strong style={{ color:'#7948f6' }}>Fix in progress</strong> — {doneCount} step{doneCount !== 1 ? 's' : ''} completed for &ldquo;{inProgressRec.title}&rdquo;.
+            <span style={{ fontSize:12, color:'rgba(255,255,255,0.9)', flex:1 }}>
+              <strong style={{ color:'#fff' }}>Fix in progress</strong> — {doneCount} step{doneCount !== 1 ? 's' : ''} completed for &ldquo;{inProgressRec.title}&rdquo;.
             </span>
             <button
               onClick={() => setGuidedFixRec(inProgressRec)}
-              style={{ fontSize:11, fontWeight:800, color:'#7948f6',
-                background:'#ede8ff', border:0, borderRadius:7,
-                padding:'5px 10px', cursor:'pointer', whiteSpace:'nowrap',
+              style={{ fontSize:11, fontWeight:800, color:'#fff',
+                background:'rgba(255,255,255,0.2)', border:'1px solid rgba(255,255,255,0.35)',
+                borderRadius:7, padding:'5px 10px', cursor:'pointer', whiteSpace:'nowrap',
                 fontFamily:'inherit' }}>
-              Continue →
+              View Plan →
             </button>
             <button
               onClick={() => {
@@ -2162,7 +2163,7 @@ export default function ReportClient({ isPro, userName, userAvatar }) {
                 try { sessionStorage.setItem(`cernly_resume_dismissed_${report.id}`, '1'); } catch {}
               }}
               aria-label="Dismiss"
-              style={{ border:0, background:'transparent', color:'#a08cc0',
+              style={{ border:0, background:'transparent', color:'rgba(255,255,255,0.7)',
                 fontSize:16, lineHeight:1, cursor:'pointer', padding:'0 2px', flexShrink:0 }}>
               ×
             </button>

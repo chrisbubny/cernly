@@ -1182,14 +1182,37 @@ export default function GuidedFix({
                 </div>
               )}
 
-              {/* Affected elements — deduplicated across all supporting findings */}
+              {/* Affected elements — scoped to the selected finding when available,
+                  otherwise deduplicated across all supporting findings.
+                  When a specific issue is selected (e.g. the user clicked a finding chip),
+                  we filter supporting_findings to those matching that finding's fingerprint
+                  so unrelated resources from sibling findings in the same group don't appear. */}
               {(() => {
                 const allItems = [];
                 const seen = new Set();
                 let totalDetected = 0;
                 let firstCheckId = null;
                 let firstAuditId = null;
-                for (const f of (rec?.supporting_findings || [])) {
+
+                // When a specific issue is selected, scope evidence to that finding only.
+                // Match on auditId (e.g. 'unused-css-rules') or fingerprintId (e.g. 'lh:unused-css-rules').
+                const selectedFp = issue?.fingerprintId || issue?.fingerprint || null;
+                const allFindings = rec?.supporting_findings || [];
+                const scopedFindings = selectedFp
+                  ? allFindings.filter(f => {
+                      if (f.fingerprintId === selectedFp) return true;
+                      if (f.fingerprint   === selectedFp) return true;
+                      // Also match when the finding fingerprint is the auditId portion (lh:<auditId>)
+                      const auditFp = f.auditId ? `lh:${f.auditId}` : null;
+                      if (auditFp && auditFp === selectedFp) return true;
+                      return false;
+                    })
+                  : allFindings;
+
+                // Fall back to all findings if the selected finding produced no items
+                const findingsToShow = (scopedFindings.length > 0 ? scopedFindings : allFindings);
+
+                for (const f of findingsToShow) {
                   if (!firstCheckId && f.checkId) firstCheckId = f.checkId;
                   if (!firstAuditId && f.auditId) firstAuditId = f.auditId;
                   if (f.totalDetected) totalDetected = Math.max(totalDetected, f.totalDetected);
@@ -1209,10 +1232,19 @@ export default function GuidedFix({
                       const name = item.label || item.selector
                         || (item.url ? item.url.split('/').pop().split('?')[0] : null)
                         || 'this element';
-                      sendChatMessage(
+                      // Open the inline chat panel first (chatStep must be non-null for
+                      // InlineChatPanel to render), then send the question automatically.
+                      // handleAskStep clears prior messages so the new question starts fresh.
+                      handleAskStep({
+                        title: name,
+                        owner: { action: `Fix the issue with "${name}"` },
+                      });
+                      // Use setTimeout so the state update from handleAskStep has settled
+                      // before sendChatMessage reads chatMessages from its closure.
+                      setTimeout(() => sendChatMessage(
                         `How do I fix the issue with "${name}"?`,
                         { elementContext: item },
-                      );
+                      ), 0);
                     }}
                   />
                 );
