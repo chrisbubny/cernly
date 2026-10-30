@@ -2763,15 +2763,16 @@ export default function ReportClient({ isPro, userName, userAvatar }) {
                 {!tipDismissed && !(report?.assessmentStatus === 'completed' && report?.assessment?.top_opportunity) && (
                   <div style={{
                     display: 'flex', alignItems: 'center', gap: 12,
-                    background: '#f5f2ff', border: '1px solid #e0d8ff', borderRadius: 10,
-                    padding: '10px 14px', marginBottom: 14, marginTop: 4,
+                    background: 'linear-gradient(135deg, rgb(138, 70, 248), rgb(54, 135, 250))',
+                    border: 'none', borderRadius: 8,
+                    padding: '10px 14px', marginBottom: 14, marginTop: 15,
                   }}>
-                    <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="#7948f6"
+                    <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="#fff"
                       strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
                       <path d="m5 12 4 4 10-10"/>
                     </svg>
-                    <span style={{ fontSize: 12, color: '#4b3a8a', flex: 1 }}>
-                      Your <strong style={{ color: '#7948f6' }}>Action plan</strong> is ready — see prioritized fixes and step-by-step instructions.
+                    <span style={{ fontSize: 12, color: '#fff', flex: 1 }}>
+                      Your <strong style={{ color: '#fff' }}>Action plan</strong> is ready — see prioritized fixes and step-by-step instructions.
                     </span>
                     <button
                       onClick={() => {
@@ -2785,7 +2786,7 @@ export default function ReportClient({ isPro, userName, userAvatar }) {
                         } catch {}
                       }}
                       style={{ fontSize: 11, fontWeight: 800, color: '#7948f6',
-                        background: '#ede8ff', border: 0, borderRadius: 7,
+                        background: '#fff', border: 0, borderRadius: 7,
                         padding: '5px 10px', cursor: 'pointer', whiteSpace: 'nowrap',
                         fontFamily: 'inherit' }}>
                       View plan →
@@ -2796,7 +2797,7 @@ export default function ReportClient({ isPro, userName, userAvatar }) {
                         try { localStorage.setItem('cernly_tip_dismissed', '1'); } catch {}
                       }}
                       aria-label="Dismiss tip"
-                      style={{ border: 0, background: 'transparent', color: '#a08cc0',
+                      style={{ border: 0, background: 'transparent', color: 'rgba(255,255,255,0.7)',
                         fontSize: 16, lineHeight: 1, cursor: 'pointer',
                         padding: '0 2px', flexShrink: 0 }}>
                       ×
