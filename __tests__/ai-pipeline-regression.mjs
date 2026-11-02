@@ -66,7 +66,7 @@ const SUMMARY_A11Y_DATA = {};
 
 const VALID_SUMMARY_OBJ = {
   summary: 'The site has moderate performance and good accessibility.',
-  siteType: 'ecommerce',
+  siteType: 'E-commerce',
   uxScore: 62,
   uxInsights: 'Users may experience slow load times on mobile.',
   discoveries: [{ title: 'Slow LCP', detail: 'Largest Contentful Paint exceeds 3s.' }],
@@ -96,7 +96,7 @@ async function callRunAiSummary() {
   });
   const result = await callRunAiSummary();
   ok('end_turn valid JSON → aiSummary present', typeof result.aiSummary === 'string' && result.aiSummary.length > 0, `got: ${JSON.stringify(result.aiSummary)}`);
-  ok('end_turn valid JSON → siteType returned', result.siteType === 'ecommerce', `got: ${result.siteType}`);
+  ok('end_turn valid JSON → siteType returned', result.siteType === 'E-commerce', `got: ${result.siteType}`);
   ok('end_turn valid JSON → not a fallback', result.isFallback !== true, 'isFallback should be absent');
 }
 
@@ -110,7 +110,7 @@ async function callRunAiSummary() {
     content: [{ type: 'text', text: truncated }],
   });
   const result = await callRunAiSummary();
-  // buildFallback() sets siteType: null — the valid mock has siteType: 'ecommerce'
+  // buildFallback() sets siteType: null — the valid mock has siteType: 'E-commerce'
   ok('max_tokens → fallback returned (siteType null)', result.siteType === null, `got siteType=${result.siteType}`);
   ok('max_tokens → summary is a string', typeof result.aiSummary === 'string', `got: ${typeof result.aiSummary}`);
   // Truncated text must not have been parsed into the result
@@ -130,7 +130,7 @@ async function callRunAiSummary() {
   });
   const result = await callRunAiSummary();
   ok('thinking block → text block found', typeof result.aiSummary === 'string' && !result.isFallback, `isFallback=${result.isFallback}`);
-  ok('thinking block → siteType parsed', result.siteType === 'ecommerce', `got: ${result.siteType}`);
+  ok('thinking block → siteType parsed', result.siteType === 'E-commerce', `got: ${result.siteType}`);
 }
 
 // 4. end_turn + malformed JSON
@@ -142,7 +142,7 @@ async function callRunAiSummary() {
     content: [{ type: 'text', text: '{ "summary": "incomplete...' }],
   });
   const result = await callRunAiSummary();
-  // buildFallback() returns siteType: null — valid mock has 'ecommerce'
+  // buildFallback() returns siteType: null — valid mock has 'E-commerce'
   ok('malformed JSON → fallback (siteType null)', result.siteType === null, `got siteType=${result.siteType}`);
   ok('malformed JSON → aiInsights null', result.aiInsights === null, `got: ${result.aiInsights}`);
 }

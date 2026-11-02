@@ -1,3 +1,6 @@
+import { getDetectedPlatform, formatPlatformContext, normalizeSitePurpose } from '@/lib/platform';
+import { canonicalFindingId } from '@/lib/finding-audits';
+import { formatEvidenceItems } from '@/lib/scan-evidence';
 import { NextResponse } from 'next/server';
 import { auth } from '@clerk/nextjs/server';
 import { getRecommendationsByReport, reserveAskSlot } from '@/lib/store';
@@ -108,7 +111,7 @@ export async function POST(request) {
 
   // ── Build report context ──────────────────────────────────────────────────
   let reportContext = '';
-  let detectedSiteType = null; // hoisted so system prompt can reference it
+  let detectedPlatform = null; // hoisted so system prompt can reference it
   let effectiveRecFingerprint = recFingerprint || null; // may be overridden below
   let contextStage = 'init';
 
@@ -135,8 +138,12 @@ export async function POST(request) {
 
         // Surface the specific finding the chip was clicked on
         const focusIssue = findingFingerprintId
-          ? allIssues.find(i => i.fingerprintId === findingFingerprintId)
+          ? allIssues.find(i => i.fingerprintId === findingFingerprintId) || allIssues.find(i => canonicalFindingId(i) === canonicalFindingId(findingFingerprintId))
           : null;
+
+        if (findingFingerprintId && !focusIssue) {
+          return NextResponse.json({ error: 'The selected finding is unavailable in this report.' }, { status: 422 });
+        }
 
         // Auto-resolve recFingerprint from findingFingerprintId when the client
         // didn't (or couldn't) send one — e.g. matchedRec was null client-side.
@@ -175,6 +182,9 @@ Area: ${focusIssue.area}
 Message: ${focusIssue.message}
 ${focusIssue.description ? 'Description: ' + focusIssue.description : ''}
 ${focusIssue.fix ? 'Recommended fix: ' + focusIssue.fix : ''}
+${focusIssue.displayValue ? 'Measured: ' + focusIssue.displayValue : ''}
+${formatEvidenceItems(focusIssue.items)}
+${focusIssue.evidenceLimitations || ''}
 `
           : '';
 
@@ -221,19 +231,12 @@ ${a.coverage?.limitations && !a.coverage.limitations.match(/^no significant/i) ?
             const findingLines = (focusRec.supporting_findings || []).slice(0, 8).map(f => {
               const dv   = f.displayValue ? ` (${f.displayValue})` : '';
               const desc = f.description ? ' — ' + f.description.slice(0, 80) : '';
-              const itemNote = f.items?.length
-                ? ' [affected: ' + f.items.slice(0, 5).map(it => {
-                    const name = it.label || (it.url ? it.url.split('/').pop().split('?')[0] || it.url : '');
-                    const ms   = it.wastedMs != null ? `${it.wastedMs}ms wasted` : '';
-                    const loc  = it.selector ? `(${it.selector})` : '';
-                    return [name, ms, loc].filter(Boolean).join(' ');
-                  }).filter(Boolean).join(', ') + ']'
-                : '';
-              return `  - [${(f.severity || 'issue').toUpperCase()}] ${f.message}${dv}${desc}${itemNote}`;
+              const itemNote = formatEvidenceItems(f.items, { limit: 5, maxChars: 1800 });
+              return `  - [${(f.severity || 'issue').toUpperCase()}] ${f.message}${dv}${desc}${itemNote ? '\n' + itemNote : ''}${f.evidenceLimitations ? '\n' + f.evidenceLimitations : ''}`;
             }).join('\n');
 
             const evidenceParts = focusRec.evidence
-              ? Object.entries(focusRec.evidence).map(([k, v]) => `${k}: ${v}`).join(', ')
+              ? Object.entries(focusRec.evidence).filter(([k]) => k !== 'items').map(([k, v]) => `${k}: ${typeof v === 'object' ? JSON.stringify(v) : v}`).join(', ')
               : null;
 
             const actionLines = (focusRec.actions || []).slice(0, 3)
@@ -251,7 +254,7 @@ ${findingLines || '  (see issues above)'}
 ${actionLines ? `Recommended actions:\n${actionLines}` : ''}
 `;
           } else {
-            console.warn(`[Ask API] [${reqId}] effectiveRecFingerprint=${effectiveRecFingerprint} not found in ${report.recommendations.length} recs`);
+            return NextResponse.json({ error: 'The selected recommendation evidence is unavailable. Please try again.' }, { status: 503 });
           }
         }
 
@@ -281,13 +284,14 @@ ${activeStep.developer?.notes ? `Notes: ${activeStep.developer.notes}` : ''}
             el.wastedMs != null ? `  Wasted: ${el.wastedMs}ms` : '',
           ].filter(Boolean).join('\n');
           if (elLines) {
-            elementBlock = `\nFOCUS ELEMENT (the user is asking about this specific item):\n${elLines}\n`;
+            elementBlock = `\nFOCUS ELEMENT (the user is asking about this specific item):\n${elLines}\n${formatEvidenceItems([el])}\n`;
           }
         }
 
         // Include detected platform/CMS type when available
-        detectedSiteType = report.siteType || null;
-        const siteTypeLine = detectedSiteType ? `Platform/CMS: ${detectedSiteType}` : '';
+        detectedPlatform = getDetectedPlatform(report.seoData);
+        const purpose = normalizeSitePurpose(report.siteType);
+        const siteTypeLine = purpose ? `Site purpose category (AI estimate): ${purpose}` : '';
 
         reportContext = `
 SITE CONTEXT:
@@ -312,10 +316,7 @@ Be concise, practical, and friendly. Use plain English. When explaining a fix, g
 
 IMPORTANT: Never describe, infer, or speculate about the site's purpose, content, the owner's profession, expertise, services, writing style, or business details unless those details appear explicitly in the scan data provided. The scan captures technical metrics only — page structure, load times, code patterns — not the site's written content or what the site is about. If a question requires knowing what the site does and that information is absent from the scan data, say so and answer based only on what was measured.
 
-${detectedSiteType
-  ? `DETECTED PLATFORM: The scan identified this site as running ${detectedSiteType}. When answering, refer to this as the confirmed platform — do not say the platform is unknown. Tailor all advice to ${detectedSiteType}-specific tools, plugins, and workflows. For WordPress specifically: never recommend blindly removing or deferring jQuery or other shared scripts — themes and plugins may depend on them. Instead, advise the user to check what depends on the resource first (using browser DevTools or Query Monitor) before deferring or removing it.`
-  : `PLATFORM: The scan did not identify the CMS or hosting platform for this site. Do not assume WordPress or any specific platform. Provide platform-neutral instructions. If platform-specific examples would help, label them clearly as conditional (e.g. "If you use WordPress: …") and always provide a generic alternative.`
-} Distinguish confirmed scan findings from steps that require manual investigation.${hasFocusContext ? `
+${formatPlatformContext(detectedPlatform)} Distinguish confirmed scan findings from steps that require manual investigation.${hasFocusContext ? `
 
 When RECOMMENDATION IN FOCUS, FOCUS FINDING, or FOCUS ELEMENT is present in the context, answer specifically about that finding or recommendation. Stay grounded in its supporting evidence and do not drift to other recommendations.` : ` When the assessment identifies a top opportunity, treat it as the established priority unless the user asks about something else specifically.`}${reportContext ? `\n${reportContext}` : ''}`;
 

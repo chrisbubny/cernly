@@ -8,7 +8,8 @@
     "start": "next start",
     "lint": "next lint",
     "migrate": "node scripts/migrate.js",
-    "test:phase1": "node --experimental-test-module-mocks --import ./lib/__tests__/alias-loader.mjs --test __tests__/phase1-*.test.mjs __tests__/verify-derive-status.test.mjs lib/__tests__/stage4.test.mjs lib/__tests__/stage5.test.mjs"
+    "test:phase1": "node --experimental-test-module-mocks --import ./lib/__tests__/alias-loader.mjs --test __tests__/phase1-*.test.mjs __tests__/verify-derive-status.test.mjs lib/__tests__/stage4.test.mjs lib/__tests__/stage5.test.mjs",
+    "test:phase2": "node --experimental-test-module-mocks --import ./lib/__tests__/alias-loader.mjs --test __tests__/phase2-*.test.mjs"
   },
   "dependencies": {
     "@clerk/nextjs": "^5.3.5",

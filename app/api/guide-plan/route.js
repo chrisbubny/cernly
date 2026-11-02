@@ -1,3 +1,4 @@
+import { getDetectedPlatform } from '@/lib/platform';
 import { NextResponse } from 'next/server';
 import { auth }         from '@clerk/nextjs/server';
 import {
@@ -105,8 +106,8 @@ export async function POST(request) {
   const rawUrl   = report.url || '';
   const domain   = extractDomain(rawUrl);
   const siteUrl  = extractSiteUrl(rawUrl);
-  const siteType = report.siteType || report.site_type || null;
-  const plan     = await generateGuidancePlan(rec, domain, persona, siteType, safeFocusIssue, siteUrl);
+  const platform = getDetectedPlatform(report.seoData);
+  const plan     = await generateGuidancePlan(rec, domain, persona, platform, safeFocusIssue, siteUrl);
 
   // generateGuidancePlan never returns an empty plan — it always falls back to
   // static guidance. The only case where fallback: true remains is an unknown
