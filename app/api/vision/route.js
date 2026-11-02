@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
+import { auth } from '@clerk/nextjs/server';
 import { runVisionAnalysis } from '@/lib/analyzers/vision';
-import { getReport, updateReportAnnotations } from '@/lib/store';
+import { updateReportAnnotations } from '@/lib/store';
+import { authorizeReport } from '@/lib/report-access';
 
 // Allow up to 60 s — vision takes image prep (~1s) + Claude vision (~30s)
 export const maxDuration = 60;
@@ -10,6 +12,10 @@ export const maxDuration = 60;
 // Runs screenshot → Claude vision pipeline and patches the report row.
 // Called from the report page after the main scan completes.
 export async function POST(request) {
+  let userId = null;
+  try { const { userId: uid } = await auth(); userId = uid || null; } catch {}
+  if (!userId) return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
+
   let body = {};
   try { body = await request.json(); } catch {}
 
@@ -17,8 +23,9 @@ export async function POST(request) {
   if (!reportId) return NextResponse.json({ error: 'reportId required' }, { status: 400 });
 
   // Load the report to get the URL and lhData
-  const report = await getReport(reportId).catch(() => null);
-  if (!report) return NextResponse.json({ error: 'Report not found' }, { status: 404 });
+  const access = await authorizeReport({ id: reportId }, userId);
+  if (!access.report) return NextResponse.json({ error: access.error }, { status: access.status });
+  const report = access.report;
 
   // If annotations already exist, return them immediately — no re-run needed
   if (report.uxAnnotations) {
@@ -58,10 +65,15 @@ export async function POST(request) {
     return NextResponse.json({ error: 'Vision analysis failed' }, { status: 500 });
   }
 
-  // Persist to DB
-  await updateReportAnnotations(reportId, uxAnnotations).catch((e) => {
+  // Recheck access at the write in case sharing was revoked during generation.
+  let saved;
+  try {
+    saved = await updateReportAnnotations(report.id, uxAnnotations, userId);
+  } catch (e) {
     console.error('[/api/vision] DB update failed:', e.message);
-  });
+    return NextResponse.json({ error: 'Annotations could not be saved. Please try again.' }, { status: 503 });
+  }
+  if (!saved) return NextResponse.json({ error: 'Report access is no longer available.' }, { status: 403 });
 
   return NextResponse.json({ uxAnnotations });
 }

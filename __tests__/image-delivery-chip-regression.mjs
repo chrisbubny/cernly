@@ -230,29 +230,16 @@ assert.ok(hasFocusContext, 'hasFocusContext is true when findingFingerprintId or
 console.log('✓ Step 8: hasFocusContext=true — AI will use finding-specific guidance, not generic');
 
 // ─── 9. Root cause regression guard ──────────────────────────────────────────
-// Verify that getReportBySlug (not getReport) is used in the ask route.
-// This is a static check against the import line.
+// The access helper retains slug lookup; route-level execution is covered by
+// phase1-access.test.mjs, including rejection before quota/evidence/AI work.
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+const routeSource = readFileSync(resolve(process.cwd(), 'app/api/ask/route.js'), 'utf8');
+const accessSource = readFileSync(resolve(process.cwd(), 'lib/report-access.js'), 'utf8');
+assert.ok(routeSource.includes('authorizeReport({ slug: reportId }, userId)'));
+assert.ok(accessSource.includes('getReportBySlug(slug)'));
+console.log('✓ Step 9: route uses the authorized slug lookup');
 
-const routeSource = readFileSync(
-  resolve(process.cwd(), 'app/api/ask/route.js'),
-  'utf8'
-);
-
-assert.ok(
-  routeSource.includes('getReportBySlug'),
-  'route.js imports getReportBySlug (slug-based lookup)'
-);
-assert.ok(
-  !routeSource.includes('getReport(reportId)'),
-  'route.js does NOT call getReport(reportId) (would break on UUID slug)'
-);
-assert.ok(
-  routeSource.includes('getReportBySlug(reportId)'),
-  'route.js calls getReportBySlug(reportId)'
-);
-console.log('✓ Step 9: route.js uses getReportBySlug — UUID slug context bug is fixed');
 
 console.log('\n✅ All image-delivery chip regression tests passed');
 console.log('   Scenario: "Why is this happening?" chip on "Improve image delivery"');

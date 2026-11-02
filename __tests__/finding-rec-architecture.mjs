@@ -174,12 +174,11 @@ await test('guide-plan route passes report.id (integer PK) to both cache functio
 
 console.log('\n4. compareRecommendations — canonical fingerprint in currFingerprintSet');
 
-await test('currFingerprintSet uses flatMap to include both fingerprintId and canonicalFingerprintId', async () => {
-  const code = await src('lib/comparison.js');
-  assert.ok(
-    code.includes('flatMap(i => [i.fingerprintId, i.canonicalFingerprintId]'),
-    'comparison.js flatMaps both IDs into currFingerprintSet'
-  );
+await test('legacy ordinal-only current finding matches its canonical recommendation', () => {
+  const result = compareRecommendations([{ fingerprint: 'fonts', finding_fingerprints: ['lh:font-display'] }],
+    [], [{ fingerprintId: 'lh:font-display:2' }], {});
+  assert.equal(result.still_open.length, 1);
+  assert.equal(result.likely_resolved.length, 0);
 });
 
 await test('finding rec classified as still_open when canonical variant present in curr scan', () => {
@@ -209,7 +208,7 @@ await test('finding rec classified as still_open when canonical variant present 
     'finding rec is still_open when canonical variant appears in curr scan with ordinal suffix');
 });
 
-await test('finding rec classified as likely_resolved when audit absent and audit completed', () => {
+await test('finding rec classified as likely_resolved when its own recorded check passed', () => {
   const prevRecs = [
     {
       fingerprint:          'lh:critical-request-chains',
@@ -220,7 +219,9 @@ await test('finding rec classified as likely_resolved when audit absent and audi
     },
   ];
   const comparison = compareRecommendations(
-    prevRecs, [], [], { performance: { status: 'completed' } }
+    prevRecs, [], [], { performance: { status: 'completed', findingResults: {
+      'lh:critical-request-chains': { status: 'passed', category: 'performance' },
+    } } }
   );
   // compareRecommendations returns { rec, ... } objects — fingerprint is on .rec
   const resolved = comparison.likely_resolved.find(r => r.rec?.fingerprint === 'lh:critical-request-chains');

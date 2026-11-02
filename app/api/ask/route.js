@@ -1,8 +1,9 @@
 import { NextResponse } from 'next/server';
 import { auth } from '@clerk/nextjs/server';
-import { getReportBySlug, getRecommendationsByReport, reserveAskSlot } from '@/lib/store';
+import { getRecommendationsByReport, reserveAskSlot } from '@/lib/store';
 import { buildScoreLines } from '@/lib/scoring';
 import { estimateCost } from '@/lib/ai-cost';
+import { authorizeReport } from '@/lib/report-access';
 
 // POST /api/ask
 // Body: { question, reportId, messages?, findingFingerprintId?, recFingerprint?, activeStep?, elementContext? }
@@ -19,6 +20,32 @@ export async function POST(request) {
   try { const { userId: uid } = await auth(); userId = uid || null; } catch {}
   if (!userId) {
     return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
+  }
+
+  let body = {};
+  try { body = await request.json(); } catch {}
+
+  const {
+    question,
+    reportId,
+    messages      = [],
+    findingFingerprintId,
+    recFingerprint,
+    activeStep,
+    elementContext,
+  } = body;
+
+  if (typeof question !== 'string' || !question.trim()) {
+    return NextResponse.json({ error: 'question required' }, { status: 400 });
+  }
+
+  // Resolve access before quota writes, evidence reads, or AI calls. Keep the
+  // authorized row so later context assembly cannot bypass this decision.
+  let report = null;
+  if (reportId) {
+    const access = await authorizeReport({ slug: reportId }, userId);
+    if (!access.report) return NextResponse.json({ error: access.error }, { status: access.status });
+    report = access.report;
   }
 
   // ── Ask usage ceiling (all plans) ────────────────────────────────────────────
@@ -71,23 +98,6 @@ export async function POST(request) {
     return NextResponse.json({ answer: "AI assistant isn't available right now — API key not configured." });
   }
 
-  let body = {};
-  try { body = await request.json(); } catch {}
-
-  const {
-    question,
-    reportId,
-    messages      = [],
-    findingFingerprintId,
-    recFingerprint,
-    activeStep,
-    elementContext,
-  } = body;
-
-  if (!question?.trim()) {
-    return NextResponse.json({ error: 'question required' }, { status: 400 });
-  }
-
   console.log(
     `[Ask API] [${reqId}] request ` +
     `reportId=${reportId || 'none'} ` +
@@ -104,15 +114,8 @@ export async function POST(request) {
 
   if (reportId) {
     try {
-      contextStage = 'getReport';
-      // reportId is the URL slug (UUID string) — use getReportBySlug, not getReport,
-      // which queries by integer PK and would throw "invalid input syntax for integer"
-      // when given a slug, causing the catch block to swallow all context silently.
-      const report = await getReportBySlug(reportId);
-
-      if (!report) {
-        console.warn(`[Ask API] [${reqId}] getReport(${reportId}) returned null — proceeding without site context`);
-      } else {
+      // Access was checked before reserving quota; never reload an unchecked row.
+      if (report) {
         // CRITICAL: getReport() only returns the reports row (no recommendations).
         // Fetch recommendations separately so focusRecBlock / recsBlock work.
         contextStage = 'getRecommendationsByReport';
@@ -298,7 +301,7 @@ ${focusBlock}${elementBlock}${focusRecBlock}${stepBlock}${assessmentBlock}${recs
     } catch (contextErr) {
       // Surface DB and context-build failures — previously these were swallowed silently.
       console.error(`[Ask API] [${reqId}] Context build failed at stage=${contextStage}: ${contextErr.message}`);
-      // Continue without context rather than returning an error to the user.
+      return NextResponse.json({ error: 'Report context is unavailable. Please try again.' }, { status: 503 });
     }
   }
 

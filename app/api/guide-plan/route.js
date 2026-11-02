@@ -5,9 +5,9 @@ import {
   getGuidancePlan,
   setGuidancePlan,
   getRecommendationsByReport,
-  getReportBySlug,
 } from '@/lib/store';
 import { generateGuidancePlan, derivePlanFingerprint } from '@/lib/guidance';
+import { authorizeReport } from '@/lib/report-access';
 
 // 'cms-admin' is the canonical value the frontend sends; 'cms' is a legacy alias
 const VALID_PERSONAS = new Set(['owner', 'cms-admin', 'cms', 'developer']);
@@ -45,22 +45,16 @@ export async function POST(request) {
     return NextResponse.json({ error: 'reportId is required' }, { status: 400 });
   }
 
-  // Ensure DB columns exist (idempotent — safe to call on every request)
-  await ensureGuidanceColumns();
-
   // reportId from the client is the URL slug (UUID string). Resolve it to the
   // integer PK so getRecommendationsByReport — which queries report_id INTEGER —
   // does not throw "invalid input syntax for type integer" and silently return [].
   // This is the same pattern used in /api/ask/route.js.
-  let report = null;
-  try {
-    report = await getReportBySlug(reportId);
-  } catch (e) {
-    console.error('[guide-plan] failed to resolve slug to report:', e.message);
-  }
-  if (!report) {
-    return NextResponse.json({ error: 'Report not found' }, { status: 404 });
-  }
+  const access = await authorizeReport({ slug: reportId }, userId);
+  if (!access.report) return NextResponse.json({ error: access.error }, { status: access.status });
+  const report = access.report;
+
+  // No initialization, recommendation reads, cache access, or AI before access.
+  await ensureGuidanceColumns();
 
   // Load the recommendation row for this user + report
   const recs = await getRecommendationsByReport(report.id).catch(() => []);
