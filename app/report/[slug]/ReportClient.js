@@ -2297,6 +2297,7 @@ export default function ReportClient({ isPro, userName, userAvatar }) {
       {/* Guided Fix panel */}
       {guidedFixRec && report && (
         <GuidedFix
+          key={guidedFixRec.fingerprint}
           rec={guidedFixRec}
           issue={guidedFixIssue}
           reportId={id}

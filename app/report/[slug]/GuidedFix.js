@@ -653,7 +653,8 @@ export default function GuidedFix({
   onClose,
   onStatusChange,
   onRescan,          // handleRescan(verifyFp) from ReportClient — triggers scan + navigate + verify
-  onAskCernly,
+  // onAskCernly was declared here but never called within GuidedFix — removed (dead code).
+  // Ask Cernly is handled via InlineChatPanel directly inside this component.
   onSwitchTab,       // (tabKey: string) => void — closes GuidedFix and switches report tab
 }) {
   const [expanded, setExpanded] = useState(false);
@@ -678,6 +679,10 @@ export default function GuidedFix({
   // Holds a pending { question, opts } to auto-send once chatStep has settled.
   // Populated by onFixElement and consumed by the useEffect below.
   const pendingAutoSendRef = useRef(null);
+  // Monotonically-incrementing counter.  Each chat send records its generation;
+  // state updates are dropped if the generation has since been superseded by a
+  // step change, rec change (via key prop), or explicit close.
+  const chatGenerationRef = useRef(0);
 
   // ── restore persisted progress ────────────────────────────────────────────
   useEffect(() => {
@@ -692,6 +697,11 @@ export default function GuidedFix({
   // We eagerly fetch with 'owner' on mount so the plan is often already loading
   // before the user reaches step 2.  When they pick a different persona we
   // re-fetch and the server returns from cache if it was already generated.
+  //
+  // AbortController: each effect run creates a new controller.  The cleanup
+  // function aborts any in-flight request so a slow persona-A response cannot
+  // arrive after persona-B's plan has already loaded and overwrite it.  All
+  // state updates check `aborted` before firing for the same reason.
   useEffect(() => {
     if (!rec?.fingerprint || !reportId) return;
     const persona = selectedRole || 'owner';
@@ -702,9 +712,12 @@ export default function GuidedFix({
     setPlan(null);
     setFallbackActions([]);
 
+    const controller = new AbortController();
+
     fetch('/api/guide-plan', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
+      signal: controller.signal,
       body: JSON.stringify({
         recFingerprint: rec.fingerprint,
         reportId,
@@ -721,6 +734,7 @@ export default function GuidedFix({
       }),
     })
       .then(r => {
+        if (controller.signal.aborted) return null;
         if (!r.ok) {
           console.warn('[GuidedFix] guide-plan returned', r.status);
           return { _httpError: r.status };
@@ -728,6 +742,7 @@ export default function GuidedFix({
         return r.json();
       })
       .then(data => {
+        if (!data || controller.signal.aborted) return;
         if (data._httpError) {
           setFallbackActions(rec?.actions || []);
           setPlanStatus('fallback');
@@ -743,10 +758,13 @@ export default function GuidedFix({
           setPlanStatus('error');
         }
       })
-      .catch(() => {
+      .catch(err => {
+        if (controller.signal.aborted) return; // expected abort — not an error
         setFallbackActions(rec?.actions || []);
         setPlanStatus('error');
       });
+
+    return () => controller.abort();
   // Re-run when persona changes (selectedRole) or the rec/report changes
   }, [selectedRole, rec?.fingerprint, reportId]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -784,9 +802,19 @@ export default function GuidedFix({
     });
   }, [currentStep, selectedRole, persistProgress]);
 
+  // retryPlanControllerRef holds the AbortController for the most recent
+  // retryPlan fetch.  A new retry cancels any in-flight previous retry.
+  const retryPlanControllerRef = useRef(null);
+
   const retryPlan = useCallback(() => {
     if (!rec?.fingerprint || !reportId) return;
     const persona = selectedRole || 'owner';
+
+    // Cancel any previous in-flight retry
+    retryPlanControllerRef.current?.abort();
+    const controller = new AbortController();
+    retryPlanControllerRef.current = controller;
+
     // Reset so the effect will re-run
     planFetchedForPersona.current = null;
     setPlanStatus('loading');
@@ -796,6 +824,7 @@ export default function GuidedFix({
     fetch('/api/guide-plan', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
+      signal: controller.signal,
       body: JSON.stringify({
         recFingerprint: rec.fingerprint,
         reportId,
@@ -810,8 +839,12 @@ export default function GuidedFix({
         } : {}),
       }),
     })
-      .then(r => r.ok ? r.json() : { _httpError: r.status })
+      .then(r => {
+        if (controller.signal.aborted) return null;
+        return r.ok ? r.json() : { _httpError: r.status };
+      })
       .then(data => {
+        if (!data || controller.signal.aborted) return;
         planFetchedForPersona.current = persona;
         if (data._httpError) {
           setFallbackActions(rec?.actions || []);
@@ -827,14 +860,19 @@ export default function GuidedFix({
           setPlanStatus('error');
         }
       })
-      .catch(() => {
+      .catch(err => {
+        if (controller.signal.aborted) return;
         setFallbackActions(rec?.actions || []);
         setPlanStatus('error');
       });
   }, [issue, selectedRole, rec?.fingerprint, rec?.actions, reportId]);
 
-  // Open inline chat for a specific step
+  // Open inline chat for a specific step.
+  // Incrementing chatGenerationRef invalidates any in-flight sendChatMessage
+  // responses that were launched for the previous step, so they cannot append
+  // to the new (cleared) messages array.
   const handleAskStep = useCallback((step) => {
+    chatGenerationRef.current += 1;
     setChatStep(step);
     setChatMessages([]);
     setChatInput('');
@@ -858,8 +896,14 @@ export default function GuidedFix({
 
   // Send a message to /api/ask with full step context.
   // opts.elementContext — optional item object for per-element targeted questions.
+  //
+  // Stale-response guard: we capture chatGenerationRef.current at the start of
+  // the call and compare it when the response arrives.  If handleAskStep() has
+  // run in the meantime (incrementing the ref), the response is for the old step
+  // and must not update messages, loading state, or error state.
   const sendChatMessage = useCallback(async (question, opts = {}) => {
     if (!question?.trim() || chatLoading) return;
+    const generation = chatGenerationRef.current;
     const q = question.trim();
     setChatInput('');
     setChatError(null);
@@ -878,20 +922,27 @@ export default function GuidedFix({
           // in the selected finding, not just the parent recommendation group.
           ...(issue?.fingerprintId ? { findingFingerprintId: issue.fingerprintId } : {}),
           activeStep: chatStep,
+          // Forward selected persona so the server uses the correct step instructions.
+          persona: selectedRole || 'owner',
           messages: chatMessages.slice(-6),
           ...(opts.elementContext ? { elementContext: opts.elementContext } : {}),
         }),
       });
       const data = await res.json().catch(() => ({}));
+      // Drop response if step changed while the request was in-flight.
+      if (chatGenerationRef.current !== generation) return;
       const answer = data.answer || 'Sorry, I couldn\'t get a response.';
       setChatMessages(prev => [...prev, { role: 'assistant', content: answer }]);
     } catch {
+      if (chatGenerationRef.current !== generation) return;
       setChatError('Could not reach the assistant — check your connection and try again.');
       setChatMessages(prev => prev.slice(0, -1)); // remove optimistic user message
     } finally {
-      setChatLoading(false);
+      if (chatGenerationRef.current === generation) {
+        setChatLoading(false);
+      }
     }
-  }, [chatLoading, chatMessages, chatStep, issue?.fingerprintId, rec?.fingerprint, reportId]);
+  }, [chatLoading, chatMessages, chatStep, issue?.fingerprintId, rec?.fingerprint, reportId, selectedRole]);
 
   const handleRescan = useCallback(() => {
     const fp = rec?.fingerprint;

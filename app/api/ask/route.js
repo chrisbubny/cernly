@@ -74,6 +74,9 @@ export async function POST(request) {
   let body = {};
   try { body = await request.json(); } catch {}
 
+  // 'cms' is a legacy alias for 'cms-admin' (matches guide-plan route validation)
+  const VALID_PERSONAS = new Set(['owner', 'cms-admin', 'cms', 'developer']);
+
   const {
     question,
     reportId,
@@ -83,6 +86,13 @@ export async function POST(request) {
     activeStep,
     elementContext,
   } = body;
+
+  // Validate and normalise persona — default to 'owner' if absent or unrecognised.
+  // 'cms' is a legacy alias for 'cms-admin'.
+  const rawPersona = body.persona;
+  const persona = VALID_PERSONAS.has(rawPersona)
+    ? (rawPersona === 'cms' ? 'cms-admin' : rawPersona)
+    : 'owner';
 
   if (!question?.trim()) {
     return NextResponse.json({ error: 'question required' }, { status: 400 });
@@ -256,13 +266,22 @@ ${actionLines ? `Recommended actions:\n${actionLines}` : ''}
         let stepBlock = '';
         if (recFingerprint && activeStep) {
           const activeRec = (report.recommendations || []).find(r => r.fingerprint === recFingerprint);
+          // Use persona-keyed step instructions first; fall back to owner, then developer.
+          // This ensures the guidance matches what the user sees in the Guided Fix panel.
+          const stepAction = activeStep[persona]?.action
+            || activeStep.owner?.action
+            || activeStep.developer?.action
+            || '';
+          const stepTooling = activeStep[persona]?.tooling || activeStep.developer?.tooling || '';
+          const stepNotes   = activeStep[persona]?.notes   || activeStep.developer?.notes   || '';
           stepBlock = `
 ACTIVE GUIDED FIX:
 Recommendation: ${activeRec?.title || recFingerprint}
 Current step: "${activeStep.title}"
-Step guidance: ${activeStep.owner?.action || activeStep.developer?.action || ''}
-${activeStep.developer?.tooling ? `Tooling: ${activeStep.developer.tooling}` : ''}
-${activeStep.developer?.notes ? `Notes: ${activeStep.developer.notes}` : ''}
+Persona: ${persona}
+Step guidance: ${stepAction}
+${stepTooling ? `Tooling: ${stepTooling}` : ''}
+${stepNotes   ? `Notes: ${stepNotes}`     : ''}
 `;
         }
 
@@ -282,9 +301,12 @@ ${activeStep.developer?.notes ? `Notes: ${activeStep.developer.notes}` : ''}
           }
         }
 
-        // Include detected platform/CMS type when available
+        // Include detected site purpose when available.
+        // Note: siteType is AI-inferred PURPOSE ("Marketing", "Blog", "SaaS") —
+        // it is NOT the CMS/platform (WordPress, Shopify, etc.), which is detected
+        // separately in Phase 2 and surfaced via a different field.
         detectedSiteType = report.siteType || null;
-        const siteTypeLine = detectedSiteType ? `Platform/CMS: ${detectedSiteType}` : '';
+        const siteTypeLine = detectedSiteType ? `Site purpose: ${detectedSiteType}` : '';
 
         reportContext = `
 SITE CONTEXT:
