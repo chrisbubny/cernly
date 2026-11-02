@@ -1,3 +1,4 @@
+import { detectPlatform, getDetectedPlatform, formatPlatformContext } from '../lib/platform.js';
 /**
  * guided-fix-evidence-regression.mjs
  *
@@ -155,71 +156,19 @@ test('perfKeys.has(k) filter still present in otherEvidence', () => {
 
 console.log('\nSection 3: Ask Cernly siteType / CMS context');
 
-test('detectedSiteType hoisted above reportContext block', () => {
-  const hoistIdx   = askRouteSrc.indexOf('let detectedSiteType');
-  const contextIdx = askRouteSrc.indexOf('let reportContext');
-  assert.ok(hoistIdx > -1, 'detectedSiteType must be declared');
-  assert.ok(contextIdx > -1, 'reportContext must be declared');
-  // Both are hoisted; detectedSiteType should appear near reportContext
-  assert.ok(Math.abs(hoistIdx - contextIdx) < 500, 'detectedSiteType should be declared near reportContext');
+// Replaces the incorrect old regression contract that treated AI siteType as
+// a confirmed CMS. Full actual-handler coverage lives in phase2-platform-routes.
+test('Purpose labels are never CMS evidence', () => {
+  assert.equal(getDetectedPlatform({ status: 'completed', siteType: 'SaaS' }), null);
+  assert.match(formatPlatformContext(null), /not CMS\/platform evidence/);
 });
-
-test('detectedSiteType assigned from report.siteType inside report block', () => {
-  assert.ok(
-    askRouteSrc.includes('detectedSiteType = report.siteType'),
-    'detectedSiteType must be assigned from report.siteType'
-  );
+test('Observed generator context is evidence-backed rather than guaranteed hosting', () => {
+  const p = detectPlatform('<head><meta name="generator" content="WordPress"></head>');
+  assert.match(formatPlatformContext(p), /OBSERVED PLATFORM: WordPress/);
+  assert.match(formatPlatformContext(p), /not proof/);
 });
-
-test('system prompt uses detectedSiteType for platform assertion', () => {
-  assert.ok(
-    askRouteSrc.includes('detectedSiteType'),
-    'detectedSiteType must appear in system prompt construction'
-  );
-});
-
-test('DETECTED PLATFORM label in system prompt when siteType known', () => {
-  assert.ok(
-    askRouteSrc.includes('DETECTED PLATFORM'),
-    'System prompt must include DETECTED PLATFORM assertion when siteType is known'
-  );
-});
-
-test('do not say platform is unknown when siteType present', () => {
-  // When detectedSiteType is set, the system prompt should NOT contain
-  // "platform unknown" in that branch.
-  const detectedBranch = askRouteSrc.match(/DETECTED PLATFORM[\s\S]*?platform-neutral/);
-  if (detectedBranch) {
-    // The "do not say CMS is unknown" instruction should be in detected branch
-    const branch = detectedBranch[0];
-    assert.ok(
-      branch.includes('do not say the platform is unknown') ||
-      branch.includes('Do not say') ||
-      branch.includes('do not say'),
-      'DETECTED PLATFORM branch must instruct AI not to say platform is unknown'
-    );
-  } else {
-    // Fallback: verify the phrase appears somewhere in the route
-    assert.ok(
-      askRouteSrc.includes('do not say the platform is unknown') ||
-      askRouteSrc.includes('Do not say the platform is unknown'),
-      'Route must instruct AI not to say platform is unknown when detected'
-    );
-  }
-});
-
-test('platform-neutral instruction when siteType is null', () => {
-  assert.ok(
-    askRouteSrc.includes('platform-neutral'),
-    'System prompt must include platform-neutral instruction when siteType is unknown'
-  );
-});
-
-test('conditional example labeling instruction when unknown', () => {
-  assert.ok(
-    askRouteSrc.includes('label') || askRouteSrc.includes('conditional'),
-    'When platform unknown, prompt should instruct labeling of conditional examples'
-  );
+test('Unknown platform advice labels conditional examples', () => {
+  assert.match(formatPlatformContext(null), /conditional/);
 });
 
 // ---------------------------------------------------------------------------

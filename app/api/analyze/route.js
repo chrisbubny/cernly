@@ -1,3 +1,4 @@
+import { getDetectedPlatform } from '@/lib/platform';
 import { NextResponse } from 'next/server';
 import { auth } from '@clerk/nextjs/server';
 import { runLighthouse } from '@/lib/analyzers/lighthouse';
@@ -193,6 +194,7 @@ export async function POST(request) {
   ]);
   const { aiSummary, siteType, uxScore, uxInsights, aiInsights, sectionSummaries } =
     aiResult || { aiSummary: null, siteType: null, uxScore: null, uxInsights: null, aiInsights: null, sectionSummaries: null };
+  const platform = getDetectedPlatform(seoData);
   const aiSummaryMeta = aiResult?.aiSummaryMeta || { status: 'fallback', reason: 'unavailable' };
   if (uxScore !== null && uxScore !== undefined) scores.ux = normalizeScore(uxScore);
 
@@ -236,7 +238,7 @@ export async function POST(request) {
         used: FREE_SCAN_LIMIT,
         limit: FREE_SCAN_LIMIT,
         // Include analysis so the user isn't left with nothing after waiting
-        url, scores, auditStatuses, aiSummary, aiSummaryMeta,
+        url, scores, auditStatuses, aiSummary, aiSummaryMeta, platform,
         siteType: siteType || null, uxInsights: uxInsights || null,
         aiInsights: aiInsights || null, sectionSummaries: sectionSummaries || null,
         issues, recommendations: recommendations || [],
@@ -290,6 +292,7 @@ export async function POST(request) {
     url,
     scores,
     auditStatuses,
+    platform,
     aiSummary,
     aiSummaryMeta,
     siteType:      siteType      || null,

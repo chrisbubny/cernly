@@ -152,7 +152,7 @@ See `lib/store.js` for the complete exported API.
 **Verified execution order** (read directly from source):
 
 ```
-1.  Auth (Clerk) — anonymous scans are allowed; userId may be null
+1.  Auth (Clerk) — sign-in required; anonymous requests return 401
 2.  Scan limit pre-check — free plan: FREE_SCAN_LIMIT (3) scans/month (UTC)
     └─ Checks subscription and monthly count in parallel; fails fast before analyzers
 3.  pg_advisory_try_lock — prevents duplicate concurrent scans for same user
@@ -163,9 +163,10 @@ See `lib/store.js` for the complete exported API.
     └── runA11yCheck()   → lib/analyzers/a11y.js
 5.  Score normalization + issue collection + assignIssueFingerprintIds()
     └─ Issues sorted by severity: critical → warning → info → good
-6.  runAiSummary()  ← awaited synchronously (not background)
-    └─ Produces: aiSummary, siteType, uxScore, uxInsights, aiInsights, sectionSummaries
-7.  generateRecommendations()  ← runs AFTER AI summary (best-effort; errors return [])
+6.  runAiSummary() and generateRecommendations() start concurrently
+    ├─ Summary: aiSummary, aiSummaryMeta, siteType (purpose), UX data, discoveries
+    └─ Recommendations: measured findings + enrichment (best-effort; errors return [])
+7.  Merge Summary results; derive platform only from completed SEO generator evidence
 8.  Release pg_advisory scan lock
 9.  saveReport()  ← persists report, scores, issues, AI summary, UX data
     └─ Atomic advisory lock check prevents two free-plan scans racing through pre-check
@@ -176,7 +177,7 @@ See `lib/store.js` for the complete exported API.
 12. Return { scores, issues, recommendations, reportId, reportSlug, assessment, ... }
 ```
 
-Stage 2 (`runAssessment`) runs synchronously and adds ~4–6 s to user-visible response time (total ~25–30 s, within Next.js serverless budget). It is not a background/async task.
+Stage 2 (`runAssessment`) is awaited synchronously. Total latency includes analyzer time, the slower of Summary/enrichment, persistence, and Assessment. No end-to-end production latency or hosting request-budget guarantee has been established by the mocked regression tests.
 
 **Report access:** `GET /api/report?slug=xxx` (`app/api/report/route.js`)
 - Gate: owner OR `isPublic` OR a validated paid Stripe checkout session
@@ -207,6 +208,12 @@ Stage 2 (`runAssessment`) runs synchronously and adds ~4–6 s to user-visible r
 - `lib/lighthouse-evidence.js` extracts current `network-tree` and legacy `criticalrequestchain` details, including nested lists. Captured items preserve request IDs, parents, URLs, byte counts, path latency (ms), and legacy request durations (seconds converted to ms). Path latency is not treated as wasted time.
 - Traversal is bounded (20 captured requests, 1,000 visited objects, depth 100). Partial evidence is flagged; unknown totals remain null. Informational trees remain informational, not fabricated critical failures. Trees are not lost behind the ordinary 30-issue display cap.
 - Structured evidence and partial flags survive report/recommendation JSON persistence and flow to Ask, Guided Fix, and affected-resource rows. Ask returns an unavailable response if the requested finding/recommendation cannot be resolved, rather than answering as if it had retrieved that evidence. Existing full-context trimming and guidance-cache redesign remain separate backlog work.
+
+**Phase 2 platform evidence:**
+- `lib/platform.js` separates AI-estimated purpose categories from observed CMS declarations. The existing SEO fetch detects explicit head `meta[name=generator]` evidence for WordPress, Shopify, Wix, Squarespace, Webflow, Drupal, Joomla and Ghost. Conflicting declarations, unrelated assets, failed scans and unsupported markers produce unknown, not a guess.
+- Platform evidence is stored inside existing `seo_data` JSONB and derived on report reads. No schema migration or historical backfill is needed. Historical scans without this evidence receive platform-neutral guidance; a fresh scan is needed to collect it. Generator declarations are page observations, not proof of server configuration, installed versions or plugins; sites that hide their generator remain unknown.
+- Summary, Ask and Guided Fix consume this observed evidence separately from `siteType`. A one-time guidance prompt-version fingerprint invalidates previously cached plans with unsupported platform assumptions. General cache identity/persona concurrency remains backlog work.
+- Legacy tests that required purpose-as-CMS and blanket WordPress plugin claims were replaced with actual policy behavior checks; handler/prompt integration is covered in `phase2-platform-routes.test.mjs`.
 
 **Recommendation fingerprints** are stable identifiers like `performance-font-display`. Each recommendation carries a `finding_fingerprints[]` array (e.g. `['lh:font-display']`) that maps individual findings to their parent recommendation.
 

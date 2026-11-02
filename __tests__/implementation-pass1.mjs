@@ -1,3 +1,4 @@
+import { detectPlatform, getDetectedPlatform, formatPlatformContext } from '../lib/platform.js';
 /**
  * implementation-pass1.mjs
  *
@@ -68,7 +69,7 @@ test('Prohibition instructs to disclose when context is absent', () => {
 test('Fabrication prohibition is after existing findings instruction and before CMS tailoring', () => {
   const findingsIdx = askRoute.indexOf("Refer to the site's actual findings");
   const prohibitIdx = askRoute.indexOf("Never describe, infer, or speculate");
-  const cmsIdx      = askRoute.indexOf("When the Platform/CMS is known");
+  const cmsIdx      = askRoute.indexOf("formatPlatformContext(detectedPlatform)");
   assert.ok(findingsIdx >= 0, 'Could not find "actual findings" instruction');
   assert.ok(prohibitIdx >= 0, 'Could not find fabrication prohibition');
   assert.ok(cmsIdx >= 0,      'Could not find CMS tailoring instruction');
@@ -82,72 +83,25 @@ test('Fabrication prohibition is after existing findings instruction and before 
 
 console.log('\n[B] CMS-Aware Guided Fix');
 
-const guidance = readFileSync(path.join(root, 'lib/guidance.js'), 'utf8');
-const guideRoute = readFileSync(path.join(root, 'app/api/guide-plan/route.js'), 'utf8');
-
-test('PLATFORM_ADMIN_HINTS object exists with wordpress key', () => {
-  assert.match(guidance, /PLATFORM_ADMIN_HINTS/,
-    'Expected PLATFORM_ADMIN_HINTS to be defined');
-  assert.match(guidance, /wordpress:/i, 'Expected wordpress entry');
+// The old assertions required siteType-as-CMS and an unsupported blanket HSTS
+// claim. Test the real policy now; handler/prompt integration is exercised by
+// phase2-platform-routes.test.mjs rather than source-string signatures.
+test('Purpose categories do not create platform evidence', () => {
+  assert.equal(getDetectedPlatform({ status: 'completed', siteType: 'Marketing' }), null);
+  assert.match(formatPlatformContext(null), /platform-neutral/);
 });
-
-test('WordPress hint includes plugin option for security headers', () => {
-  const wpMatch = guidance.match(/wordpress:.*?`/s);
-  assert.ok(wpMatch, 'Could not locate wordpress hint template literal');
-  // The hint is a template literal that starts after "wordpress:"
-  const wpHintStart = guidance.indexOf('wordpress: `');
-  assert.ok(wpHintStart >= 0, 'wordpress hint not found');
-  const afterHint = guidance.slice(wpHintStart, wpHintStart + 800);
-  assert.match(afterHint, /plugin/i, 'WordPress hint should mention plugins');
-  assert.match(afterHint, /All In One Security|Really Simple Security/i,
-    'WordPress hint should name specific plugins');
+test('Explicit generator evidence identifies the observed platform', () => {
+  const p = detectPlatform('<head><meta name="generator" content="WordPress 6.7"></head>');
+  assert.equal(p.name, 'WordPress');
+  assert.match(formatPlatformContext(p), /OBSERVED PLATFORM: WordPress/);
 });
-
-test('WordPress hint explicitly says HSTS cannot be set by a plugin', () => {
-  const wpHintStart = guidance.indexOf('wordpress: `');
-  const afterHint = guidance.slice(wpHintStart, wpHintStart + 1000);
-  assert.match(afterHint, /HSTS.*server-level|server-level.*HSTS/i,
-    'HSTS must be noted as server-level in WordPress hint');
-  assert.match(afterHint, /cannot be set by a WordPress plugin/i,
-    'Must explicitly say HSTS cannot be set by a plugin');
+test('Generator evidence does not guarantee hosting or installed components', () => {
+  const p = detectPlatform('<head><meta name="generator" content="WordPress"></head>');
+  assert.match(formatPlatformContext(p), /not proof of server configuration/);
 });
-
-test('WordPress hint does not claim plugins guarantee every header', () => {
-  const wpHintStart = guidance.indexOf('wordpress: `');
-  const afterHint = guidance.slice(wpHintStart, wpHintStart + 1000);
-  // We want "Do not claim a plugin guarantees" — the prohibition should be present
-  assert.match(afterHint, /Do not claim a plugin guarantees/i,
-    'Must include disclaimer about plugin guarantees');
-});
-
-test('buildPrompt signature accepts siteType parameter', () => {
-  // Allow optional additional parameters after siteType (e.g. focusIssue)
-  assert.match(guidance, /function buildPrompt\s*\(\s*rec\s*,\s*domain\s*,\s*persona\s*,\s*siteType/,
-    'buildPrompt must accept siteType as 4th parameter');
-});
-
-test('generateGuidancePlan signature accepts siteType parameter', () => {
-  assert.match(guidance, /export.*function generateGuidancePlan\s*\([^)]*siteType/,
-    'generateGuidancePlan must accept siteType parameter');
-});
-
-test('guide-plan route reads siteType from report and passes to generateGuidancePlan', () => {
-  assert.match(guideRoute, /siteType\s*=\s*report\.siteType\s*\|\|\s*report\.site_type/,
-    'Route must read siteType from report with fallback');
-  assert.match(guideRoute, /generateGuidancePlan\([^)]*siteType/,
-    'siteType must be passed to generateGuidancePlan');
-});
-
-test('Platform hint is injected only when platformKey matches', () => {
-  // Verify the condition checks the platform key and falls back to empty string
-  assert.match(guidance, /PLATFORM_ADMIN_HINTS\[platformKey\]\s*\|\|\s*''/,
-    'Must fall back to empty string when no platform hint exists');
-});
-
-test('Unknown siteType produces no platform injection (empty string)', () => {
-  // Verify the code normalises via toLowerCase() so a weird case doesn't crash
-  assert.match(guidance, /\(siteType \|\| ''\)\.toLowerCase\(\)/,
-    'siteType must be normalised to lowercase');
+test('Incomplete scans do not supply platform context', () => {
+  const p = detectPlatform('<head><meta name="generator" content="WordPress"></head>');
+  assert.equal(getDetectedPlatform({ status: 'fetch_failed', platform: p }), null);
 });
 
 // ---------------------------------------------------------------------------

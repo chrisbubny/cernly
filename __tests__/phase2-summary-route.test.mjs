@@ -1,9 +1,10 @@
+import { detectPlatform } from '../lib/platform.js';
 import {test,mock} from 'node:test';
 import assert from 'node:assert/strict';
 let resolveSummary,summaryStarted=false,enrichmentStarted=false,saved;
 mock.module('@clerk/nextjs/server',{namedExports:{auth:async()=>({userId:'owner'})}});
 for(const [name,fn] of [['lighthouse','runLighthouse'],['seo','runSeoAudit'],['ssl','runSslCheck'],['a11y','runA11yCheck']]) {
-  mock.module(new URL(`../lib/analyzers/${name}.js`,import.meta.url).href,{namedExports:{[fn]:async()=>({performance:80,score:80,issues:[]})}});
+  mock.module(new URL(`../lib/analyzers/${name}.js`,import.meta.url).href,{namedExports:{[fn]:async()=>({performance:80,score:80,issues:[],status:'completed',platform:name==='seo'?detectPlatform('<head><meta name=generator content=WordPress></head>'):null})}});
 }
 mock.module(new URL('../lib/analyzers/ai.js',import.meta.url).href,{namedExports:{
   runAiSummary:async()=>{summaryStarted=true;return new Promise(resolve=>{resolveSummary=resolve})},runAssessment:async()=>null,
@@ -21,5 +22,5 @@ test('Enrichment starts before Summary completes; fallback does not discard or b
   const r=await POST(new Request('https://cernly.test/api/analyze',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({url:'https://site.test'})}));
   assert.equal(r.status,200);assert.ok(enrichmentStarted);
   assert.equal(saved.scores.performance,80);assert.equal(saved.aiSummaryMeta.reason,'timeout');
-  assert.equal((await r.json()).aiSummaryMeta.status,'fallback');
+  const body=await r.json();assert.equal(body.aiSummaryMeta.status,'fallback');assert.equal(body.platform.name,'WordPress');assert.equal(saved.seoData.platform.name,'WordPress');
 });
