@@ -198,6 +198,11 @@ Stage 2 (`runAssessment`) runs synchronously and adds ~4–6 s to user-visible r
 - `aiSummaryMeta` reports completed/fallback with a stable reason and duration. It is stored as `summaryMeta` in existing `ai_insights` JSONB; old reports without it return null. The scan result labels deterministic fallback text as an automated summary, not AI analysis.
 - Run `npm run test:phase2` with Node 22 for executable regression tests. No schema migration or live database is required.
 
+**Phase 2 Vision normalization:**
+- Both PSI and Microlink captures pass through `lib/vision-image.js`: validate raster bytes, bound encoded/downloaded input (20 MiB / 40 million pixels), auto-orient, resize/compress to JPEG (long edge ≤1,536 px, ≤1.15 million pixels, ≤3 MiB decoded).
+- Exceptionally tall captures review a top-of-page region (at most four image widths tall) rather than shrinking the entire page into unreadable detail. Coverage is returned in `uxAnnotations.image` and disclosed in the report; the displayed overlay uses the identical normalized image sent to Vision. Original PSI captures remain in `lhData`.
+- Malformed/unsupported/oversized inputs fail before Vision API submission; streamed downloads stop at the input limit. Historical cached annotations are not regenerated automatically.
+
 **Recommendation fingerprints** are stable identifiers like `performance-font-display`. Each recommendation carries a `finding_fingerprints[]` array (e.g. `['lh:font-display']`) that maps individual findings to their parent recommendation.
 
 **Finding fingerprint format:** `${source}:${auditId}` — e.g. `lh:font-display`

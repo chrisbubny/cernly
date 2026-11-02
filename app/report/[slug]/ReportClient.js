@@ -711,6 +711,9 @@ function UxCard({ uxScore, uxInsights, uxAnnotations, visionStatus, siteType, ur
       </div>
 
       {/* Annotated screenshot */}
+      {uxAnnotations?.image?.coverage === 'top-of-page' && (
+        <p style={{ fontSize: 12, color: '#83899c' }}>Visual review covers the top portion of this page, shown below.</p>
+      )}
       {(screenshotUrl || url) && (
         <div style={{ marginBottom: annotations.length ? 0 : 16 }}>
           {visionLoading && (
