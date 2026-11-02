@@ -184,27 +184,17 @@ export async function POST(request) {
   });
   const issues = assignIssueFingerprintIds(rawIssues);
 
-  // AI summary (vision runs separately via /api/vision after the report is saved)
-  // Pass auditStatuses and raw analyzer data so the AI gets structured evidence
-  // and safe score formatting via buildScoreLines.
-  const aiResult = await runAiSummary({ url, scores, auditStatuses, issues, lhData, seoData, sslData, a11yData }).catch(() => null);
-
+  // Summary and enrichment both consume measured analyzer results, not each
+  // other's generated text. Start together so their deadlines do not add up.
+  const [aiResult, recommendations] = await Promise.all([
+    runAiSummary({ url, scores, auditStatuses, issues, lhData, seoData, sslData, a11yData }).catch(() => null),
+    generateRecommendations(issues, scores, url, { lhData, seoData, sslData, a11yData }, auditStatuses)
+      .catch(err => { console.error('[analyze] recommendations error:', err.message); return []; }),
+  ]);
   const { aiSummary, siteType, uxScore, uxInsights, aiInsights, sectionSummaries } =
     aiResult || { aiSummary: null, siteType: null, uxScore: null, uxInsights: null, aiInsights: null, sectionSummaries: null };
-
-  // Merge UX score into scores (normalized)
+  const aiSummaryMeta = aiResult?.aiSummaryMeta || { status: 'fallback', reason: 'unavailable' };
   if (uxScore !== null && uxScore !== undefined) scores.ux = normalizeScore(uxScore);
-
-  // Generate structured recommendations from the fingerprinted issues.
-  // This runs after AI summary to avoid blocking the core report.
-  // Runs best-effort: failures do not prevent the report from being saved.
-  const recommendations = await generateRecommendations(
-    issues,
-    scores,
-    url,
-    { lhData, seoData, sslData, a11yData },
-    auditStatuses,
-  ).catch(err => { console.error('[analyze] recommendations error:', err.message); return []; });
 
   // Release scan-serialization lock before saveReport — the expensive analyzer
   // work is done; saveReport handles its own atomic counting with a separate
@@ -220,6 +210,7 @@ export async function POST(request) {
     scores,
     issues,
     aiSummary,
+    aiSummaryMeta,
     siteType,
     uxScore,
     uxInsights,
@@ -245,7 +236,7 @@ export async function POST(request) {
         used: FREE_SCAN_LIMIT,
         limit: FREE_SCAN_LIMIT,
         // Include analysis so the user isn't left with nothing after waiting
-        url, scores, auditStatuses, aiSummary,
+        url, scores, auditStatuses, aiSummary, aiSummaryMeta,
         siteType: siteType || null, uxInsights: uxInsights || null,
         aiInsights: aiInsights || null, sectionSummaries: sectionSummaries || null,
         issues, recommendations: recommendations || [],
@@ -266,8 +257,8 @@ export async function POST(request) {
 
   // ── Stage 2: structured assessment ──────────────────────────────────────────
   // Runs AFTER saveRecommendations so top_opportunity fingerprints reference
-  // confirmed DB entries. Validated before saving. Adds ~4-6s to user-visible
-  // latency (total ~25-30s, within 60s serverless budget).
+  // saved entries. This stage is also bounded by its own deadline; actual
+  // request latency depends on analyzers and external service response times.
   //
   // assessment_status values:
   //   'completed' — assessment generated and validated
@@ -300,6 +291,7 @@ export async function POST(request) {
     scores,
     auditStatuses,
     aiSummary,
+    aiSummaryMeta,
     siteType:      siteType      || null,
     uxInsights:    uxInsights    || null,
     uxAnnotations: null,

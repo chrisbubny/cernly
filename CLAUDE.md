@@ -193,6 +193,11 @@ Stage 2 (`runAssessment`) runs synchronously and adds ~4–6 s to user-visible r
 - Historical scans without per-check coverage remain readable and can show still-detected findings, but cannot prove resolution by absence. Run a new scan to obtain verification evidence. Previously persisted verification results are not retroactively recomputed.
 - Run `npm run test:phase1` for executable tests of the real handlers/helpers/analyzers/mappers. Node's experimental module mocks replace external I/O only. Validated locally with Node 22.23.4 (the production Node 22 major) and Node 25.2.1; no live database or AI calls are made by this command.
 
+**Phase 2 Summary reliability:**
+- Summary and recommendation enrichment start concurrently from measured analyzer output. Assessment remains after persistence. Summary uses a compact schema, 1,600 output tokens, and a 20-second request/body deadline; actual external service performance still needs live verification.
+- `aiSummaryMeta` reports completed/fallback with a stable reason and duration. It is stored as `summaryMeta` in existing `ai_insights` JSONB; old reports without it return null. The scan result labels deterministic fallback text as an automated summary, not AI analysis.
+- Run `npm run test:phase2` with Node 22 for executable regression tests. No schema migration or live database is required.
+
 **Recommendation fingerprints** are stable identifiers like `performance-font-display`. Each recommendation carries a `finding_fingerprints[]` array (e.g. `['lh:font-display']`) that maps individual findings to their parent recommendation.
 
 **Finding fingerprint format:** `${source}:${auditId}` — e.g. `lh:font-display`

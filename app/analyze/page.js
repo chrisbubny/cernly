@@ -435,7 +435,7 @@ function AnalyzeContent() {
   );
 
   /* ── Results ── */
-  const { scores, aiSummary, issues, reportId, reportSlug, siteType, uxInsights } = data;
+  const { scores, aiSummary, aiSummaryMeta, issues, reportId, reportSlug, siteType, uxInsights } = data;
   const reportRef = reportSlug || reportId; // use slug for URLs, fall back to integer id
 
   const categories = [
@@ -501,7 +501,7 @@ function AnalyzeContent() {
           <div className="ai-box">
             <div className="ai-box-head">
               <svg viewBox="0 0 24 24"><path d="M12 2.5c1.4 5.1 4.4 8.1 9.5 9.5-5.1 1.4-8.1 4.4-9.5 9.5-1.4-5.1-4.4-8.1-9.5-9.5 5.1-1.4 8.1-4.4 9.5-9.5Z"/></svg>
-              AI Analysis
+              {aiSummaryMeta?.status === 'fallback' ? 'Automated scan summary · AI unavailable' : 'AI Analysis'}
             </div>
             <p>{aiSummary}</p>
           </div>
