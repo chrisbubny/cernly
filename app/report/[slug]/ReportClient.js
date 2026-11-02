@@ -447,6 +447,7 @@ function FixCard({ issue, n, impact, rec, workItem, onStatusChange, onAskCernly,
               <AffectedElements
                 items={issue.items}
                 totalDetected={issue.totalDetected}
+                evidenceLimitations={issue.evidenceLimitations}
                 checkId={issue.checkId}
                 auditId={issue.auditId}
                 onFixElement={(item) => {

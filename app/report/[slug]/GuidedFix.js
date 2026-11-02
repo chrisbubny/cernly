@@ -1256,7 +1256,7 @@ export default function GuidedFix({
                   if (!firstAuditId && f.auditId) firstAuditId = f.auditId;
                   if (f.totalDetected) totalDetected = Math.max(totalDetected, f.totalDetected);
                   for (const item of (f.items || [])) {
-                    const key = item.url || item.selector || item.snippet || JSON.stringify(item);
+                    const key = item.requestId ? `${item.requestId}:${item.parentRequestId || ''}` : item.url || item.selector || item.snippet || JSON.stringify(item);
                     if (!seen.has(key)) { seen.add(key); allItems.push(item); }
                   }
                 }
@@ -1266,6 +1266,7 @@ export default function GuidedFix({
                   <AffectedElements
                     items={allItems}
                     totalDetected={totalDetected || allItems.length}
+                    evidenceLimitations={findingsToShow.map(f => f.evidenceLimitations).filter(Boolean).join(' ')}
                     checkId={firstCheckId}
                     auditId={firstAuditId}
                     onFixElement={(item) => {

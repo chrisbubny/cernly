@@ -1,3 +1,5 @@
+import { canonicalFindingId } from '@/lib/finding-audits';
+import { formatEvidenceItems } from '@/lib/scan-evidence';
 import { NextResponse } from 'next/server';
 import { auth } from '@clerk/nextjs/server';
 import { getRecommendationsByReport, reserveAskSlot } from '@/lib/store';
@@ -135,8 +137,12 @@ export async function POST(request) {
 
         // Surface the specific finding the chip was clicked on
         const focusIssue = findingFingerprintId
-          ? allIssues.find(i => i.fingerprintId === findingFingerprintId)
+          ? allIssues.find(i => i.fingerprintId === findingFingerprintId) || allIssues.find(i => canonicalFindingId(i) === canonicalFindingId(findingFingerprintId))
           : null;
+
+        if (findingFingerprintId && !focusIssue) {
+          return NextResponse.json({ error: 'The selected finding is unavailable in this report.' }, { status: 422 });
+        }
 
         // Auto-resolve recFingerprint from findingFingerprintId when the client
         // didn't (or couldn't) send one — e.g. matchedRec was null client-side.
@@ -175,6 +181,9 @@ Area: ${focusIssue.area}
 Message: ${focusIssue.message}
 ${focusIssue.description ? 'Description: ' + focusIssue.description : ''}
 ${focusIssue.fix ? 'Recommended fix: ' + focusIssue.fix : ''}
+${focusIssue.displayValue ? 'Measured: ' + focusIssue.displayValue : ''}
+${formatEvidenceItems(focusIssue.items)}
+${focusIssue.evidenceLimitations || ''}
 `
           : '';
 
@@ -221,19 +230,12 @@ ${a.coverage?.limitations && !a.coverage.limitations.match(/^no significant/i) ?
             const findingLines = (focusRec.supporting_findings || []).slice(0, 8).map(f => {
               const dv   = f.displayValue ? ` (${f.displayValue})` : '';
               const desc = f.description ? ' — ' + f.description.slice(0, 80) : '';
-              const itemNote = f.items?.length
-                ? ' [affected: ' + f.items.slice(0, 5).map(it => {
-                    const name = it.label || (it.url ? it.url.split('/').pop().split('?')[0] || it.url : '');
-                    const ms   = it.wastedMs != null ? `${it.wastedMs}ms wasted` : '';
-                    const loc  = it.selector ? `(${it.selector})` : '';
-                    return [name, ms, loc].filter(Boolean).join(' ');
-                  }).filter(Boolean).join(', ') + ']'
-                : '';
-              return `  - [${(f.severity || 'issue').toUpperCase()}] ${f.message}${dv}${desc}${itemNote}`;
+              const itemNote = formatEvidenceItems(f.items, { limit: 5, maxChars: 1800 });
+              return `  - [${(f.severity || 'issue').toUpperCase()}] ${f.message}${dv}${desc}${itemNote ? '\n' + itemNote : ''}${f.evidenceLimitations ? '\n' + f.evidenceLimitations : ''}`;
             }).join('\n');
 
             const evidenceParts = focusRec.evidence
-              ? Object.entries(focusRec.evidence).map(([k, v]) => `${k}: ${v}`).join(', ')
+              ? Object.entries(focusRec.evidence).filter(([k]) => k !== 'items').map(([k, v]) => `${k}: ${typeof v === 'object' ? JSON.stringify(v) : v}`).join(', ')
               : null;
 
             const actionLines = (focusRec.actions || []).slice(0, 3)
@@ -251,7 +253,7 @@ ${findingLines || '  (see issues above)'}
 ${actionLines ? `Recommended actions:\n${actionLines}` : ''}
 `;
           } else {
-            console.warn(`[Ask API] [${reqId}] effectiveRecFingerprint=${effectiveRecFingerprint} not found in ${report.recommendations.length} recs`);
+            return NextResponse.json({ error: 'The selected recommendation evidence is unavailable. Please try again.' }, { status: 503 });
           }
         }
 
@@ -281,7 +283,7 @@ ${activeStep.developer?.notes ? `Notes: ${activeStep.developer.notes}` : ''}
             el.wastedMs != null ? `  Wasted: ${el.wastedMs}ms` : '',
           ].filter(Boolean).join('\n');
           if (elLines) {
-            elementBlock = `\nFOCUS ELEMENT (the user is asking about this specific item):\n${elLines}\n`;
+            elementBlock = `\nFOCUS ELEMENT (the user is asking about this specific item):\n${elLines}\n${formatEvidenceItems([el])}\n`;
           }
         }
 

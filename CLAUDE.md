@@ -203,6 +203,11 @@ Stage 2 (`runAssessment`) runs synchronously and adds ~4–6 s to user-visible r
 - Exceptionally tall captures review a top-of-page region (at most four image widths tall) rather than shrinking the entire page into unreadable detail. Coverage is returned in `uxAnnotations.image` and disclosed in the report; the displayed overlay uses the identical normalized image sent to Vision. Original PSI captures remain in `lhData`.
 - Malformed/unsupported/oversized inputs fail before Vision API submission; streamed downloads stop at the input limit. Historical cached annotations are not regenerated automatically.
 
+**Phase 2 dependency evidence:**
+- `lib/lighthouse-evidence.js` extracts current `network-tree` and legacy `criticalrequestchain` details, including nested lists. Captured items preserve request IDs, parents, URLs, byte counts, path latency (ms), and legacy request durations (seconds converted to ms). Path latency is not treated as wasted time.
+- Traversal is bounded (20 captured requests, 1,000 visited objects, depth 100). Partial evidence is flagged; unknown totals remain null. Informational trees remain informational, not fabricated critical failures. Trees are not lost behind the ordinary 30-issue display cap.
+- Structured evidence and partial flags survive report/recommendation JSON persistence and flow to Ask, Guided Fix, and affected-resource rows. Ask returns an unavailable response if the requested finding/recommendation cannot be resolved, rather than answering as if it had retrieved that evidence. Existing full-context trimming and guidance-cache redesign remain separate backlog work.
+
 **Recommendation fingerprints** are stable identifiers like `performance-font-display`. Each recommendation carries a `finding_fingerprints[]` array (e.g. `['lh:font-display']`) that maps individual findings to their parent recommendation.
 
 **Finding fingerprint format:** `${source}:${auditId}` — e.g. `lh:font-display`

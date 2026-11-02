@@ -18,7 +18,7 @@ function detectItemType(checkId, auditId) {
     id.includes('render-blocking') ||
     id.includes('unused-javascript') ||
     id.includes('unused-css') ||
-    id.includes('resource')
+    id.includes('resource') || id.includes('dependency-tree') || id.includes('request-chains')
   ) return 'resource';
   return 'element';
 }
@@ -41,7 +41,7 @@ function shortUrl(url) {
 //   checkId        — a11y analyzer check id (e.g. "images_missing_alt")
 //   auditId        — Lighthouse audit id (e.g. "image-alt")
 //   onFixElement   — optional (item) => void; shows "Ask about this" per item
-export default function AffectedElements({ items, totalDetected, checkId, auditId, onFixElement }) {
+export default function AffectedElements({ items, totalDetected, evidenceLimitations, checkId, auditId, onFixElement }) {
   const [expanded, setExpanded] = useState(false);
   if (!items?.length) return null;
 
@@ -101,9 +101,11 @@ export default function AffectedElements({ items, totalDetected, checkId, auditI
       {/* Truncation notice — scanner capped the list */}
       {detectedCount > capturedCount && (
         <p style={{ fontSize: 11, color: '#83899c', margin: '5px 0 0', lineHeight: 1.5 }}>
-          Showing {capturedCount} of {detectedCount} detected. Run a re-scan to capture the full list.
+          Showing {capturedCount} of {detectedCount} detected. This evidence list was capped; a rescan may still return a partial list.
         </p>
       )}
+
+      {evidenceLimitations && <p style={{ fontSize: 11, color: '#83899c' }}>{evidenceLimitations}</p>}
 
       {/* Contextual guidance for images */}
       {isImage && (
@@ -130,7 +132,7 @@ function ItemRow({ item, itemType, onFix }) {
   const rawFilename = item.url
     ? item.url.split('/').pop().split('?')[0] || item.url
     : null;
-  const label = item.label || rawFilename || item.selector || 'Unknown element';
+  const label = item.label || (item.requestId ? item.url : rawFilename) || item.selector || 'Unknown element';
   const hasUrl = item.url && !item.url.startsWith('data:');
   // Show URL path when the label is already the filename (avoid repeating it)
   const showUrlLine = hasUrl && label !== rawFilename;
@@ -174,6 +176,11 @@ function ItemRow({ item, itemType, onFix }) {
               {wastedMs >= 1000 ? `${(wastedMs / 1000).toFixed(1)}s` : `${wastedMs}ms`} wasted
             </div>
           )}
+
+          {item.parentUrl && <div style={{ fontSize: 11, color: '#83899c', wordBreak: 'break-all' }}>Requested after: {item.parentUrl}</div>}
+          {item.chainDurationMs != null && <div style={{ fontSize: 11, color: '#83899c' }}>Path latency: {item.chainDurationMs} ms</div>}
+          {item.requestDurationMs != null && <div style={{ fontSize: 11, color: '#83899c' }}>Request duration: {item.requestDurationMs} ms</div>}
+          {item.transferSize != null && <div style={{ fontSize: 11, color: '#83899c' }}>Transferred: {item.transferSize} bytes</div>}
 
           {/* HTML snippet toggle */}
           {hasSnippet && (
