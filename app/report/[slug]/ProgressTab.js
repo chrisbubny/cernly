@@ -14,7 +14,7 @@
 
 import React, { useState } from 'react';
 import Link from 'next/link';
-import { compareScans } from '@/lib/comparison';
+import { compareScans, selectComparisonPair } from '@/lib/comparison';
 
 // ─── Shared micro-components ────────────────────────────────────────────────
 
@@ -1005,8 +1005,7 @@ export default function ProgressTab({
   onRescan, onSwitchTab, fromRescan, verifyFp,
 }) {
   const scans         = Array.isArray(comparisonScans) ? comparisonScans : [];
-  const currScan      = scans[0] || null;
-  const prevScan      = scans[selectedPrevIdx] || null;
+  const { current: currScan, previous: prevScan } = selectComparisonPair(scans, report?.id, selectedPrevIdx);
   const hasMultiScans = scans.length >= 2;
 
   const enrichedCurr = currScan && report

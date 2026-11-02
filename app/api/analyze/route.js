@@ -145,12 +145,19 @@ export async function POST(request) {
     performance:   lh.status === 'rejected'
       ? { status: 'failed', score: null, error: { code: 'LIGHTHOUSE_ERROR', message: lh.reason?.message || 'Lighthouse failed to run.', retryable: true }, attemptedAt: now }
       : lhData
-        ? { status: 'completed', score: lhData.performance ?? null, attemptedAt: now }
+        ? { status: lhData.performance != null ? 'completed' : 'unavailable', score: lhData.performance ?? null, attemptedAt: now }
         : { status: 'failed', score: null, error: { code: 'NULL_RESULT', message: 'Lighthouse returned no data.', retryable: true }, attemptedAt: now },
     seo:           classifyResult(seo,  v => v.score ?? null),
     security:      classifyResult(ssl,  v => v.score ?? null),
     accessibility: classifyResult(a11y, v => v.score ?? lhData?.accessibility ?? null),
   };
+
+  // Per-check coverage lives in the existing scores.auditStatuses JSONB.
+  // Older reports without it remain readable, but absence alone cannot verify a fix.
+  auditStatuses.performance.findingResults = lhData?.auditResults || {};
+  auditStatuses.seo.findingResults = seoData?.auditResults || {};
+  auditStatuses.security.findingResults = sslData?.auditResults || {};
+  auditStatuses.accessibility.findingResults = a11yData?.auditResults || {};
 
   // Compute scores — normalize to finite integers in [0,100] or null.
   // auditStatuses is stored separately; scores contains only numeric values.

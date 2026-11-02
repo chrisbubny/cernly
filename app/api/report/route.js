@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { auth } from '@clerk/nextjs/server';
 import { getReport, getReportBySlug, getRecommendationsByReport } from '@/lib/store';
 import { isValidPaidStripeSession } from '@/lib/stripe-session';
+import { canReadReport } from '@/lib/report-access';
 
 // GET /api/report?slug=xxx  (preferred — public UUID)
 // GET /api/report?id=xxx    (legacy integer ID — kept for backward compat)
@@ -35,7 +36,7 @@ export async function GET(request) {
     isStripeSession = await isValidPaidStripeSession(sessionId, report.slug, report.id);
   }
 
-  if (!isOwner && !report.isPublic && !isStripeSession) {
+  if (!canReadReport(report, viewerUserId) && !isStripeSession) {
     return NextResponse.json({ error: 'This report is private.' }, { status: 403 });
   }
 

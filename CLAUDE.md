@@ -179,8 +179,19 @@ See `lib/store.js` for the complete exported API.
 Stage 2 (`runAssessment`) runs synchronously and adds ~4–6 s to user-visible response time (total ~25–30 s, within Next.js serverless budget). It is not a background/async task.
 
 **Report access:** `GET /api/report?slug=xxx` (`app/api/report/route.js`)
-- Gate: owner OR `isPublic` OR active Stripe session
+- Gate: owner OR `isPublic` OR a validated paid Stripe checkout session
 - Returns: `{ ...report, recommendations, isOwner }`
+
+**Phase 1 access and verification contract:**
+- Ask, Guided Fix, and Vision require sign-in and enforce the same owner/public-sharing policy through `lib/report-access.js`, before recommendation/cache access, AI calls, or annotation writes. Public report GET remains available anonymously; authenticated public-report viewers may use the AI endpoints. The validated checkout exception remains limited to report GET.
+- Annotation writes recheck ownership/public sharing atomically, so revoking sharing during generation prevents persistence and disclosure of the new annotations.
+- `/api/vision-debug` is disabled (404), with no report lookup or external calls.
+- Each analyzer records `auditResults`; `/api/analyze` stores these as `auditStatuses[category].findingResults` in the existing scores JSONB. No schema migration is required.
+- A missing finding requires its own explicit passing check in a completed source analyzer to be considered likely resolved. Missing/failed/manual/errored coverage is unable to verify. Lighthouse findings use Lighthouse check evidence, not HTML accessibility coverage.
+- Canonical finding IDs survive comparison history; ordinal duplicate IDs do not represent independently resolved audit types.
+- Unknown finding/recommendation targets never default to resolved. The verify endpoint requires a newer scan and maps targets through `lib/verification.js`.
+- Historical scans without per-check coverage remain readable and can show still-detected findings, but cannot prove resolution by absence. Run a new scan to obtain verification evidence. Previously persisted verification results are not retroactively recomputed.
+- Run `npm run test:phase1` for executable tests of the real handlers/helpers/analyzers/mappers. Node's experimental module mocks replace external I/O only. Validated locally with Node 22.23.4 (the production Node 22 major) and Node 25.2.1; no live database or AI calls are made by this command.
 
 **Recommendation fingerprints** are stable identifiers like `performance-font-display`. Each recommendation carries a `finding_fingerprints[]` array (e.g. `['lh:font-display']`) that maps individual findings to their parent recommendation.
 
@@ -246,7 +257,7 @@ const MODEL_PREFERENCE = [
 
 If context retrieval fails:
 - The failure must be logged (verified: `console.error` at the catch block in `route.js`)
-- The current implementation continues with empty context, which may produce a generic-sounding answer
+- Report lookup failures fail closed before AI generation; context assembly errors return an unavailable response. A failed recommendation lookup still permits report-only context (remaining stabilization work).
 
 **Engineering requirement for future changes:** When `reportId` is present and context retrieval fails, the response must either:
 1. Retry or recover the context, or
