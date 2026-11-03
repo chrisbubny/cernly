@@ -1795,7 +1795,7 @@ export default function ReportClient({ isPro, userName, userAvatar }) {
       : ['What should I fix first?', 'How do I improve my LCP score?', 'What SEO issues hurt me most?'];
 
     return (
-      <div style={{ maxWidth: 860, margin: '0 auto' }}>
+      <div style={{ maxWidth: 1300, margin: '0 auto' }}>
         {/* ── 1. Verdict headline (open editorial section, no box) ── */}
         {(hasAssessment || topRec) && (
           <div style={{ padding: '4px 0 20px' }}>
@@ -1835,12 +1835,24 @@ export default function ReportClient({ isPro, userName, userAvatar }) {
               fontWeight: 800, color: '#151621', margin: '0 0 10px' }}>
               {headline}
             </h2>
-            {/* Summary body */}
-            {summaryText && (
-              <p style={{ fontSize: 14, lineHeight: 1.75, color: '#636b80', margin: '0 0 4px', maxWidth: 640 }}>
-                {summaryText}
-              </p>
-            )}
+            {/* Summary body — first sentence primary, remaining as supporting detail */}
+            {summaryText && (() => {
+              const sentences = summaryText.match(/[^.!?]+[.!?]+/g) || [summaryText];
+              const primary = sentences[0]?.trim() || summaryText;
+              const detail = sentences.slice(1).join(' ').trim();
+              return (
+                <>
+                  <p style={{ fontSize: 14, lineHeight: 1.75, color: '#636b80', margin: '0 0 4px', maxWidth: 640 }}>
+                    {primary}
+                  </p>
+                  {detail && (
+                    <p style={{ fontSize: 12, lineHeight: 1.65, color: '#a0a8bc', margin: '0 0 4px', maxWidth: 600 }}>
+                      {detail}
+                    </p>
+                  )}
+                </>
+              );
+            })()}
             {confidenceNote && (
               <div style={{ marginTop: 12, background: '#fffbf0', border: '1px solid #fde68a',
                 borderRadius: 8, padding: '8px 12px', fontSize: 11, color: '#92400e', lineHeight: 1.5 }}>
@@ -1863,35 +1875,99 @@ export default function ReportClient({ isPro, userName, userAvatar }) {
           </div>
         )}
 
-        {/* ── 2. Next Best Step (dark gradient) + compact Progress panel ── */}
+        {/* ── 2. Next Best Step + Progress — same grid as lower section ── */}
         {displayRec && (
-          <div style={{ display: 'flex', gap: 12, marginBottom: 20, alignItems: 'flex-start', flexWrap: 'wrap' }}>
+          <div className="ov-top-grid" style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) minmax(280px,340px)', gap: 20, marginBottom: 20, alignItems: 'stretch' }}>
+
             {/* Next Best Step dark card */}
             <div style={{ background: 'linear-gradient(145deg,#16102b,#0f1f3d)',
-              borderRadius: 16, padding: '22px 24px', flex: '1 1 320px', maxWidth: 520,
-              boxShadow: '0 8px 32px rgba(121,72,246,.22)' }}>
+              borderRadius: 16, padding: '24px 26px', boxShadow: '0 8px 32px rgba(121,72,246,.22)',
+              display: 'flex', flexDirection: 'column' }}>
               <div style={{ fontSize: 9, fontWeight: 900, letterSpacing: '.12em',
                 textTransform: 'uppercase', color: '#a78bfa', marginBottom: 10 }}>
                 Next best step
               </div>
+              {displayRec.category && (
+                <span style={{ fontSize: 10, fontWeight: 700, color: '#3687fa',
+                  background: 'rgba(54,135,250,.15)', borderRadius: 5, padding: '2px 8px',
+                  display: 'inline-block', marginBottom: 10, alignSelf: 'flex-start',
+                  textTransform: 'capitalize' }}>
+                  {displayRec.category}
+                </span>
+              )}
               <p style={{ fontSize: 15, fontWeight: 700, color: '#fff',
-                margin: '0 0 6px', lineHeight: 1.35 }}>
+                margin: '0 0 10px', lineHeight: 1.35 }}>
                 {displayRec.title}
               </p>
-              {(displayRec.what_we_found || displayRec.why_it_matters || displayRec.explanation) && (
-                <p style={{ fontSize: 12, color: 'rgba(255,255,255,.5)',
+              {/* Why it matters / impact explanation */}
+              {(displayRec.why_it_matters || displayRec.what_we_found || displayRec.explanation) && (
+                <p style={{ fontSize: 12, color: 'rgba(255,255,255,.65)',
                   margin: '0 0 14px', lineHeight: 1.65 }}>
-                  {(displayRec.what_we_found || displayRec.why_it_matters || displayRec.explanation)?.slice(0, 120)}
-                  {((displayRec.what_we_found || displayRec.why_it_matters || displayRec.explanation) || '').length > 120 ? '…' : ''}
+                  {displayRec.why_it_matters || displayRec.what_we_found || displayRec.explanation}
                 </p>
               )}
+              {/* Evidence block — only when both fields available */}
+              {displayRec.why_it_matters && displayRec.what_we_found && (
+                <div style={{ background: 'rgba(255,255,255,.06)', borderRadius: 9,
+                  padding: '10px 13px', marginBottom: 14 }}>
+                  <div style={{ fontSize: 9, fontWeight: 800, letterSpacing: '.1em',
+                    color: '#a78bfa', textTransform: 'uppercase', marginBottom: 4 }}>What we found</div>
+                  <p style={{ fontSize: 11, color: 'rgba(255,255,255,.5)', margin: 0, lineHeight: 1.55 }}>
+                    {displayRec.what_we_found.length > 180
+                      ? displayRec.what_we_found.slice(0, 180) + '…'
+                      : displayRec.what_we_found}
+                  </p>
+                </div>
+              )}
+              {/* First action */}
+              {Array.isArray(displayRec.actions) && displayRec.actions[0] && (
+                <div style={{ display: 'flex', gap: 9, alignItems: 'flex-start', marginBottom: 14 }}>
+                  <div style={{ width: 18, height: 18, borderRadius: '50%',
+                    background: 'rgba(138,70,248,.35)', border: '1px solid rgba(138,70,248,.5)',
+                    display: 'grid', placeItems: 'center', flexShrink: 0, marginTop: 1 }}>
+                    <span style={{ color: '#c4a9ff', fontSize: 9, fontWeight: 900 }}>1</span>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 9, fontWeight: 800, color: '#a78bfa',
+                      textTransform: 'uppercase', letterSpacing: '.08em', marginBottom: 3 }}>
+                      First action
+                    </div>
+                    <p style={{ fontSize: 12, color: 'rgba(255,255,255,.6)', margin: 0, lineHeight: 1.5 }}>
+                      {(() => {
+                        const a = displayRec.actions[0];
+                        const t = a.title || '';
+                        // For non-enriched recs, title is "Fix: [message]" — prefer the actual guidance in detail
+                        return (t && !t.startsWith('Fix: ')) ? t : (a.detail || t || (typeof a === 'string' ? a : ''));
+                      })()}
+                    </p>
+                  </div>
+                </div>
+              )}
+              {/* Savings / impact metadata from supporting findings */}
+              {(() => {
+                const sf = Array.isArray(displayRec.supporting_findings) ? displayRec.supporting_findings : [];
+                const sv = sf.find(f => f.displayValue && /saving|ms\b|kb\b|\bs\b/i.test(f.displayValue));
+                return sv ? (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 14 }}>
+                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#19b987"
+                      strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
+                    </svg>
+                    <span style={{ fontSize: 11, color: '#19b987', fontWeight: 700 }}>
+                      {sv.displayValue}
+                    </span>
+                  </div>
+                ) : null;
+              })()}
+              {/* CTA */}
               <button onClick={() => setGuidedFixRec(displayRec)}
                 style={{ display: 'inline-flex', alignItems: 'center', gap: 7,
                   background: 'linear-gradient(135deg,#8a46f8,#3687fa)', color: '#fff',
                   border: 0, borderRadius: 9, padding: '10px 18px', fontSize: 13,
                   fontWeight: 800, cursor: 'pointer', fontFamily: 'inherit',
-                  boxShadow: '0 4px 18px #7948f640', letterSpacing: '-.01em' }}>
-                Start guided fix
+                  boxShadow: '0 4px 18px #7948f640', letterSpacing: '-.01em',
+                  marginTop: 'auto', alignSelf: 'flex-start' }}>
+                Guide me through this fix
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                   strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M5 12h14M12 5l7 7-7 7"/>
@@ -1899,54 +1975,96 @@ export default function ReportClient({ isPro, userName, userAvatar }) {
               </button>
             </div>
 
-            {/* Compact progress panel — only when there's something to show */}
-            {hasProgress && (
-              <div style={{ background: '#fff', border: '1px solid #e9eaf2', borderRadius: 16,
-                padding: '16px 18px', minWidth: 160, boxShadow: '0 2px 8px #1b1d3205' }}>
-                <div style={{ fontSize: 9, fontWeight: 900, letterSpacing: '.1em',
-                  color: '#83899c', textTransform: 'uppercase', marginBottom: 12 }}>
-                  Your progress
-                </div>
-                {progressConfirmed > 0 && (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-                    <div style={{ width: 7, height: 7, borderRadius: '50%', background: '#19b987', flexShrink: 0 }}/>
-                    <div>
-                      <div style={{ fontSize: 18, fontWeight: 800, color: '#151621', lineHeight: 1 }}>{progressConfirmed}</div>
-                      <div style={{ fontSize: 10, color: '#83899c', marginTop: 1 }}>Fixes confirmed</div>
-                    </div>
-                  </div>
-                )}
-                {progressReadyVerify > 0 && (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-                    <div style={{ width: 7, height: 7, borderRadius: '50%', background: '#3687fa', flexShrink: 0 }}/>
-                    <div>
-                      <div style={{ fontSize: 18, fontWeight: 800, color: '#151621', lineHeight: 1 }}>{progressReadyVerify}</div>
-                      <div style={{ fontSize: 10, color: '#83899c', marginTop: 1 }}>Ready to verify</div>
-                    </div>
-                  </div>
-                )}
-                {progressInProgress > 0 && (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <div style={{ width: 7, height: 7, borderRadius: '50%', background: '#efa642', flexShrink: 0 }}/>
-                    <div>
-                      <div style={{ fontSize: 18, fontWeight: 800, color: '#151621', lineHeight: 1 }}>{progressInProgress}</div>
-                      <div style={{ fontSize: 10, color: '#83899c', marginTop: 1 }}>In progress</div>
-                    </div>
-                  </div>
-                )}
-                <button onClick={() => setActiveTab('progress')}
-                  style={{ marginTop: 14, width: '100%', background: '#f4f5fb', border: 'none',
-                    borderRadius: 8, padding: '7px 10px', fontSize: 11, fontWeight: 700,
-                    color: '#7948f6', cursor: 'pointer', fontFamily: 'inherit' }}>
-                  View progress →
-                </button>
+            {/* Progress panel — always rendered, stretches to match NBS height */}
+            <div style={{ background: '#fff', border: '1px solid #e9eaf2', borderRadius: 16,
+              padding: '22px 20px', boxShadow: '0 2px 8px #1b1d3205',
+              display: 'flex', flexDirection: 'column' }}>
+              <div style={{ fontSize: 9, fontWeight: 900, letterSpacing: '.1em',
+                color: '#83899c', textTransform: 'uppercase', marginBottom: 16 }}>
+                Your progress
               </div>
-            )}
+              {hasProgress ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 0, flex: 1 }}>
+                  {progressConfirmed > 0 && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 12,
+                      padding: '12px 0', borderBottom: (progressReadyVerify > 0 || progressInProgress > 0) ? '1px solid #f0f1f8' : 'none' }}>
+                      <div style={{ width: 36, height: 36, borderRadius: 10, background: '#edf9f4',
+                        display: 'grid', placeItems: 'center', flexShrink: 0 }}>
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
+                          stroke="#16a34a" strokeWidth="2.5" strokeLinecap="round">
+                          <path d="m5 12 4 4 10-10"/>
+                        </svg>
+                      </div>
+                      <div>
+                        <div style={{ fontSize: 22, fontWeight: 800, color: '#151621', lineHeight: 1 }}>{progressConfirmed}</div>
+                        <div style={{ fontSize: 11, color: '#83899c', marginTop: 2 }}>Scan-confirmed fixes</div>
+                      </div>
+                    </div>
+                  )}
+                  {progressReadyVerify > 0 && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 12,
+                      padding: '12px 0', borderBottom: progressInProgress > 0 ? '1px solid #f0f1f8' : 'none' }}>
+                      <div style={{ width: 36, height: 36, borderRadius: 10, background: '#eff6ff',
+                        display: 'grid', placeItems: 'center', flexShrink: 0 }}>
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
+                          stroke="#3687fa" strokeWidth="2.5" strokeLinecap="round">
+                          <path d="M9 12l2 2 4-4"/><path d="M12 2a10 10 0 1 0 0 20A10 10 0 0 0 12 2z"/>
+                        </svg>
+                      </div>
+                      <div>
+                        <div style={{ fontSize: 22, fontWeight: 800, color: '#151621', lineHeight: 1 }}>{progressReadyVerify}</div>
+                        <div style={{ fontSize: 11, color: '#83899c', marginTop: 2 }}>Ready to verify</div>
+                      </div>
+                    </div>
+                  )}
+                  {progressInProgress > 0 && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 0' }}>
+                      <div style={{ width: 36, height: 36, borderRadius: 10, background: '#fffbf0',
+                        display: 'grid', placeItems: 'center', flexShrink: 0 }}>
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
+                          stroke="#efa642" strokeWidth="2.5" strokeLinecap="round">
+                          <circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>
+                        </svg>
+                      </div>
+                      <div>
+                        <div style={{ fontSize: 22, fontWeight: 800, color: '#151621', lineHeight: 1 }}>{progressInProgress}</div>
+                        <div style={{ fontSize: 11, color: '#83899c', marginTop: 2 }}>In progress</div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div style={{ flex: 1, display: 'flex', flexDirection: 'column',
+                  alignItems: 'center', justifyContent: 'center',
+                  textAlign: 'center', padding: '8px 0' }}>
+                  <div style={{ width: 44, height: 44, borderRadius: 12, background: '#f4f5fb',
+                    display: 'grid', placeItems: 'center', marginBottom: 12 }}>
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none"
+                      stroke="#b0b4c8" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>
+                    </svg>
+                  </div>
+                  <p style={{ fontSize: 12, color: '#83899c', margin: '0 0 4px', fontWeight: 600 }}>
+                    No fixes tracked yet
+                  </p>
+                  <p style={{ fontSize: 11, color: '#b0b4c8', margin: 0, lineHeight: 1.5 }}>
+                    Use Guided Fix to track your progress on each recommendation.
+                  </p>
+                </div>
+              )}
+              <button onClick={() => setActiveTab('progress')}
+                style={{ marginTop: 'auto', paddingTop: 14, width: '100%', background: '#f4f5fb',
+                  border: 'none', borderRadius: 10, padding: '9px 10px', fontSize: 11,
+                  fontWeight: 700, color: '#7948f6', cursor: 'pointer', fontFamily: 'inherit' }}>
+                View full progress →
+              </button>
+            </div>
+
           </div>
         )}
 
         {/* ── 3. Lower two-column section ── */}
-        <div className="ov-lower-grid" style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) minmax(280px,340px)', gap: 14, alignItems: 'start' }}>
+        <div className="ov-lower-grid" style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) minmax(280px,340px)', gap: 20, alignItems: 'start' }}>
 
           {/* ── Primary column (left) ── */}
           <div style={{ minWidth: 0 }}>
@@ -2118,7 +2236,8 @@ export default function ReportClient({ isPro, userName, userAvatar }) {
 
         {/* ── Responsive: stack columns on narrow viewports ── */}
         <style>{`
-          @media (max-width: 680px) {
+          @media (max-width: 860px) {
+            .ov-top-grid { grid-template-columns: 1fr !important }
             .ov-lower-grid { grid-template-columns: 1fr !important }
             .ov-secondary { order: -1 }
           }
