@@ -1795,16 +1795,15 @@ export default function ReportClient({ isPro, userName, userAvatar }) {
       : ['What should I fix first?', 'How do I improve my LCP score?', 'What SEO issues hurt me most?'];
 
     return (
-      <div>
-        {/* ── 1. Verdict headline (light surface, above dark card) ── */}
+      <div style={{ maxWidth: 860, margin: '0 auto' }}>
+        {/* ── 1. Verdict headline (open editorial section, no box) ── */}
         {(hasAssessment || topRec) && (
-          <div style={{ background: '#fff', border: '1px solid #e9eaf2', borderRadius: 16,
-            padding: '20px 22px', marginBottom: 14, boxShadow: '0 2px 8px #1b1d3205' }}>
+          <div style={{ padding: '4px 0 20px' }}>
             {/* Partial-scan warning */}
             {hasAssessment && assessment.coverage?.audits_failed?.length > 0 && (
               <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start',
                 background: '#fffbf0', border: '1px solid #fde68a', borderRadius: 9,
-                padding: '9px 12px', marginBottom: 14 }}>
+                padding: '9px 12px', marginBottom: 16 }}>
                 <svg width="13" height="13" viewBox="0 0 24 24" {...sa} stroke="#efa642" style={{ flexShrink: 0, marginTop: 1 }}>
                   <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
                   <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
@@ -1817,7 +1816,7 @@ export default function ReportClient({ isPro, userName, userAvatar }) {
               </div>
             )}
             {/* AI label */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 14 }}>
               <div style={{ width: 22, height: 22, borderRadius: 6,
                 background: 'linear-gradient(135deg,#8a46f8,#3687fa)',
                 display: 'grid', placeItems: 'center', flexShrink: 0 }}>
@@ -1830,20 +1829,20 @@ export default function ReportClient({ isPro, userName, userAvatar }) {
               </span>
               <span style={{ fontSize: 10, color: '#b0b4c8', marginLeft: 2 }}>AI-generated · based on this scan</span>
             </div>
-            {/* Headline */}
-            <h3 style={{ fontFamily: 'var(--font-manrope, Manrope, sans-serif)',
-              fontSize: 19, lineHeight: 1.35, letterSpacing: '-.03em',
-              fontWeight: 800, color: '#151621', margin: '0 0 8px' }}>
+            {/* Headline — editorial, unboxed */}
+            <h2 style={{ fontFamily: 'var(--font-manrope, Manrope, sans-serif)',
+              fontSize: 'clamp(22px, 2.2vw, 28px)', lineHeight: 1.25, letterSpacing: '-.04em',
+              fontWeight: 800, color: '#151621', margin: '0 0 10px' }}>
               {headline}
-            </h3>
+            </h2>
             {/* Summary body */}
             {summaryText && (
-              <p style={{ fontSize: 13, lineHeight: 1.8, color: '#636b80', margin: '0 0 4px' }}>
+              <p style={{ fontSize: 14, lineHeight: 1.75, color: '#636b80', margin: '0 0 4px', maxWidth: 640 }}>
                 {summaryText}
               </p>
             )}
             {confidenceNote && (
-              <div style={{ marginTop: 10, background: '#fffbf0', border: '1px solid #fde68a',
+              <div style={{ marginTop: 12, background: '#fffbf0', border: '1px solid #fde68a',
                 borderRadius: 8, padding: '8px 12px', fontSize: 11, color: '#92400e', lineHeight: 1.5 }}>
                 <strong>Note:</strong> {confidenceNote}
               </div>
@@ -1866,11 +1865,10 @@ export default function ReportClient({ isPro, userName, userAvatar }) {
 
         {/* ── 2. Next Best Step (dark gradient) + compact Progress panel ── */}
         {displayRec && (
-          <div style={{ display: 'grid', gridTemplateColumns: hasProgress ? '1fr auto' : '1fr',
-            gap: 12, marginBottom: 14, alignItems: 'start' }}>
+          <div style={{ display: 'flex', gap: 12, marginBottom: 20, alignItems: 'flex-start', flexWrap: 'wrap' }}>
             {/* Next Best Step dark card */}
             <div style={{ background: 'linear-gradient(145deg,#16102b,#0f1f3d)',
-              borderRadius: 16, padding: '18px 20px',
+              borderRadius: 16, padding: '22px 24px', flex: '1 1 320px', maxWidth: 520,
               boxShadow: '0 8px 32px rgba(121,72,246,.22)' }}>
               <div style={{ fontSize: 9, fontWeight: 900, letterSpacing: '.12em',
                 textTransform: 'uppercase', color: '#a78bfa', marginBottom: 10 }}>
@@ -1947,23 +1945,10 @@ export default function ReportClient({ isPro, userName, userAvatar }) {
           </div>
         )}
 
-        {/* ── 3. Score tiles row ── */}
-        {report?.scores && (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(120px,1fr))',
-            gap: 10, marginBottom: 16 }}>
-            {['performance','seo','security','accessibility'].map(k => {
-              const v = report.scores[k];
-              if (v == null) return null;
-              const labels = { performance: 'Performance', seo: 'SEO', security: 'Security', accessibility: 'Accessibility' };
-              return <ScoreTile key={k} label={labels[k]} value={v} onClick={() => setTileModal(k)} />;
-            })}
-          </div>
-        )}
+        {/* ── 3. Lower two-column section ── */}
+        <div className="ov-lower-grid" style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) minmax(280px,340px)', gap: 14, alignItems: 'start' }}>
 
-        {/* ── 4. Lower two-column section ── */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 258px', gap: 14, alignItems: 'start' }}>
-
-          {/* ── Primary column (left, ~65%) ── */}
+          {/* ── Primary column (left) ── */}
           <div style={{ minWidth: 0 }}>
 
             {/* What Changed — only when comparison data exists */}
@@ -1975,7 +1960,7 @@ export default function ReportClient({ isPro, userName, userAvatar }) {
                     <path d="M12 22V12M12 12L8 16M12 12L16 16M12 2v4M4.93 4.93l2.83 2.83M19.07 4.93l-2.83 2.83"/>
                   </svg>
                   <span style={{ fontFamily: 'var(--font-manrope, Manrope, sans-serif)',
-                    fontWeight: 800, fontSize: 13, color: '#151621' }}>Since your last scan</span>
+                    fontWeight: 800, fontSize: 14, letterSpacing: '-.01em', color: '#151621' }}>Since your last scan</span>
                   <button onClick={() => setActiveTab('progress')}
                     style={{ marginLeft: 'auto', background: 'none', border: 'none',
                       fontSize: 11, color: '#7948f6', fontWeight: 700, cursor: 'pointer',
@@ -2010,7 +1995,7 @@ export default function ReportClient({ isPro, userName, userAvatar }) {
                     <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
                   </svg>
                   <span style={{ fontFamily: 'var(--font-manrope, Manrope, sans-serif)',
-                    fontWeight: 800, fontSize: 13, color: '#151621' }}>Key discoveries</span>
+                    fontWeight: 800, fontSize: 14, letterSpacing: '-.01em', color: '#151621' }}>Key discoveries</span>
                   {report.aiInsights && (
                     <span style={{ fontSize: 10, fontWeight: 700, color: '#7948f6',
                       background: '#f1edff', padding: '2px 8px', borderRadius: 5 }}>AI ANALYSIS</span>
@@ -2035,12 +2020,12 @@ export default function ReportClient({ isPro, userName, userAvatar }) {
 
           </div>
 
-          {/* ── Secondary column (right, 258px) ── */}
-          <div style={{ minWidth: 0 }}>
+          {/* ── Secondary column (right) ── */}
+          <div className="ov-secondary" style={{ minWidth: 0 }}>
 
             {/* Ask Cernly compact advisor card */}
             <div style={{ background: '#fff', border: '1px solid #e9eaf2', borderRadius: 14,
-              padding: '16px 16px 14px', marginBottom: 12, boxShadow: '0 2px 8px #1b1d3205' }}>
+              padding: '20px 20px 16px', marginBottom: 12, boxShadow: '0 2px 8px #1b1d3205' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 12 }}>
                 <div style={{ width: 26, height: 26, borderRadius: 8,
                   background: 'linear-gradient(135deg,#8a46f8,#3687fa)',
@@ -2050,7 +2035,7 @@ export default function ReportClient({ isPro, userName, userAvatar }) {
                   </svg>
                 </div>
                 <span style={{ fontFamily: 'var(--font-manrope, Manrope, sans-serif)',
-                  fontWeight: 800, fontSize: 13, color: '#151621' }}>Ask Cernly</span>
+                  fontWeight: 800, fontSize: 14, letterSpacing: '-.01em', color: '#151621' }}>Ask Cernly</span>
               </div>
               {/* Suggested question chips (stacked vertically in narrow col) */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: 5, marginBottom: 10 }}>
@@ -2102,13 +2087,13 @@ export default function ReportClient({ isPro, userName, userAvatar }) {
             {/* What's Working Well (strengths) */}
             {hasAssessment && assessment.strengths?.length > 0 && (
               <div style={{ background: '#fff', border: '1px solid #e9eaf2', borderRadius: 14,
-                padding: '16px 16px', boxShadow: '0 2px 8px #1b1d3205' }}>
+                padding: '20px 20px', boxShadow: '0 2px 8px #1b1d3205' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 12 }}>
                   <svg width="14" height="14" viewBox="0 0 24 24" {...sa} stroke="#19b987">
                     <path d="m5 12 4 4 10-10"/>
                   </svg>
                   <span style={{ fontFamily: 'var(--font-manrope, Manrope, sans-serif)',
-                    fontWeight: 800, fontSize: 13, color: '#151621' }}>What&apos;s working well</span>
+                    fontWeight: 800, fontSize: 14, letterSpacing: '-.01em', color: '#151621' }}>What&apos;s working well</span>
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                   {assessment.strengths.slice(0, 4).map((s, i) => (
