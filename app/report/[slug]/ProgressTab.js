@@ -5,7 +5,7 @@
  *
  * Receives all data and handlers as props from ReportClient; no internal
  * data fetching. Renders:
- *   1. Rescan Results banner (when fromRescan=true)
+ *   1. Rescan Results banner (when valid comparison data exists)
  *   2. Score trend chart (when ≥2 scans in scanHistory)
  *   3. Next recommended action (from comparison engine)
  *   4. Fix verification detail (from comparison engine)
@@ -470,8 +470,8 @@ function NextAction({ comparison, onSwitchTab }) {
 
 // ─── Comparison results banner (prominent after rescan) ──────────────────────
 
-function RescanBanner({ comparison, fromRescan }) {
-  if (!comparison?.isComparable || !fromRescan) return null;
+function RescanBanner({ comparison }) {
+  if (!comparison?.isComparable) return null;
 
   const recs     = comparison.recommendations;
   const findings = comparison.findings;
@@ -1002,7 +1002,7 @@ function ScanHistoryList({ scanHistory, slug, id }) {
 export default function ProgressTab({
   domain, slug, id, report,
   scanHistory, comparisonScans, selectedPrevIdx, setSelectedPrevIdx,
-  onRescan, onSwitchTab, fromRescan, verifyFp,
+  onRescan, onSwitchTab, verifyFp,
 }) {
   const scans         = Array.isArray(comparisonScans) ? comparisonScans : [];
   const { current: currScan, previous: prevScan } = selectComparisonPair(scans, report?.id, selectedPrevIdx);
@@ -1083,13 +1083,13 @@ export default function ProgressTab({
       {/* Multi-scan content */}
       {!showSingleScan && (
         <>
-          {/* Rescan results banner */}
-          {fromRescan && liveComparison && hasMultiScans && (
-            <RescanBanner comparison={liveComparison} fromRescan={fromRescan} />
+          {/* Rescan results banner — shown whenever valid comparison data exists */}
+          {liveComparison && hasMultiScans && (
+            <RescanBanner comparison={liveComparison} />
           )}
 
-          {/* Overview — when not arriving from rescan */}
-          {!fromRescan && (
+          {/* Overview — shown when no valid comparison data exists */}
+          {!(liveComparison && hasMultiScans) && (
             <OverviewSection
               comparison={liveComparison}
               comparisonScans={comparisonScans}

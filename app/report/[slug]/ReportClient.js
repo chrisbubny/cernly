@@ -2874,7 +2874,6 @@ export default function ReportClient({ isPro, userName, userAvatar }) {
                     setSelectedPrevIdx={setSelectedPrevIdx}
                     onRescan={handleRescan}
                     onSwitchTab={setActiveTab}
-                    fromRescan={new URLSearchParams(typeof window !== 'undefined' ? window.location.search : '').get('from') === 'rescan'}
                     verifyFp={typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('verify') : null}
                   />
                 )}
