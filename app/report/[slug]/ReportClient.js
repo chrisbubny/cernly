@@ -4,7 +4,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import Link from 'next/link';
 import { useParams, useSearchParams, useRouter } from 'next/navigation';
 import { useClerk } from '@clerk/nextjs';
-import { compareScans } from '@/lib/comparison';
+import { compareScans, selectComparisonPair } from '@/lib/comparison';
 import GuidedFix from './GuidedFix';
 import AffectedElements from './AffectedElements';
 import ProgressTab from './ProgressTab';
@@ -1717,281 +1717,366 @@ export default function ReportClient({ isPro, userName, userAvatar }) {
   `;
 
   /* ── Tab content ── */
-  const renderOverview = () => (
-    <div>
-      {/* Cernly's Take — structured interpretation of this specific scan */}
-      {(() => {
-        const recs = report.recommendations || [];
-        const topRec = recs[0] || null;
-        const assessment = report.assessment || null;
-        const assessmentStatus = report.assessmentStatus || null;
-        const hasAssessment = assessmentStatus === 'completed' && assessment;
+  const renderOverview = () => {
+    const recs = report.recommendations || [];
+    const topRec = recs[0] || null;
+    const assessment = report.assessment || null;
+    const assessmentStatus = report.assessmentStatus || null;
+    const hasAssessment = assessmentStatus === 'completed' && assessment;
 
-        // Suggested questions tailored to what we actually found
-        const suggestedQs = topRec
-          ? [
-              `How do I fix "${(topRec.title || '').slice(0, 40)}${topRec.title?.length > 40 ? '…' : ''}"?`,
-              'What should I prioritize first?',
-              'How long will these fixes take?',
-              'What else needs attention?',
-            ]
-          : ['What should I fix first?', 'How do I improve my LCP score?', 'What SEO issues hurt me most?', 'How do I fix my security headers?'];
+    // Top opportunity from assessment, linked to the actual saved recommendation
+    const topOpportunity = hasAssessment ? assessment.top_opportunity : null;
+    const linkedRec = topOpportunity?.recommendation_fingerprints?.length
+      ? recs.find(r => topOpportunity.recommendation_fingerprints.includes(r.fingerprint)) || topRec
+      : topRec;
+    const displayRec = hasAssessment ? linkedRec : topRec;
 
-        // Top opportunity from assessment, linked to the actual saved recommendation
-        const topOpportunity = hasAssessment ? assessment.top_opportunity : null;
-        const linkedRec = topOpportunity?.recommendation_fingerprints?.length
-          ? recs.find(r => topOpportunity.recommendation_fingerprints.includes(r.fingerprint)) || topRec
-          : topRec;
-        const displayRec = hasAssessment ? linkedRec : topRec;
-        const firstAction = displayRec?.actions?.[0] || null;
+    // Headline and summary
+    const headline = hasAssessment && assessment.headline
+      ? assessment.headline
+      : topRec
+        ? `Your biggest opportunity is: ${topRec.title.toLowerCase()}.`
+        : 'Your site has improvement opportunities.';
 
-        // Only show limitations when non-trivial
-        const limitations = hasAssessment && assessment.coverage?.limitations
-          && !assessment.coverage.limitations.match(/^no significant/i)
-          ? assessment.coverage.limitations : null;
+    const summaryText = hasAssessment && assessment.summary
+      ? assessment.summary
+      : topRec
+        ? (topRec.why_it_matters || topRec.what_we_found || topRec.explanation || null)
+        : assessmentStatus === 'failed'
+          ? 'Analysis failed for this scan. Rescan to generate a fresh assessment.'
+          : null;
 
-        // Low-confidence note
-        const confidenceNote = hasAssessment && assessment.confidence?.level === 'low'
-          ? assessment.confidence?.explanation : null;
+    // Low-confidence note
+    const confidenceNote = hasAssessment && assessment.confidence?.level === 'low'
+      ? assessment.confidence?.explanation : null;
 
-        // CTA buttons (shared between assessment and fallback paths)
-        // recFp: fingerprint of the top rec to pre-select (optional)
-        // rec:   full rec object — opens GuidedFix panel for all supported groups
-        const renderCTAs = (showActionPlan, recFp = null, rec = null) => (
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', marginBottom: 16 }}>
-            {showActionPlan && (
-              rec ? (
-                <button onClick={() => setGuidedFixRec(rec)}
-                  style={{ display: 'inline-flex', alignItems: 'center', gap: 7,
-                    background: 'linear-gradient(135deg,#8a46f8,#3687fa)', color: '#fff',
-                    border: 0, borderRadius: 9, padding: '10px 18px', fontSize: 13,
-                    fontWeight: 800, cursor: 'pointer', fontFamily: 'inherit',
-                    boxShadow: '0 4px 18px #7948f640', letterSpacing: '-.01em' }}>
-                  Guide me through this fix
-                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                    strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M5 12h14M12 5l7 7-7 7"/>
-                  </svg>
-                </button>
-              ) : (
-                <button onClick={() => { setActiveTab('action'); if (recFp) setHighlightedFp(recFp); }}
-                  style={{ display: 'inline-flex', alignItems: 'center', gap: 7,
-                    background: 'linear-gradient(135deg,#8a46f8,#3687fa)', color: '#fff',
-                    border: 0, borderRadius: 9, padding: '10px 18px', fontSize: 13,
-                    fontWeight: 800, cursor: 'pointer', fontFamily: 'inherit',
-                    boxShadow: '0 4px 18px #7948f640', letterSpacing: '-.01em' }}>
-                  See how to fix this
-                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                    strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M5 12h14M12 5l7 7-7 7"/>
-                  </svg>
-                </button>
-              )
+    // Progress counts from workItems
+    const workItemList = Object.values(workItems);
+    const progressConfirmed = workItemList.filter(w => w.verifiedStatus === 'likely_resolved').length;
+    const progressReadyVerify = workItemList.filter(w => w.userStatus === 'complete' && !w.verifiedStatus).length;
+    const progressInProgress = workItemList.filter(w => w.userStatus === 'in_progress').length;
+    const hasProgress = progressConfirmed > 0 || progressReadyVerify > 0 || progressInProgress > 0;
+
+    // Live comparison for What Changed section
+    const compScans = Array.isArray(comparisonScans) ? comparisonScans : [];
+    const { current: currScan, previous: prevScan } = selectComparisonPair(compScans, report?.id, selectedPrevIdx);
+    const enrichedCurr = currScan && report
+      ? { ...currScan, issues: report.issues || currScan.issues, auditStatuses: report.auditStatuses || currScan.auditStatuses || {}, recommendations: report.recommendations || currScan.recommendations }
+      : currScan;
+    let liveComparison = null;
+    if (enrichedCurr && prevScan) {
+      try { liveComparison = compareScans(prevScan, enrichedCurr); } catch { liveComparison = null; }
+    }
+    const hasMultiScans = compScans.length >= 2;
+    const hasComparison = liveComparison && hasMultiScans;
+
+    // Changed recommendations: derive display badges (never expose internal status values)
+    const changedRecs = hasComparison
+      ? (() => {
+          const changes = liveComparison?.recommendations || [];
+          return changes.slice(0, 4).map(c => {
+            let badge = 'New';
+            let badgeColor = '#7948f6'; let badgeBg = '#f1edff';
+            if (c.status === 'resolved' || c.status === 'likely_resolved') {
+              badge = 'Scan confirmed'; badgeColor = '#16a34a'; badgeBg = '#edf9f4';
+            } else if (c.status === 'still_detected' || c.status === 'worsened') {
+              badge = 'Needs rescan'; badgeColor = '#efa642'; badgeBg = '#fffbf0';
+            } else if (c.status === 'new' || c.status === 'appeared') {
+              badge = 'New'; badgeColor = '#7948f6'; badgeBg = '#f1edff';
+            }
+            return { title: c.title || c.fingerprint, badge, badgeColor, badgeBg };
+          });
+        })()
+      : [];
+
+    // Suggested questions for Ask Cernly
+    const suggestedQs = topRec
+      ? [
+          `How do I fix "${(topRec.title || '').slice(0, 38)}${(topRec.title || '').length > 38 ? '…' : ''}"?`,
+          'What should I prioritize first?',
+          'How long will these fixes take?',
+        ]
+      : ['What should I fix first?', 'How do I improve my LCP score?', 'What SEO issues hurt me most?'];
+
+    return (
+      <div>
+        {/* ── 1. Verdict headline (light surface, above dark card) ── */}
+        {(hasAssessment || topRec) && (
+          <div style={{ background: '#fff', border: '1px solid #e9eaf2', borderRadius: 16,
+            padding: '20px 22px', marginBottom: 14, boxShadow: '0 2px 8px #1b1d3205' }}>
+            {/* Partial-scan warning */}
+            {hasAssessment && assessment.coverage?.audits_failed?.length > 0 && (
+              <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start',
+                background: '#fffbf0', border: '1px solid #fde68a', borderRadius: 9,
+                padding: '9px 12px', marginBottom: 14 }}>
+                <svg width="13" height="13" viewBox="0 0 24 24" {...sa} stroke="#efa642" style={{ flexShrink: 0, marginTop: 1 }}>
+                  <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+                  <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+                </svg>
+                <span style={{ fontSize: 11, color: '#92400e', lineHeight: 1.5 }}>
+                  <strong>Partial scan — </strong>
+                  {assessment.coverage.audits_failed.map(k => k.charAt(0).toUpperCase() + k.slice(1)).join(' and ')}{' '}
+                  data unavailable.
+                </span>
+              </div>
+            )}
+            {/* AI label */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10 }}>
+              <div style={{ width: 22, height: 22, borderRadius: 6,
+                background: 'linear-gradient(135deg,#8a46f8,#3687fa)',
+                display: 'grid', placeItems: 'center', flexShrink: 0 }}>
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round">
+                  <path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z"/>
+                </svg>
+              </div>
+              <span style={{ fontSize: 10, fontWeight: 800, color: '#7948f6', letterSpacing: '.07em' }}>
+                CERNLY&apos;S TAKE
+              </span>
+              <span style={{ fontSize: 10, color: '#b0b4c8', marginLeft: 2 }}>AI-generated · based on this scan</span>
+            </div>
+            {/* Headline */}
+            <h3 style={{ fontFamily: 'var(--font-manrope, Manrope, sans-serif)',
+              fontSize: 19, lineHeight: 1.35, letterSpacing: '-.03em',
+              fontWeight: 800, color: '#151621', margin: '0 0 8px' }}>
+              {headline}
+            </h3>
+            {/* Summary body */}
+            {summaryText && (
+              <p style={{ fontSize: 13, lineHeight: 1.8, color: '#636b80', margin: '0 0 4px' }}>
+                {summaryText}
+              </p>
+            )}
+            {confidenceNote && (
+              <div style={{ marginTop: 10, background: '#fffbf0', border: '1px solid #fde68a',
+                borderRadius: 8, padding: '8px 12px', fontSize: 11, color: '#92400e', lineHeight: 1.5 }}>
+                <strong>Note:</strong> {confidenceNote}
+              </div>
+            )}
+            {/* No-issues state */}
+            {recs.length === 0 && hasAssessment && (
+              <div style={{ display: 'flex', gap: 7, alignItems: 'center',
+                background: '#edf9f4', border: '1px solid #bbf7d0',
+                borderRadius: 9, padding: '10px 14px', marginTop: 12 }}>
+                <svg width="13" height="13" viewBox="0 0 24 24" {...sa} stroke="#16a34a" strokeWidth="2.5">
+                  <path d="m5 12 4 4 10-10"/>
+                </svg>
+                <span style={{ fontSize: 13, color: '#15803d', fontWeight: 600 }}>
+                  Your site is in good shape — no critical improvements identified.
+                </span>
+              </div>
             )}
           </div>
-        );
+        )}
 
-        return (
-          <div style={{ background: 'linear-gradient(145deg,#16102b,#0f1f3d)',
-            borderRadius: 18, padding: '22px 22px 18px', marginBottom: 26,
-            boxShadow: '0 8px 32px rgba(121,72,246,.22)' }}>
-
-            {/* Header row */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
-              <div style={{ width: 34, height: 34, borderRadius: 10,
-                background: 'linear-gradient(135deg,#8a46f8,#3687fa)',
-                display: 'grid', placeItems: 'center', flexShrink: 0,
-                boxShadow: '0 3px 12px #7948f650' }}>
-                <span style={{ color: '#fff', fontSize: 15, lineHeight: 1 }}>✦</span>
+        {/* ── 2. Next Best Step (dark gradient) + compact Progress panel ── */}
+        {displayRec && (
+          <div style={{ display: 'grid', gridTemplateColumns: hasProgress ? '1fr auto' : '1fr',
+            gap: 12, marginBottom: 14, alignItems: 'start' }}>
+            {/* Next Best Step dark card */}
+            <div style={{ background: 'linear-gradient(145deg,#16102b,#0f1f3d)',
+              borderRadius: 16, padding: '18px 20px',
+              boxShadow: '0 8px 32px rgba(121,72,246,.22)' }}>
+              <div style={{ fontSize: 9, fontWeight: 900, letterSpacing: '.12em',
+                textTransform: 'uppercase', color: '#a78bfa', marginBottom: 10 }}>
+                Next best step
               </div>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontFamily: 'var(--font-manrope, Manrope, sans-serif)',
-                  fontWeight: 800, fontSize: 13, color: '#fff', letterSpacing: '.01em' }}>CERNLY&apos;S TAKE</div>
-                <div style={{ fontSize: 11, color: 'rgba(255,255,255,.45)' }}>AI-generated · based on this scan</div>
-              </div>
-              <button onClick={() => { setDrawerContext(null); setDrawerOpen(true); }}
-                style={{ border: '1.5px solid rgba(255,255,255,.18)', background: 'rgba(255,255,255,.08)',
-                  color: '#c5b4fa', borderRadius: 8, padding: '5px 13px', fontSize: 11, fontWeight: 700,
-                  cursor: 'pointer', fontFamily: 'inherit', display: 'flex', alignItems: 'center',
-                  gap: 5, whiteSpace: 'nowrap', flexShrink: 0 }}>
-                <span style={{ fontSize: 12 }}>✦</span> Ask Cernly
+              <p style={{ fontSize: 15, fontWeight: 700, color: '#fff',
+                margin: '0 0 6px', lineHeight: 1.35 }}>
+                {displayRec.title}
+              </p>
+              {(displayRec.what_we_found || displayRec.why_it_matters || displayRec.explanation) && (
+                <p style={{ fontSize: 12, color: 'rgba(255,255,255,.5)',
+                  margin: '0 0 14px', lineHeight: 1.65 }}>
+                  {(displayRec.what_we_found || displayRec.why_it_matters || displayRec.explanation)?.slice(0, 120)}
+                  {((displayRec.what_we_found || displayRec.why_it_matters || displayRec.explanation) || '').length > 120 ? '…' : ''}
+                </p>
+              )}
+              <button onClick={() => setGuidedFixRec(displayRec)}
+                style={{ display: 'inline-flex', alignItems: 'center', gap: 7,
+                  background: 'linear-gradient(135deg,#8a46f8,#3687fa)', color: '#fff',
+                  border: 0, borderRadius: 9, padding: '10px 18px', fontSize: 13,
+                  fontWeight: 800, cursor: 'pointer', fontFamily: 'inherit',
+                  boxShadow: '0 4px 18px #7948f640', letterSpacing: '-.01em' }}>
+                Start guided fix
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                  strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M5 12h14M12 5l7 7-7 7"/>
+                </svg>
               </button>
             </div>
 
-            {/* ── MAIN CONTENT — problem-led, CTA-focused ── */}
-            {(() => {
-              // Derive the best headline and body text
-              const headline = hasAssessment && assessment.headline
-                ? assessment.headline
-                : topRec
-                  ? `Your biggest opportunity is: ${topRec.title.toLowerCase()}.`
-                  : 'Your site has improvement opportunities.';
-
-              const summaryText = hasAssessment && assessment.summary
-                ? assessment.summary
-                : topRec
-                  ? (topRec.why_it_matters || topRec.what_we_found || topRec.explanation || null)
-                  : assessmentStatus === 'failed'
-                    ? 'Analysis failed for this scan. Rescan to generate a fresh assessment.'
-                    : null;
-
-              // The rec to link to — prefer assessment's linked rec, fall back to topRec
-              const ctaRec = hasAssessment ? displayRec : topRec;
-
-              // No-issues state
-              if (recs.length === 0 && hasAssessment) {
-                return (
-                  <div style={{ display: 'flex', gap: 7, alignItems: 'center',
-                    background: 'rgba(25,185,135,.12)', border: '1px solid rgba(25,185,135,.3)',
-                    borderRadius: 9, padding: '12px 14px', marginBottom: 16 }}>
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#3fe8b9"
-                      strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="m5 12 4 4 10-10"/>
-                    </svg>
-                    <span style={{ fontSize: 13, color: '#3fe8b9', fontWeight: 600 }}>
-                      Your site is in good shape — no critical improvements identified.
-                    </span>
+            {/* Compact progress panel — only when there's something to show */}
+            {hasProgress && (
+              <div style={{ background: '#fff', border: '1px solid #e9eaf2', borderRadius: 16,
+                padding: '16px 18px', minWidth: 160, boxShadow: '0 2px 8px #1b1d3205' }}>
+                <div style={{ fontSize: 9, fontWeight: 900, letterSpacing: '.1em',
+                  color: '#83899c', textTransform: 'uppercase', marginBottom: 12 }}>
+                  Your progress
+                </div>
+                {progressConfirmed > 0 && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                    <div style={{ width: 7, height: 7, borderRadius: '50%', background: '#19b987', flexShrink: 0 }}/>
+                    <div>
+                      <div style={{ fontSize: 18, fontWeight: 800, color: '#151621', lineHeight: 1 }}>{progressConfirmed}</div>
+                      <div style={{ fontSize: 10, color: '#83899c', marginTop: 1 }}>Fixes confirmed</div>
+                    </div>
                   </div>
-                );
-              }
+                )}
+                {progressReadyVerify > 0 && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                    <div style={{ width: 7, height: 7, borderRadius: '50%', background: '#3687fa', flexShrink: 0 }}/>
+                    <div>
+                      <div style={{ fontSize: 18, fontWeight: 800, color: '#151621', lineHeight: 1 }}>{progressReadyVerify}</div>
+                      <div style={{ fontSize: 10, color: '#83899c', marginTop: 1 }}>Ready to verify</div>
+                    </div>
+                  </div>
+                )}
+                {progressInProgress > 0 && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <div style={{ width: 7, height: 7, borderRadius: '50%', background: '#efa642', flexShrink: 0 }}/>
+                    <div>
+                      <div style={{ fontSize: 18, fontWeight: 800, color: '#151621', lineHeight: 1 }}>{progressInProgress}</div>
+                      <div style={{ fontSize: 10, color: '#83899c', marginTop: 1 }}>In progress</div>
+                    </div>
+                  </div>
+                )}
+                <button onClick={() => setActiveTab('progress')}
+                  style={{ marginTop: 14, width: '100%', background: '#f4f5fb', border: 'none',
+                    borderRadius: 8, padding: '7px 10px', fontSize: 11, fontWeight: 700,
+                    color: '#7948f6', cursor: 'pointer', fontFamily: 'inherit' }}>
+                  View progress →
+                </button>
+              </div>
+            )}
+          </div>
+        )}
 
-              return (
-                <>
-                  {/* Partial-scan warning */}
-                  {hasAssessment && assessment.coverage?.audits_failed?.length > 0 && (
-                    <div style={{ display: 'flex', gap: 9, alignItems: 'flex-start',
-                      background: 'rgba(239,166,66,.1)', border: '1px solid rgba(239,166,66,.2)',
-                      borderRadius: 9, padding: '9px 12px', marginBottom: 12 }}>
-                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#efa642"
-                        strokeWidth="2" strokeLinecap="round" style={{ flexShrink: 0, marginTop: 1 }}>
-                        <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
-                        <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
-                      </svg>
-                      <span style={{ fontSize: 11, color: '#fbbf6a', lineHeight: 1.5 }}>
-                        <strong>Partial scan — </strong>
-                        {assessment.coverage.audits_failed.map(k => k.charAt(0).toUpperCase() + k.slice(1)).join(' and ')}{' '}
-                        data unavailable. Conclusions about {assessment.coverage.audits_failed.length === 1 ? 'that area' : 'those areas'} are omitted.
+        {/* ── 3. Score tiles row ── */}
+        {report?.scores && (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(120px,1fr))',
+            gap: 10, marginBottom: 16 }}>
+            {['performance','seo','security','accessibility'].map(k => {
+              const v = report.scores[k];
+              if (v == null) return null;
+              const labels = { performance: 'Performance', seo: 'SEO', security: 'Security', accessibility: 'Accessibility' };
+              return <ScoreTile key={k} label={labels[k]} value={v} onClick={() => setTileModal(k)} />;
+            })}
+          </div>
+        )}
+
+        {/* ── 4. Lower two-column section ── */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 258px', gap: 14, alignItems: 'start' }}>
+
+          {/* ── Primary column (left, ~65%) ── */}
+          <div style={{ minWidth: 0 }}>
+
+            {/* What Changed — only when comparison data exists */}
+            {hasComparison && changedRecs.length > 0 && (
+              <div style={{ background: '#fff', border: '1px solid #e9eaf2', borderRadius: 14,
+                padding: '18px 20px', marginBottom: 14, boxShadow: '0 2px 8px #1b1d3205' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
+                  <svg width="14" height="14" viewBox="0 0 24 24" {...sa} stroke="#3687fa">
+                    <path d="M12 22V12M12 12L8 16M12 12L16 16M12 2v4M4.93 4.93l2.83 2.83M19.07 4.93l-2.83 2.83"/>
+                  </svg>
+                  <span style={{ fontFamily: 'var(--font-manrope, Manrope, sans-serif)',
+                    fontWeight: 800, fontSize: 13, color: '#151621' }}>Since your last scan</span>
+                  <button onClick={() => setActiveTab('progress')}
+                    style={{ marginLeft: 'auto', background: 'none', border: 'none',
+                      fontSize: 11, color: '#7948f6', fontWeight: 700, cursor: 'pointer',
+                      fontFamily: 'inherit', padding: 0 }}>
+                    Full report →
+                  </button>
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  {changedRecs.map((c, i) => (
+                    <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10,
+                      padding: '10px 12px', background: '#f9fafc', borderRadius: 10,
+                      border: '1px solid #f0f1f8' }}>
+                      <span style={{ fontSize: 12, fontWeight: 600, color: '#151621',
+                        flex: 1, minWidth: 0, lineHeight: 1.4 }}>{c.title}</span>
+                      <span style={{ fontSize: 10, fontWeight: 800, color: c.badgeColor,
+                        background: c.badgeBg, borderRadius: 5, padding: '3px 8px',
+                        whiteSpace: 'nowrap', flexShrink: 0 }}>
+                        {c.badge}
                       </span>
                     </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Key Discoveries */}
+            {Array.isArray(effectiveDiscoveries) && effectiveDiscoveries.length > 0 && (
+              <div style={{ background: '#fff', border: '1px solid #e9eaf2', borderRadius: 14,
+                padding: '18px 20px', boxShadow: '0 2px 8px #1b1d3205' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
+                  <svg width="14" height="14" viewBox="0 0 24 24" {...sa} stroke="#7948f6">
+                    <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
+                  </svg>
+                  <span style={{ fontFamily: 'var(--font-manrope, Manrope, sans-serif)',
+                    fontWeight: 800, fontSize: 13, color: '#151621' }}>Key discoveries</span>
+                  {report.aiInsights && (
+                    <span style={{ fontSize: 10, fontWeight: 700, color: '#7948f6',
+                      background: '#f1edff', padding: '2px 8px', borderRadius: 5 }}>AI ANALYSIS</span>
                   )}
+                  <span style={{ fontSize: 11, color: '#83899c', marginLeft: 'auto' }}>
+                    {effectiveDiscoveries.length} finding{effectiveDiscoveries.length !== 1 ? 's' : ''}
+                  </span>
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  {effectiveDiscoveries.slice(0, 3).map((d, i) => <DiscoveryCard key={i} d={d} index={i} />)}
+                </div>
+                {effectiveDiscoveries.length > 3 && (
+                  <button onClick={() => setActiveTab('findings')}
+                    style={{ border: '1px solid #e9eaf2', background: '#fff', color: '#7948f6',
+                      borderRadius: 10, padding: '10px 16px', width: '100%', marginTop: 8,
+                      fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
+                    View all {effectiveDiscoveries.length} findings →
+                  </button>
+                )}
+              </div>
+            )}
 
-                  {/* Site-specific headline */}
-                  <h3 style={{ fontFamily: 'var(--font-manrope, Manrope, sans-serif)',
-                    fontSize: 20, lineHeight: 1.3, letterSpacing: '-.03em',
-                    fontWeight: 800, color: '#fff', margin: '0 0 8px' }}>
-                    {headline}
-                  </h3>
+          </div>
 
-                  {/* Summary body */}
-                  {summaryText && (
-                    <p style={{ fontSize: 13, lineHeight: 1.8, color: 'rgba(255,255,255,.6)',
-                      margin: '0 0 16px' }}>
-                      {summaryText}
-                    </p>
-                  )}
+          {/* ── Secondary column (right, 258px) ── */}
+          <div style={{ minWidth: 0 }}>
 
-                  {/* START HERE box — primary recommendation */}
-                  {ctaRec && (
-                    <div style={{ background: 'rgba(121,72,246,.12)',
-                      border: '1px solid rgba(121,72,246,.3)', borderRadius: 12,
-                      padding: '14px 16px', marginBottom: 14 }}>
-                      <div style={{ fontSize: 9, fontWeight: 900, letterSpacing: '.12em',
-                        textTransform: 'uppercase', color: '#a78bfa', marginBottom: 8 }}>
-                        Start here
-                      </div>
-                      <p style={{ fontSize: 14, fontWeight: 700, color: '#fff',
-                        margin: '0 0 5px', lineHeight: 1.35 }}>
-                        {ctaRec.title}
-                      </p>
-                      {(ctaRec.what_we_found || ctaRec.why_it_matters || ctaRec.explanation) && (
-                        <p style={{ fontSize: 12, color: 'rgba(255,255,255,.55)',
-                          margin: '0 0 10px', lineHeight: 1.65 }}>
-                          {ctaRec.what_we_found || ctaRec.why_it_matters || ctaRec.explanation}
-                        </p>
-                      )}
-                      <div style={{ fontSize: 11, color: 'rgba(255,255,255,.35)',
-                        display: 'flex', alignItems: 'center', gap: 4 }}>
-                        <span>⏱</span>
-                        <span>Step-by-step guidance · Adapted to your experience</span>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Primary CTA — full width */}
-                  {ctaRec && (
-                    <button
-                      onClick={() => setGuidedFixRec(ctaRec)}
-                      style={{ width: '100%', maxWidth: 280, padding: '13px',
-                        background: 'linear-gradient(135deg,#8a46f8,#3687fa)',
-                        border: 0, borderRadius: 10, color: '#fff',
-                        fontSize: 14, fontWeight: 800, cursor: 'pointer',
-                        fontFamily: 'inherit', marginBottom: 14,
-                        boxShadow: '0 4px 20px rgba(121,72,246,.4)',
-                        display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-                        letterSpacing: '-.01em' }}>
-                      Start guided improvement
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                        strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                        <path d="M5 12h14M12 5l7 7-7 7"/>
-                      </svg>
-                    </button>
-                  )}
-
-                  {/* Secondary: strengths (collapsed by default intent — shown small) */}
-                  {hasAssessment && assessment.strengths?.length > 0 && (
-                    <div style={{ marginBottom: 8 }}>
-                      {assessment.strengths.slice(0, 2).map((s, i) => (
-                        <div key={i} style={{ display: 'flex', gap: 7,
-                          alignItems: 'flex-start', padding: '3px 0' }}>
-                          <svg width="11" height="11" viewBox="0 0 24 24" fill="none"
-                            stroke="#19b987" strokeWidth="2.5" strokeLinecap="round"
-                            strokeLinejoin="round" style={{ flexShrink: 0, marginTop: 3 }}>
-                            <path d="m5 12 4 4 10-10"/>
-                          </svg>
-                          <span style={{ fontSize: 11, color: 'rgba(255,255,255,.4)', lineHeight: 1.5 }}>
-                            <strong style={{ color: 'rgba(61,232,185,.6)' }}>Working well:</strong>{' '}
-                            {s.finding}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-
-                  {/* Low-confidence note */}
-                  {confidenceNote && (
-                    <div style={{ background: 'rgba(239,166,66,.08)',
-                      border: '1px solid rgba(239,166,66,.2)', borderRadius: 8,
-                      padding: '8px 12px', marginBottom: 10, fontSize: 11,
-                      color: '#fbbf6a', lineHeight: 1.5 }}>
-                      <strong>Note:</strong> {confidenceNote}
-                    </div>
-                  )}
-                </>
-              );
-            })()}
-
-            {/* Ask Cernly suggestions — at bottom of dark card */}
-            <div style={{ borderTop: '1px solid rgba(255,255,255,.1)', paddingTop: 14 }}>
-              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
+            {/* Ask Cernly compact advisor card */}
+            <div style={{ background: '#fff', border: '1px solid #e9eaf2', borderRadius: 14,
+              padding: '16px 16px 14px', marginBottom: 12, boxShadow: '0 2px 8px #1b1d3205' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 12 }}>
+                <div style={{ width: 26, height: 26, borderRadius: 8,
+                  background: 'linear-gradient(135deg,#8a46f8,#3687fa)',
+                  display: 'grid', placeItems: 'center', flexShrink: 0 }}>
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round">
+                    <path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z"/>
+                  </svg>
+                </div>
+                <span style={{ fontFamily: 'var(--font-manrope, Manrope, sans-serif)',
+                  fontWeight: 800, fontSize: 13, color: '#151621' }}>Ask Cernly</span>
+              </div>
+              {/* Suggested question chips (stacked vertically in narrow col) */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 5, marginBottom: 10 }}>
                 {suggestedQs.map(q => (
                   <button key={q}
                     onClick={() => { setAdvisorInput(''); setDrawerContext({ _initialMessage: q }); setDrawerOpen(true); }}
-                    style={{ background: 'rgba(255,255,255,.07)', border: '1px solid rgba(255,255,255,.14)',
-                      borderRadius: 20, padding: '5px 12px', fontSize: 11, fontWeight: 600,
-                      color: 'rgba(255,255,255,.65)', cursor: 'pointer', fontFamily: 'inherit', lineHeight: 1.4 }}>
+                    style={{ background: '#f4f5fb', border: '1px solid #e9eaf2',
+                      borderRadius: 8, padding: '7px 10px', fontSize: 11, fontWeight: 600,
+                      color: '#636b80', cursor: 'pointer', fontFamily: 'inherit',
+                      textAlign: 'left', lineHeight: 1.4 }}>
                     {q}
                   </button>
                 ))}
               </div>
-
-              {/* Inline input */}
-              <div style={{ background: 'rgba(255,255,255,.07)', borderRadius: 10,
-                border: '1px solid rgba(255,255,255,.14)',
-                display: 'flex', alignItems: 'center', padding: '7px 7px 7px 12px', gap: 7 }}>
+              {/* Input row */}
+              <div style={{ background: '#f9fafc', borderRadius: 9,
+                border: '1px solid #e9eaf2',
+                display: 'flex', alignItems: 'center', padding: '6px 6px 6px 10px', gap: 6 }}>
                 <input
                   value={advisorInput}
                   onChange={e => setAdvisorInput(e.target.value)}
-                  placeholder="Ask anything about this report…"
+                  placeholder="Ask about this report…"
                   onKeyDown={e => {
                     if (e.key === 'Enter' && advisorInput.trim()) {
                       const q = advisorInput.trim();
@@ -2001,7 +2086,7 @@ export default function ReportClient({ isPro, userName, userAvatar }) {
                     }
                   }}
                   style={{ flex: 1, background: 'none', border: 0, outline: 0,
-                    fontSize: 12, color: '#fff', fontFamily: 'inherit', minWidth: 0 }}
+                    fontSize: 12, color: '#151621', fontFamily: 'inherit', minWidth: 0 }}
                 />
                 <button onClick={() => {
                   if (!advisorInput.trim()) { setDrawerContext(null); setDrawerOpen(true); return; }
@@ -2010,50 +2095,56 @@ export default function ReportClient({ isPro, userName, userAvatar }) {
                   setDrawerContext({ _initialMessage: q });
                   setDrawerOpen(true);
                 }}
-                  style={{ border: 0, background: '#7948f6', color: '#fff', borderRadius: 7,
-                    width: 26, height: 26, display: 'grid', placeItems: 'center',
+                  style={{ border: 0, background: '#7948f6', color: '#fff', borderRadius: 6,
+                    width: 24, height: 24, display: 'grid', placeItems: 'center',
                     cursor: 'pointer', flexShrink: 0 }}>
-                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
                 </button>
               </div>
             </div>
-          </div>
-        );
-      })()}
 
-      {/* Top discoveries — show only when assessment doesn't already cover this territory.
-          When a completed assessment has strengths/concerns, those cover the same info. */}
-      {!(report.assessmentStatus === 'completed' && report.assessment &&
-          ((report.assessment.strengths?.length > 0) || (report.assessment.concerns?.length > 0))) &&
-        Array.isArray(effectiveDiscoveries) && effectiveDiscoveries.length > 0 && (
-        <div style={{ marginBottom: 22 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 13 }}>
-            <span style={{ fontFamily: 'var(--font-manrope, Manrope, sans-serif)',
-              fontWeight: 800, fontSize: 13, color: '#151621' }}>Key discoveries</span>
-            {report.aiInsights && (
-              <span style={{ fontSize: 10, fontWeight: 700, color: '#7948f6',
-                background: '#f1edff', padding: '2px 8px', borderRadius: 5 }}>AI ANALYSIS</span>
+            {/* What's Working Well (strengths) */}
+            {hasAssessment && assessment.strengths?.length > 0 && (
+              <div style={{ background: '#fff', border: '1px solid #e9eaf2', borderRadius: 14,
+                padding: '16px 16px', boxShadow: '0 2px 8px #1b1d3205' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 12 }}>
+                  <svg width="14" height="14" viewBox="0 0 24 24" {...sa} stroke="#19b987">
+                    <path d="m5 12 4 4 10-10"/>
+                  </svg>
+                  <span style={{ fontFamily: 'var(--font-manrope, Manrope, sans-serif)',
+                    fontWeight: 800, fontSize: 13, color: '#151621' }}>What&apos;s working well</span>
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  {assessment.strengths.slice(0, 4).map((s, i) => (
+                    <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
+                      <div style={{ width: 16, height: 16, borderRadius: '50%',
+                        background: '#edf9f4', display: 'grid', placeItems: 'center', flexShrink: 0, marginTop: 1 }}>
+                        <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="#16a34a" strokeWidth="3" strokeLinecap="round">
+                          <path d="m5 12 4 4 10-10"/>
+                        </svg>
+                      </div>
+                      <span style={{ fontSize: 12, color: '#4b5168', lineHeight: 1.5 }}>
+                        {s.finding || (typeof s === 'string' ? s : '')}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
             )}
-            <span style={{ fontSize: 11, color: '#83899c', marginLeft: 'auto' }}>
-              {effectiveDiscoveries.length} finding{effectiveDiscoveries.length !== 1 ? 's' : ''}
-            </span>
-          </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {effectiveDiscoveries.slice(0, 3).map((d, i) => <DiscoveryCard key={i} d={d} index={i} />)}
-          </div>
-          {effectiveDiscoveries.length > 3 && (
-            <button onClick={() => setActiveTab('findings')}
-              style={{ border: '1px solid #e9eaf2', background: '#fff', color: '#7948f6',
-                borderRadius: 10, padding: '10px 16px', width: '100%', marginTop: 8,
-                fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
-              View all {effectiveDiscoveries.length} findings in Findings →
-            </button>
-          )}
-        </div>
-      )}
 
-    </div>
-  );
+          </div>
+        </div>
+
+        {/* ── Responsive: stack columns on narrow viewports ── */}
+        <style>{`
+          @media (max-width: 680px) {
+            .ov-lower-grid { grid-template-columns: 1fr !important }
+            .ov-secondary { order: -1 }
+          }
+        `}</style>
+      </div>
+    );
+  };
 
   const renderActionPlan = () => (
     <div>
