@@ -1771,21 +1771,17 @@ export default function ReportClient({ isPro, userName, userAvatar }) {
     const hasComparison = liveComparison && hasMultiScans;
 
     // Changed recommendations: derive display badges (never expose internal status values)
+    // liveComparison.recommendations is { still_open, likely_resolved, partially_resolved,
+    // unable_to_verify, new_high_priority } — each an array of { rec, ... } objects.
     const changedRecs = hasComparison
       ? (() => {
-          const changes = liveComparison?.recommendations || [];
-          return changes.slice(0, 4).map(c => {
-            let badge = 'New';
-            let badgeColor = '#7948f6'; let badgeBg = '#f1edff';
-            if (c.status === 'resolved' || c.status === 'likely_resolved') {
-              badge = 'Scan confirmed'; badgeColor = '#16a34a'; badgeBg = '#edf9f4';
-            } else if (c.status === 'still_detected' || c.status === 'worsened') {
-              badge = 'Needs rescan'; badgeColor = '#efa642'; badgeBg = '#fffbf0';
-            } else if (c.status === 'new' || c.status === 'appeared') {
-              badge = 'New'; badgeColor = '#7948f6'; badgeBg = '#f1edff';
-            }
-            return { title: c.title || c.fingerprint, badge, badgeColor, badgeBg };
-          });
+          const r = liveComparison?.recommendations || {};
+          return [
+            ...(Array.isArray(r.likely_resolved)   ? r.likely_resolved   : []).map(c => ({ title: c.rec?.title || c.rec?.fingerprint || '', badge: 'Scan confirmed', badgeColor: '#16a34a', badgeBg: '#edf9f4' })),
+            ...(Array.isArray(r.new_high_priority)  ? r.new_high_priority  : []).map(c => ({ title: c.rec?.title || c.rec?.fingerprint || '', badge: 'New',           badgeColor: '#7948f6', badgeBg: '#f1edff' })),
+            ...(Array.isArray(r.still_open)         ? r.still_open         : []).map(c => ({ title: c.rec?.title || c.rec?.fingerprint || '', badge: 'Needs rescan',  badgeColor: '#efa642', badgeBg: '#fffbf0' })),
+            ...(Array.isArray(r.partially_resolved) ? r.partially_resolved : []).map(c => ({ title: c.rec?.title || c.rec?.fingerprint || '', badge: 'Needs rescan',  badgeColor: '#efa642', badgeBg: '#fffbf0' })),
+          ].filter(c => c.title).slice(0, 4);
         })()
       : [];
 
