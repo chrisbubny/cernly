@@ -192,11 +192,11 @@ export async function POST(request) {
     generateRecommendations(issues, scores, url, { lhData, seoData, sslData, a11yData }, auditStatuses)
       .catch(err => { console.error('[analyze] recommendations error:', err.message); return []; }),
   ]);
-  const { aiSummary, siteType, uxScore, uxInsights, aiInsights, sectionSummaries } =
-    aiResult || { aiSummary: null, siteType: null, uxScore: null, uxInsights: null, aiInsights: null, sectionSummaries: null };
+  const { aiSummary, siteType, uxInsights, aiInsights, sectionSummaries } =
+    aiResult || { aiSummary: null, siteType: null, uxInsights: null, aiInsights: null, sectionSummaries: null };
   const platform = getDetectedPlatform(seoData);
   const aiSummaryMeta = aiResult?.aiSummaryMeta || { status: 'fallback', reason: 'unavailable' };
-  if (uxScore !== null && uxScore !== undefined) scores.ux = normalizeScore(uxScore);
+  // uxScore removed — was deterministic fallback (perf+a11y avg), not AI-generated; scores.ux no longer written
 
   // Release scan-serialization lock before saveReport — the expensive analyzer
   // work is done; saveReport handles its own atomic counting with a separate
