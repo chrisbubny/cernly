@@ -68,6 +68,21 @@ export async function GET(request) {
     return NextResponse.json({ status: 'done', presignedUrl, capturedAt: capture.capturedAt });
   }
 
+  // If still marked 'capturing' but the 90s lease has expired, the background
+  // worker likely failed silently (e.g. Microlink timeout before failDesktopCapture ran).
+  // Report it as 'failed' so the client can offer a retry rather than polling forever.
+  if (capture.status === 'capturing' && capture.claimedAt) {
+    const ageMs = Date.now() - new Date(capture.claimedAt).getTime();
+    if (ageMs > 90_000) {
+      console.log(`[capture-desktop] GET — lease expired, treating as failed | reportId: ${access.report.id} | ageMs: ${ageMs}`);
+      return NextResponse.json({
+        status:    'failed',
+        retries:   capture.retries ?? 0,
+        reason:    'lease_expired',
+      });
+    }
+  }
+
   return NextResponse.json({
     status:    capture.status,
     retries:   capture.retries ?? 0,

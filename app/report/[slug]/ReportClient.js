@@ -673,7 +673,7 @@ function UxCard({ uxScore, uxInsights, uxAnnotations, visionStatus, siteType, ur
     }
 
     // Trigger a new capture
-    if (captureStatus === 'none' || captureStatus === 'failed') {
+    if (captureStatus === 'none' || captureStatus === 'failed' || captureStatus === 'timed_out') {
       setDesktopLoading(true);
       setCaptureStatus('capturing');
       try {
@@ -689,7 +689,13 @@ function UxCard({ uxScore, uxInsights, uxAnnotations, visionStatus, siteType, ur
           let polls = 0;
           const interval = setInterval(async () => {
             polls++;
-            if (polls > 24) { clearInterval(interval); setDesktopLoading(false); return; } // 2 min max
+            if (polls > 24) {
+              // 2-minute polling limit reached — show terminal error
+              clearInterval(interval);
+              setDesktopLoading(false);
+              setCaptureStatus('timed_out');
+              return;
+            }
             try {
               const r = await fetch(`/api/capture-desktop?slug=${reportSlug}`);
               const d = await r.json();
@@ -698,7 +704,7 @@ function UxCard({ uxScore, uxInsights, uxAnnotations, visionStatus, siteType, ur
                 setDesktopUrl(d.presignedUrl);
                 setDesktopLoading(false);
                 clearInterval(interval);
-              } else if (d.status === 'failed' || d.status === 'exhausted') {
+              } else if (d.status === 'failed' || d.status === 'exhausted' || d.status === 'timed_out') {
                 setDesktopLoading(false);
                 clearInterval(interval);
               }
@@ -709,6 +715,9 @@ function UxCard({ uxScore, uxInsights, uxAnnotations, visionStatus, siteType, ur
           const r = await fetch(`/api/capture-desktop?slug=${reportSlug}`);
           const d = await r.json();
           if (d.presignedUrl) setDesktopUrl(d.presignedUrl);
+          setDesktopLoading(false);
+        } else {
+          // Terminal non-capturing status (exhausted, failed, etc.) — stop loading
           setDesktopLoading(false);
         }
       } catch { setDesktopLoading(false); setCaptureStatus('failed'); }
@@ -788,7 +797,7 @@ function UxCard({ uxScore, uxInsights, uxAnnotations, visionStatus, siteType, ur
               background: screenshotView === 'mobile' ? '#7948f6' : '#f4f5fb',
               color:      screenshotView === 'mobile' ? '#fff'    : '#83899c',
               cursor: 'pointer', letterSpacing: '.03em' }}>
-            📱 Mobile Analysis
+            Visual Analysis
           </button>
           <button onClick={handleDesktopTab}
             disabled={captureStatus === 'exhausted'}
@@ -796,7 +805,7 @@ function UxCard({ uxScore, uxInsights, uxAnnotations, visionStatus, siteType, ur
               background: screenshotView === 'desktop' ? '#7948f6' : '#f4f5fb',
               color:      screenshotView === 'desktop' ? '#fff'    : captureStatus === 'exhausted' ? '#c8cfdc' : '#83899c',
               cursor: captureStatus === 'exhausted' ? 'not-allowed' : 'pointer', letterSpacing: '.03em' }}>
-            🖥 Desktop Preview
+            Desktop Preview
             {desktopLoading && (
               <span style={{ display: 'inline-block', width: 10, height: 10,
                 border: '2px solid #ffffff66', borderTopColor: '#fff',
@@ -820,14 +829,15 @@ function UxCard({ uxScore, uxInsights, uxAnnotations, visionStatus, siteType, ur
               </span>
             </div>
           )}
-          {(captureStatus === 'failed' || captureStatus === 'exhausted') && !desktopUrl && (
+          {(captureStatus === 'failed' || captureStatus === 'exhausted' || captureStatus === 'timed_out') && !desktopUrl && (
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10,
               background: '#fff5f6', borderRadius: 9, padding: '9px 13px' }}>
-              <span style={{ fontSize: 18, lineHeight: 1, flexShrink: 0 }}>⚠️</span>
-              <span style={{ fontSize: 12, color: '#ef6473' }}>
+              <span style={{ fontSize: 11, color: '#ef6473' }}>
                 {captureStatus === 'exhausted'
                   ? 'Desktop screenshot could not be captured after multiple attempts.'
-                  : 'Desktop screenshot capture failed. Please try again later.'}
+                  : captureStatus === 'timed_out'
+                  ? 'Desktop screenshot is taking longer than expected. Click the tab above to try again.'
+                  : 'Desktop screenshot capture failed. Click the tab above to try again.'}
               </span>
             </div>
           )}
@@ -840,7 +850,7 @@ function UxCard({ uxScore, uxInsights, uxAnnotations, visionStatus, siteType, ur
                 onError={e => { e.target.style.display = 'none'; }} />
             </div>
           )}
-          {!desktopLoading && !desktopUrl && captureStatus !== 'failed' && captureStatus !== 'exhausted' && (
+          {!desktopLoading && !desktopUrl && captureStatus !== 'failed' && captureStatus !== 'exhausted' && captureStatus !== 'capturing' && captureStatus !== 'timed_out' && (
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 13px',
               background: '#f4f5fb', borderRadius: 9 }}>
               <span style={{ fontSize: 12, color: '#83899c' }}>
