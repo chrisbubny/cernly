@@ -51,7 +51,7 @@ export async function GET(request) {
 
   const access = await authorizeReport({ slug }, userId);
   if (!access.report) return NextResponse.json({ error: access.error }, { status: access.status });
-  if (!access.isOwner) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  if (access.report.userId !== userId) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 
   const capture = access.report.lhData?.desktopCapture || null;
   if (!capture) return NextResponse.json({ status: 'none' });
@@ -112,7 +112,7 @@ export async function POST(request) {
   // Ownership check — only the owner may trigger a desktop capture
   const access = await authorizeReport({ slug: reportId }, userId);
   if (!access.report) return NextResponse.json({ error: access.error }, { status: access.status });
-  if (!access.isOwner) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  if (access.report.userId !== userId) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 
   const report  = access.report;
   const capture = report.lhData?.desktopCapture || null;

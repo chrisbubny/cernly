@@ -27,6 +27,12 @@ export async function POST(request) {
   if (!access.report) return NextResponse.json({ error: access.error }, { status: access.status });
   const report = access.report;
 
+  // Only the report owner may trigger AI vision generation.
+  // Authenticated viewers of public reports cannot initiate new AI calls.
+  if (report.userId !== userId) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  }
+
   // If annotations already exist, return them immediately — no re-run needed
   if (report.uxAnnotations) {
     return NextResponse.json({ uxAnnotations: report.uxAnnotations });

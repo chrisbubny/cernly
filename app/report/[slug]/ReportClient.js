@@ -647,7 +647,8 @@ function DiscoveryCard({ d, index }) {
 /* ─── UX / Visual Experience card — used in Findings tab ─── */
 function UxCard({ uxScore, uxInsights, uxAnnotations, visionStatus, siteType, url, issues, desktopCapture, reportSlug }) {
   const [activePin, setActivePin]           = useState(null);
-  const [screenshotView, setScreenshotView] = useState('mobile'); // 'mobile' | 'desktop'
+  // Default to desktop view when no screenshot exists (Visual Analysis hidden without annotations)
+  const [screenshotView, setScreenshotView] = useState(uxAnnotations?.screenshotUrl ? 'mobile' : 'desktop');
   const [desktopUrl, setDesktopUrl]         = useState(null);
   const [desktopLoading, setDesktopLoading] = useState(false);
   const [captureStatus, setCaptureStatus]   = useState(desktopCapture?.status || 'none');
@@ -792,13 +793,16 @@ function UxCard({ uxScore, uxInsights, uxAnnotations, visionStatus, siteType, ur
       {/* Mobile / Desktop tab toggle */}
       {(screenshotUrl || url) && (
         <div style={{ display: 'flex', gap: 6, marginBottom: 14 }}>
-          <button onClick={() => setScreenshotView('mobile')}
-            style={{ fontSize: 11, fontWeight: 700, padding: '5px 12px', borderRadius: 7, border: 'none',
-              background: screenshotView === 'mobile' ? '#7948f6' : '#f4f5fb',
-              color:      screenshotView === 'mobile' ? '#fff'    : '#83899c',
-              cursor: 'pointer', letterSpacing: '.03em' }}>
-            Visual Analysis
-          </button>
+          {/* Visual Analysis tab — only shown when screenshot/annotations exist */}
+          {screenshotUrl && (
+            <button onClick={() => setScreenshotView('mobile')}
+              style={{ fontSize: 11, fontWeight: 700, padding: '5px 12px', borderRadius: 7, border: 'none',
+                background: screenshotView === 'mobile' ? '#7948f6' : '#f4f5fb',
+                color:      screenshotView === 'mobile' ? '#fff'    : '#83899c',
+                cursor: 'pointer', letterSpacing: '.03em' }}>
+              Visual Analysis
+            </button>
+          )}
           <button onClick={handleDesktopTab}
             disabled={captureStatus === 'exhausted'}
             style={{ fontSize: 11, fontWeight: 700, padding: '5px 12px', borderRadius: 7, border: 'none',
@@ -861,11 +865,11 @@ function UxCard({ uxScore, uxInsights, uxAnnotations, visionStatus, siteType, ur
         </div>
       )}
 
-      {/* Annotated screenshot (Mobile Analysis tab) */}
-      {screenshotView === 'mobile' && uxAnnotations?.image?.coverage === 'top-of-page' && (
+      {/* Annotated screenshot (Visual Analysis tab) — only rendered when screenshot exists */}
+      {screenshotView === 'mobile' && screenshotUrl && uxAnnotations?.image?.coverage === 'top-of-page' && (
         <p style={{ fontSize: 12, color: '#83899c' }}>Visual review covers the top portion of this page, shown below.</p>
       )}
-      {screenshotView === 'mobile' && (screenshotUrl || url) && (
+      {screenshotView === 'mobile' && screenshotUrl && (
         <div style={{ marginBottom: annotations.length ? 0 : 16 }}>
           {visionLoading && (
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10,
@@ -1714,19 +1718,8 @@ export default function ReportClient({ isPro, userName, userAvatar }) {
         if (d.error) { setStatus('error'); return; }
         setReport(d);
         setStatus('ok');
-        if (d.uxAnnotations) { setVisionStatus('done'); return; }
-        setVisionStatus('loading');
-        fetch('/api/vision', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ reportId: d.id }),
-        })
-          .then(r => r.json())
-          .then(v => {
-            if (v.uxAnnotations) { setLiveAnnotations(v.uxAnnotations); setVisionStatus('done'); }
-            else { setVisionStatus('error'); }
-          })
-          .catch(() => setVisionStatus('error'));
+        // Visual Analysis is on-demand; not triggered automatically on report load.
+        if (d.uxAnnotations) { setVisionStatus('done'); }
       })
       .catch(() => setStatus('error'));
   }, [id, sessionId]);
