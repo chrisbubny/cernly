@@ -1795,7 +1795,7 @@ export default function ReportClient({ isPro, userName, userAvatar }) {
       : ['What should I fix first?', 'How do I improve my LCP score?', 'What SEO issues hurt me most?'];
 
     return (
-      <div style={{ maxWidth: 1300, margin: '0 auto' }}>
+      <div>
         {/* ── 1. Verdict headline (open editorial section, no box) ── */}
         {(hasAssessment || topRec) && (
           <div style={{ padding: '4px 0 20px' }}>
@@ -1824,15 +1824,15 @@ export default function ReportClient({ isPro, userName, userAvatar }) {
                   <path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z"/>
                 </svg>
               </div>
-              <span style={{ fontSize: 10, fontWeight: 800, color: '#7948f6', letterSpacing: '.07em' }}>
+              <span style={{ fontSize: 12, fontWeight: 800, color: '#7948f6', letterSpacing: '.07em' }}>
                 CERNLY&apos;S TAKE
               </span>
-              <span style={{ fontSize: 10, color: '#b0b4c8', marginLeft: 2 }}>AI-generated · based on this scan</span>
+              <span style={{ fontSize: 12, color: '#b0b4c8', marginLeft: 2 }}>AI-generated · based on this scan</span>
             </div>
             {/* Headline — editorial, unboxed */}
             <h2 style={{ fontFamily: 'var(--font-manrope, Manrope, sans-serif)',
               fontSize: 'clamp(22px, 2.2vw, 28px)', lineHeight: 1.25, letterSpacing: '-.04em',
-              fontWeight: 800, color: '#151621', margin: '0 0 10px' }}>
+              fontWeight: 800, color: '#151621', margin: '0 0 10px', maxWidth: 767 }}>
               {headline}
             </h2>
             {/* Summary body — first sentence primary, remaining as supporting detail */}
@@ -1842,11 +1842,11 @@ export default function ReportClient({ isPro, userName, userAvatar }) {
               const detail = sentences.slice(1).join(' ').trim();
               return (
                 <>
-                  <p style={{ fontSize: 14, lineHeight: 1.75, color: '#636b80', margin: '0 0 4px', maxWidth: 640 }}>
+                  <p style={{ fontSize: 16, lineHeight: 1.6, color: '#636b80', margin: '0 0 4px', maxWidth: 767 }}>
                     {primary}
                   </p>
                   {detail && (
-                    <p style={{ fontSize: 12, lineHeight: 1.65, color: '#a0a8bc', margin: '0 0 4px', maxWidth: 600 }}>
+                    <p style={{ fontSize: 14, lineHeight: 1.6, color: '#a0a8bc', margin: '0 0 4px', maxWidth: 767 }}>
                       {detail}
                     </p>
                   )}
@@ -2760,6 +2760,7 @@ export default function ReportClient({ isPro, userName, userAvatar }) {
 
             {status === 'ok' && (
               <React.Fragment>
+                <div style={{ maxWidth: 1240, margin: '0 auto', width: '100%' }}>
                 {/* Page header */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 6, flexWrap: 'wrap' }}>
                   <Link href="/dashboard" style={{ display: 'flex', alignItems: 'center', gap: 5,
@@ -3002,7 +3003,7 @@ export default function ReportClient({ isPro, userName, userAvatar }) {
 
                 {/* Tabs */}
                 <div style={{ display: 'flex', gap: 0, borderBottom: '1px solid #e9eaf2',
-                  marginBottom: 24, marginTop: 6 }}>
+                  marginBottom: 24, marginTop: 25 }}>
                   {[
                     { key: 'overview',  label: 'Overview',    icon: 'M3 3h7v7H3zm11 0h7v7h-7zM3 14h7v7H3zm11 0h7v7h-7z' },
                     { key: 'action',    label: 'Action plan', icon: 'm5 12 4 4 10-10' },
@@ -3068,6 +3069,7 @@ export default function ReportClient({ isPro, userName, userAvatar }) {
                     verifyFp={typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('verify') : null}
                   />
                 )}
+                </div>{/* /maxWidth 1240 wrapper */}
               </React.Fragment>
             )}
           </div>
