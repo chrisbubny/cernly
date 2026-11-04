@@ -39,6 +39,13 @@ export async function POST(request) {
     ? (rawPersona === 'cms' ? 'cms-admin' : rawPersona)
     : 'owner';
 
+  // ── Diagnostic: log incoming request (no sensitive data) ─────────────────────
+  console.info('[guide-plan:diag] request | recFingerprint:', recFingerprint,
+    '| reportId (slug):', reportId,
+    '| persona:', persona,
+    '| hasFocusIssue:', !!focusIssue,
+    '| focusFingerprintId:', focusIssue?.fingerprintId || 'none');
+
   if (!recFingerprint || typeof recFingerprint !== 'string') {
     return NextResponse.json({ error: 'recFingerprint is required' }, { status: 400 });
   }
@@ -60,6 +67,13 @@ export async function POST(request) {
   // Load the recommendation row for this user + report
   const recs = await getRecommendationsByReport(report.id).catch(() => []);
   const rec  = recs.find(r => r.fingerprint === recFingerprint);
+
+  // ── Diagnostic: log rec lookup outcome ───────────────────────────────────────
+  console.info('[guide-plan:diag] rec lookup | report.id (int):', report.id,
+    '| recs loaded:', recs.length,
+    '| rec_types:', recs.map(r => r.rec_type || 'group').join(','),
+    '| found:', !!rec,
+    '| stored_fingerprints:', recs.map(r => r.fingerprint).join(','));
 
   if (!rec) {
     console.error('[guide-plan] rec not found | fingerprint:', recFingerprint,
@@ -97,8 +111,13 @@ export async function POST(request) {
 
   if (cachedForPersona && cachedForPersona.planFingerprint === currentFp) {
     // Cache hit for this persona/focus combination — content has not changed
+    console.info('[guide-plan:diag] cache HIT | rec:', recFingerprint, '| personaKey:', personaKey);
     return NextResponse.json({ plan: cachedForPersona, cached: true, persona });
   }
+
+  console.info('[guide-plan:diag] cache MISS | rec:', recFingerprint, '| personaKey:', personaKey,
+    '| currentFp:', currentFp, '| cachedFp:', cachedForPersona?.planFingerprint || 'none',
+    '| rec.group_key:', rec.group_key || 'null', '| rec.rec_type:', rec.rec_type || 'group');
 
   // ── Generate ────────────────────────────────────────────────────────────────
   // rec.page_url / rec.url are not populated by getRecommendationsByReport.
@@ -107,7 +126,17 @@ export async function POST(request) {
   const domain   = extractDomain(rawUrl);
   const siteUrl  = extractSiteUrl(rawUrl);
   const platform = getDetectedPlatform(report.seoData);
+  console.info('[guide-plan:diag] generating plan | rec:', recFingerprint,
+    '| group_key:', rec.group_key || 'null', '| platform:', platform || 'unknown');
   const plan     = await generateGuidancePlan(rec, domain, persona, platform, safeFocusIssue, siteUrl);
+
+  // ── Diagnostic: log generation outcome ──────────────────────────────────────
+  console.info('[guide-plan:diag] generation outcome | rec:', recFingerprint,
+    '| planSource:', plan.planSource || (plan.fallback ? 'bare_fallback' : 'ai'),
+    '| isStatic:', plan.isStatic === true,
+    '| fallback:', plan.fallback === true,
+    '| reason:', plan.reason || 'none',
+    '| stepCount:', plan.steps?.length ?? 'n/a');
 
   // generateGuidancePlan never returns an empty plan — it always falls back to
   // static guidance. The only case where fallback: true remains is an unknown
@@ -148,6 +177,8 @@ export async function POST(request) {
     // Return the plan even if caching fails
   }
 
+  console.info('[guide-plan:diag] response OK | rec:', recFingerprint, '| persona:', persona,
+    '| planSource:', plan.planSource || 'ai', '| cached: false');
   return NextResponse.json({ plan, cached: false, persona });
 }
 

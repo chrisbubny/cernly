@@ -43,5 +43,25 @@ export async function GET(request) {
   // Fetch persisted recommendations (best-effort — empty array on failure)
   const recommendations = await getRecommendationsByReport(report.id).catch(() => []);
 
+  // ── Diagnostic: log enrichment field presence per rec ────────────────────────
+  // Surfaces whether what_we_found / why_it_matters are null in DB for each rec.
+  // Remove after enrichment root cause is confirmed.
+  if (recommendations.length > 0) {
+    console.info('[report:diag] recommendations enrichment state | report:', slug || reportId,
+      '| count:', recommendations.length);
+    for (const rec of recommendations) {
+      console.info('[report:diag] rec |',
+        'fingerprint:', rec.fingerprint,
+        '| rec_type:', rec.rec_type || 'group',
+        '| group_key:', rec.group_key || 'null',
+        '| what_we_found:', rec.what_we_found != null ? `present(${String(rec.what_we_found).length}ch)` : 'NULL',
+        '| why_it_matters:', rec.why_it_matters != null ? `present(${String(rec.why_it_matters).length}ch)` : 'NULL',
+        '| actions:', Array.isArray(rec.actions) ? `${rec.actions.length} items` : 'NULL/not-array',
+        '| priority:', rec.priority || 'none');
+    }
+  } else {
+    console.info('[report:diag] no recommendations for report:', slug || reportId);
+  }
+
   return NextResponse.json({ ...report, recommendations, isOwner });
 }
