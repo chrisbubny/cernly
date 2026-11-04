@@ -645,8 +645,77 @@ function DiscoveryCard({ d, index }) {
 }
 
 /* ─── UX / Visual Experience card — used in Findings tab ─── */
-function UxCard({ uxScore, uxInsights, uxAnnotations, visionStatus, siteType, url, issues }) {
-  const [activePin, setActivePin] = useState(null);
+function UxCard({ uxScore, uxInsights, uxAnnotations, visionStatus, siteType, url, issues, desktopCapture, reportSlug }) {
+  const [activePin, setActivePin]           = useState(null);
+  const [screenshotView, setScreenshotView] = useState('mobile'); // 'mobile' | 'desktop'
+  const [desktopUrl, setDesktopUrl]         = useState(null);
+  const [desktopLoading, setDesktopLoading] = useState(false);
+  const [captureStatus, setCaptureStatus]   = useState(desktopCapture?.status || 'none');
+
+  // Trigger capture and/or fetch presigned URL when user switches to Desktop tab
+  const handleDesktopTab = useCallback(async () => {
+    setScreenshotView('desktop');
+
+    // If already done and we have a URL, nothing to do
+    if (desktopUrl) return;
+
+    // If done in DB, fetch presigned URL
+    if (captureStatus === 'done' || desktopCapture?.status === 'done') {
+      setDesktopLoading(true);
+      try {
+        const res = await fetch(`/api/capture-desktop?slug=${reportSlug}`);
+        const data = await res.json();
+        if (data.presignedUrl) setDesktopUrl(data.presignedUrl);
+        setCaptureStatus(data.status);
+      } catch {}
+      setDesktopLoading(false);
+      return;
+    }
+
+    // Trigger a new capture
+    if (captureStatus === 'none' || captureStatus === 'failed') {
+      setDesktopLoading(true);
+      setCaptureStatus('capturing');
+      try {
+        const res  = await fetch('/api/capture-desktop', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ reportId: reportSlug }),
+        });
+        const data = await res.json();
+        setCaptureStatus(data.status);
+        // Poll for result
+        if (data.status === 'capturing') {
+          let polls = 0;
+          const interval = setInterval(async () => {
+            polls++;
+            if (polls > 24) { clearInterval(interval); setDesktopLoading(false); return; } // 2 min max
+            try {
+              const r = await fetch(`/api/capture-desktop?slug=${reportSlug}`);
+              const d = await r.json();
+              setCaptureStatus(d.status);
+              if (d.status === 'done' && d.presignedUrl) {
+                setDesktopUrl(d.presignedUrl);
+                setDesktopLoading(false);
+                clearInterval(interval);
+              } else if (d.status === 'failed' || d.status === 'exhausted') {
+                setDesktopLoading(false);
+                clearInterval(interval);
+              }
+            } catch { /* poll errors are silent */ }
+          }, 5000);
+        } else if (data.status === 'done') {
+          // Completed synchronously (cached) — fetch presigned URL
+          const r = await fetch(`/api/capture-desktop?slug=${reportSlug}`);
+          const d = await r.json();
+          if (d.presignedUrl) setDesktopUrl(d.presignedUrl);
+          setDesktopLoading(false);
+        }
+      } catch { setDesktopLoading(false); setCaptureStatus('failed'); }
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [captureStatus, desktopUrl, reportSlug]);
+
   const score = uxScore ?? null;
   const color = score == null ? '#83899c' : score >= 80 ? '#19b987' : score >= 60 ? '#efa642' : '#ef6473';
   const visionLoading = visionStatus === 'loading';
@@ -711,11 +780,82 @@ function UxCard({ uxScore, uxInsights, uxAnnotations, visionStatus, siteType, ur
         )}
       </div>
 
-      {/* Annotated screenshot */}
-      {uxAnnotations?.image?.coverage === 'top-of-page' && (
+      {/* Mobile / Desktop tab toggle */}
+      {(screenshotUrl || url) && (
+        <div style={{ display: 'flex', gap: 6, marginBottom: 14 }}>
+          <button onClick={() => setScreenshotView('mobile')}
+            style={{ fontSize: 11, fontWeight: 700, padding: '5px 12px', borderRadius: 7, border: 'none',
+              background: screenshotView === 'mobile' ? '#7948f6' : '#f4f5fb',
+              color:      screenshotView === 'mobile' ? '#fff'    : '#83899c',
+              cursor: 'pointer', letterSpacing: '.03em' }}>
+            📱 Mobile Analysis
+          </button>
+          <button onClick={handleDesktopTab}
+            disabled={captureStatus === 'exhausted'}
+            style={{ fontSize: 11, fontWeight: 700, padding: '5px 12px', borderRadius: 7, border: 'none',
+              background: screenshotView === 'desktop' ? '#7948f6' : '#f4f5fb',
+              color:      screenshotView === 'desktop' ? '#fff'    : captureStatus === 'exhausted' ? '#c8cfdc' : '#83899c',
+              cursor: captureStatus === 'exhausted' ? 'not-allowed' : 'pointer', letterSpacing: '.03em' }}>
+            🖥 Desktop Preview
+            {desktopLoading && (
+              <span style={{ display: 'inline-block', width: 10, height: 10,
+                border: '2px solid #ffffff66', borderTopColor: '#fff',
+                borderRadius: '50%', animation: 'spin .7s linear infinite',
+                marginLeft: 7, verticalAlign: 'middle' }} />
+            )}
+          </button>
+        </div>
+      )}
+
+      {/* Desktop Preview panel */}
+      {screenshotView === 'desktop' && (screenshotUrl || url) && (
+        <div style={{ marginBottom: 16 }}>
+          {desktopLoading && !desktopUrl && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10,
+              background: '#f4f0ff', borderRadius: 9, padding: '9px 13px' }}>
+              <div style={{ width: 14, height: 14, border: '2px solid #d8ccff', borderTopColor: '#7948f6',
+                borderRadius: '50%', animation: 'spin .7s linear infinite', flexShrink: 0 }} />
+              <span style={{ fontSize: 12, fontWeight: 700, color: '#7948f6' }}>
+                Capturing desktop screenshot — this takes about 15–30 seconds…
+              </span>
+            </div>
+          )}
+          {(captureStatus === 'failed' || captureStatus === 'exhausted') && !desktopUrl && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10,
+              background: '#fff5f6', borderRadius: 9, padding: '9px 13px' }}>
+              <span style={{ fontSize: 18, lineHeight: 1, flexShrink: 0 }}>⚠️</span>
+              <span style={{ fontSize: 12, color: '#ef6473' }}>
+                {captureStatus === 'exhausted'
+                  ? 'Desktop screenshot could not be captured after multiple attempts.'
+                  : 'Desktop screenshot capture failed. Please try again later.'}
+              </span>
+            </div>
+          )}
+          {desktopUrl && (
+            <div style={{ position: 'relative', borderRadius: 13, overflow: 'hidden',
+              border: '1px solid #e9eaf2', background: '#f4f5fb',
+              maxHeight: 520, overflowY: 'auto', overflowX: 'hidden' }}>
+              <img src={desktopUrl} alt={`Desktop screenshot of ${url}`}
+                style={{ width: '100%', height: 'auto', display: 'block' }}
+                onError={e => { e.target.style.display = 'none'; }} />
+            </div>
+          )}
+          {!desktopLoading && !desktopUrl && captureStatus !== 'failed' && captureStatus !== 'exhausted' && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 13px',
+              background: '#f4f5fb', borderRadius: 9 }}>
+              <span style={{ fontSize: 12, color: '#83899c' }}>
+                Click &ldquo;Desktop Preview&rdquo; above to capture a 1280px desktop screenshot.
+              </span>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Annotated screenshot (Mobile Analysis tab) */}
+      {screenshotView === 'mobile' && uxAnnotations?.image?.coverage === 'top-of-page' && (
         <p style={{ fontSize: 12, color: '#83899c' }}>Visual review covers the top portion of this page, shown below.</p>
       )}
-      {(screenshotUrl || url) && (
+      {screenshotView === 'mobile' && (screenshotUrl || url) && (
         <div style={{ marginBottom: annotations.length ? 0 : 16 }}>
           {visionLoading && (
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10,
@@ -794,8 +934,8 @@ function UxCard({ uxScore, uxInsights, uxAnnotations, visionStatus, siteType, ur
         </div>
       )}
 
-      {/* Annotation legend */}
-      {annotations.length > 0 && (
+      {/* Annotation legend — only shown on mobile tab */}
+      {screenshotView === 'mobile' && annotations.length > 0 && (
         <div style={{ marginTop: 12, marginBottom: 16 }}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
             {annotations.map((ann, i) => {
@@ -2444,6 +2584,8 @@ export default function ReportClient({ isPro, userName, userAvatar }) {
             siteType={report.siteType}
             url={report.url}
             issues={allIssues}
+            desktopCapture={report.lhData?.desktopCapture || null}
+            reportSlug={slug}
           />
         )}
 

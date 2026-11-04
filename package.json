@@ -12,6 +12,8 @@
     "test:phase2": "node --experimental-test-module-mocks --import ./lib/__tests__/alias-loader.mjs --test __tests__/phase2-*.test.mjs"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1161.0",
+    "@aws-sdk/s3-request-presigner": "^3.1161.0",
     "@clerk/nextjs": "^5.3.5",
     "@react-pdf/renderer": "^4.9.0",
     "@stripe/stripe-js": "^4.3.0",
