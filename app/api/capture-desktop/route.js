@@ -42,7 +42,9 @@ import {
 // ---------------------------------------------------------------------------
 
 export async function GET(request) {
-  const { userId } = await auth().catch(() => ({ userId: null }));
+  // Clerk v5 auth() is synchronous — .catch() on a non-promise throws TypeError.
+  let userId = null;
+  try { ({ userId } = auth()); } catch {};
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   const { searchParams } = new URL(request.url);

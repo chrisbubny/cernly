@@ -790,80 +790,20 @@ function UxCard({ uxScore, uxInsights, uxAnnotations, visionStatus, siteType, ur
         )}
       </div>
 
-      {/* Mobile / Desktop tab toggle */}
-      {(screenshotUrl || url) && (
+      {/* Visual Analysis tab toggle — Desktop Preview hidden (infrastructure preserved) */}
+      {screenshotUrl && (
         <div style={{ display: 'flex', gap: 6, marginBottom: 14 }}>
-          {/* Visual Analysis tab — only shown when screenshot/annotations exist */}
-          {screenshotUrl && (
-            <button onClick={() => setScreenshotView('mobile')}
-              style={{ fontSize: 11, fontWeight: 700, padding: '5px 12px', borderRadius: 7, border: 'none',
-                background: screenshotView === 'mobile' ? '#7948f6' : '#f4f5fb',
-                color:      screenshotView === 'mobile' ? '#fff'    : '#83899c',
-                cursor: 'pointer', letterSpacing: '.03em' }}>
-              Visual Analysis
-            </button>
-          )}
-          <button onClick={handleDesktopTab}
-            disabled={captureStatus === 'exhausted'}
+          <button onClick={() => setScreenshotView('mobile')}
             style={{ fontSize: 11, fontWeight: 700, padding: '5px 12px', borderRadius: 7, border: 'none',
-              background: screenshotView === 'desktop' ? '#7948f6' : '#f4f5fb',
-              color:      screenshotView === 'desktop' ? '#fff'    : captureStatus === 'exhausted' ? '#c8cfdc' : '#83899c',
-              cursor: captureStatus === 'exhausted' ? 'not-allowed' : 'pointer', letterSpacing: '.03em' }}>
-            Desktop Preview
-            {desktopLoading && (
-              <span style={{ display: 'inline-block', width: 10, height: 10,
-                border: '2px solid #ffffff66', borderTopColor: '#fff',
-                borderRadius: '50%', animation: 'spin .7s linear infinite',
-                marginLeft: 7, verticalAlign: 'middle' }} />
-            )}
+              background: screenshotView === 'mobile' ? '#7948f6' : '#f4f5fb',
+              color:      screenshotView === 'mobile' ? '#fff'    : '#83899c',
+              cursor: 'pointer', letterSpacing: '.03em' }}>
+            Visual Analysis
           </button>
         </div>
       )}
 
-      {/* Desktop Preview panel */}
-      {screenshotView === 'desktop' && (screenshotUrl || url) && (
-        <div style={{ marginBottom: 16 }}>
-          {desktopLoading && !desktopUrl && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10,
-              background: '#f4f0ff', borderRadius: 9, padding: '9px 13px' }}>
-              <div style={{ width: 14, height: 14, border: '2px solid #d8ccff', borderTopColor: '#7948f6',
-                borderRadius: '50%', animation: 'spin .7s linear infinite', flexShrink: 0 }} />
-              <span style={{ fontSize: 12, fontWeight: 700, color: '#7948f6' }}>
-                Capturing desktop screenshot — this takes about 15–30 seconds…
-              </span>
-            </div>
-          )}
-          {(captureStatus === 'failed' || captureStatus === 'exhausted' || captureStatus === 'timed_out') && !desktopUrl && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10,
-              background: '#fff5f6', borderRadius: 9, padding: '9px 13px' }}>
-              <span style={{ fontSize: 11, color: '#ef6473' }}>
-                {captureStatus === 'exhausted'
-                  ? 'Desktop screenshot could not be captured after multiple attempts.'
-                  : captureStatus === 'timed_out'
-                  ? 'Desktop screenshot is taking longer than expected. Click the tab above to try again.'
-                  : 'Desktop screenshot capture failed. Click the tab above to try again.'}
-              </span>
-            </div>
-          )}
-          {desktopUrl && (
-            <div style={{ position: 'relative', borderRadius: 13, overflow: 'hidden',
-              border: '1px solid #e9eaf2', background: '#f4f5fb',
-              maxHeight: 520, overflowY: 'auto', overflowX: 'hidden' }}>
-              <img src={desktopUrl} alt={`Desktop screenshot of ${url}`}
-                style={{ width: '100%', height: 'auto', display: 'block' }}
-                onError={e => { e.target.style.display = 'none'; }} />
-            </div>
-          )}
-          {!desktopLoading && !desktopUrl && captureStatus !== 'failed' && captureStatus !== 'exhausted' && captureStatus !== 'capturing' && captureStatus !== 'timed_out' && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 13px',
-              background: '#f4f5fb', borderRadius: 9 }}>
-              <span style={{ fontSize: 12, color: '#83899c' }}>
-                Click &ldquo;Desktop Preview&rdquo; above to capture a 1280px desktop screenshot.
-              </span>
-            </div>
-          )}
-        </div>
-      )}
+      {/* Desktop Preview panel — hidden; infrastructure and stored data preserved */}
 
       {/* Annotated screenshot (Visual Analysis tab) — only rendered when screenshot exists */}
       {screenshotView === 'mobile' && screenshotUrl && uxAnnotations?.image?.coverage === 'top-of-page' && (
@@ -2925,13 +2865,13 @@ export default function ReportClient({ isPro, userName, userAvatar }) {
 
                 {/* Prominent score cards — NO IIFEs here; SWC rejects fragment-returning IIFEs
                     inside another fragment. All logic uses auditStatuses from component scope. */}
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 10, marginBottom: 0 }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10, marginBottom: 0 }}>
                   {[
                     { label: 'Performance',   key: 'performance',   score: report.scores?.performance,   cat: 'Performance' },
                     { label: 'SEO',           key: 'seo',           score: report.scores?.seo,           cat: 'SEO' },
                     { label: 'Security',      key: 'security',      score: report.scores?.security,      cat: 'Security' },
                     { label: 'Accessibility', key: 'accessibility', score: report.scores?.accessibility, cat: 'Accessibility' },
-                    { label: 'UX',            key: 'ux',            score: uxScore,                      cat: 'Visual'  },
+                    // UX score removed — was deterministic fallback (perf+a11y avg), not AI-generated
                   ].map(c => {
                     const st       = auditStatuses[c.key];
                     // unavail only when there's no score AND no completed audit status.
