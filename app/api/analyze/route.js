@@ -214,7 +214,7 @@ export async function POST(request) {
     aiSummary,
     aiSummaryMeta,
     siteType,
-    uxScore,
+    uxScore: null,
     uxInsights,
     uxAnnotations: null,
     aiInsights,
