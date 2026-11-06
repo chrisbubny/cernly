@@ -215,4 +215,46 @@ function makeSourceLocation(url, line = 10, column = 4, original = null) {
   console.log('  ✓ Test 10: URL truncation');
 }
 
+// ─── Test 11: formatEvidenceItems passes insight fields through ───────────────
+// This is the critical regression guard for the scan-evidence.js allowlist fix.
+// Verifies that line, column, originalUrl, originalLine, reflowTime survive
+// formatEvidenceItems — previously they were silently dropped.
+// scan-evidence.js has no imports, so a plain relative import works.
+{
+  const { formatEvidenceItems } = await import('../lib/scan-evidence.js');
+
+  const items = [
+    {
+      url:         'https://example.com/app.min.js',
+      line:        1,
+      column:      1234,
+      originalUrl: 'https://example.com/src/app.ts',
+      originalLine: 42,
+      reflowTime:  25.6,
+    },
+    {
+      url:        'https://example.com/vendor.js',
+      line:       100,
+      reflowTime: 8.3,
+    },
+  ];
+
+  const result = formatEvidenceItems(items, { limit: 5 });
+  assert.ok(result.length > 0, 'formatEvidenceItems should produce output');
+
+  const parsed0 = JSON.parse(result.split('\n')[0]);
+  assert.equal(parsed0.line, 1, 'line must survive formatEvidenceItems');
+  assert.equal(parsed0.column, 1234, 'column must survive formatEvidenceItems');
+  assert.equal(parsed0.originalUrl, 'https://example.com/src/app.ts', 'originalUrl must survive');
+  assert.equal(parsed0.originalLine, 42, 'originalLine must survive');
+  assert.equal(parsed0.reflowTime, 25.6, 'reflowTime must survive formatEvidenceItems');
+
+  const parsed1 = JSON.parse(result.split('\n')[1]);
+  assert.equal(parsed1.line, 100, 'line in second item must survive');
+  assert.equal(parsed1.reflowTime, 8.3, 'reflowTime in second item must survive');
+  assert.equal(parsed1.column, undefined, 'absent column should not appear');
+
+  console.log('  ✓ Test 11: formatEvidenceItems passes insight source-location fields');
+}
+
 console.log('\n✅ All insight-evidence-extraction tests passed.\n');
