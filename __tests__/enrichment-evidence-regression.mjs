@@ -174,16 +174,15 @@ test('Enrichment call uses 4096 max_tokens', () => {
   );
 });
 
-test('AI Summary uses 1600 max_tokens (known truncation risk)', () => {
-  // This is a documentation test: 1600 is a known bottleneck when
-  // discoveries + uxInsights both fire. Flag it, not fix it here.
+test('AI Summary max_tokens raised to 2000 for verbose worst-case headroom', () => {
+  // max_tokens was raised from 1600 to 2000 after token-budget analysis showed
+  // that a verbose AI response (ignoring word-count instructions) could reach
+  // ~1710 tokens. The prompt was also tightened with per-field word limits.
+  // See: __tests__/ai-summary-token-budget.mjs for the full regression suite.
   assert.ok(
-    aiSrc.includes('max_tokens: 1600'),
-    'AI Summary is at 1600 max_tokens — known truncation risk; separate fix needed'
+    aiSrc.includes('max_tokens: 2000'),
+    'AI Summary must use max_tokens: 2000 — raised from 1600 to handle verbose worst-case (~1710 tokens)'
   );
-  // Report it clearly so reviewers notice
-  console.log('    ⚠ AI Summary max_tokens=1600: may truncate when discoveries+uxInsights both fire.');
-  console.log('      This is a pre-existing bottleneck. A separate fix should raise it to 2200–2400.');
 });
 
 test('Enrichment truncation guard returns baseRecs on max_tokens', () => {
