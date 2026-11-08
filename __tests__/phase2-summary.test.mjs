@@ -11,7 +11,7 @@ test('Compact Summary request uses the longer bounded deadline and smaller outpu
   global.fetch=async(u,o)=>{request=JSON.parse(o.body);return response(JSON.stringify({summary:'Measured performance needs work.',discoveries:[]}))};
   const r=await runAiSummary(input);
   assert.equal(r.aiSummaryMeta.status,'completed');assert.equal(r.aiSummaryMeta.reason,null);
-  assert.equal(SUMMARY_TIMEOUT_MS,20000);assert.equal(request.max_tokens,1600);
+  assert.equal(SUMMARY_TIMEOUT_MS,20000);assert.equal(request.max_tokens,2000); // raised from 1600 — verbose worst-case headroom
   assert.match(request.messages[0].content,/Do not invent/);
   assert.ok(r.aiSummaryMeta.durationMs>=0);
 });
