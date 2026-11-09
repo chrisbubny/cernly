@@ -36,6 +36,7 @@ export async function POST(request) {
     recFingerprint,
     activeStep,
     elementContext,
+    userPlatform,   // { name, category } — user-confirmed override when scan detected null
   } = body;
 
   if (typeof question !== 'string' || !question.trim()) {
@@ -288,7 +289,7 @@ ${activeStep.developer?.notes ? `Notes: ${activeStep.developer.notes}` : ''}
           }
         }
 
-        // Include detected platform/CMS type when available
+        // Include detected platform/CMS type when available; fall back to user override
         detectedPlatform = getDetectedPlatform(report.seoData);
         const purpose = normalizeSitePurpose(report.siteType);
         const siteTypeLine = purpose ? `Site purpose category (AI estimate): ${purpose}` : '';
@@ -314,9 +315,11 @@ ${focusBlock}${elementBlock}${focusRecBlock}${stepBlock}${assessmentBlock}${recs
 
 Be concise, practical, and friendly. Use plain English. When explaining a fix, give specific actionable steps — not generic advice. Keep answers under 250 words unless the question needs more detail. Refer to the site's actual findings and priorities rather than giving generic advice.
 
+SCAN DATA AVAILABLE: The user is already viewing results from a Lighthouse-backed performance scan. Use the scan data provided in this context — scores, findings, and evidence — to answer performance and SEO questions. Do not redirect users to run PageSpeed Insights, Lighthouse, or other external diagnostic tools to get information this scan already contains. When a user asks how to verify a fix, tell them to run a rescan in Cernly rather than directing them to an external tool. Exception: if a question requires investigation detail that the scan genuinely cannot provide (for example, specific server configuration, network routing, or JavaScript runtime behavior), you may recommend Chrome DevTools or another tool — but explain what specific information is missing from the scan and why the additional investigation is needed.
+
 IMPORTANT: Never describe, infer, or speculate about the site's purpose, content, the owner's profession, expertise, services, writing style, or business details unless those details appear explicitly in the scan data provided. The scan captures technical metrics only — page structure, load times, code patterns — not the site's written content or what the site is about. If a question requires knowing what the site does and that information is absent from the scan data, say so and answer based only on what was measured.
 
-${formatPlatformContext(detectedPlatform)} Distinguish confirmed scan findings from steps that require manual investigation.${hasFocusContext ? `
+${formatPlatformContext(detectedPlatform, !detectedPlatform && userPlatform?.name ? userPlatform : null)} Distinguish confirmed scan findings from steps that require manual investigation.${hasFocusContext ? `
 
 When RECOMMENDATION IN FOCUS, FOCUS FINDING, or FOCUS ELEMENT is present in the context, answer specifically about that finding or recommendation. Stay grounded in its supporting evidence and do not drift to other recommendations.` : ` When the assessment identifies a top opportunity, treat it as the established priority unless the user asks about something else specifically.`}${reportContext ? `\n${reportContext}` : ''}`;
 
