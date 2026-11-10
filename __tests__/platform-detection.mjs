@@ -178,13 +178,37 @@ test('multi: same platform from multiple asset patterns → confidence high', ()
 // Conflict resolution
 // ---------------------------------------------------------------------------
 
-test('conflict: Shopify CDN + Next.js /_next/ = null (conflicting high signals)', () => {
+test('conflict: Shopify CDN + Next.js /_next/ = Shopify primary + Next.js secondary', () => {
   const html = `
     <link href="//cdn.shopifycdn.com/s/files/1/theme.css" rel="stylesheet">
     <script src="/_next/static/chunks/main.js"></script>
   `;
   const result = detectPlatform(html);
-  // Both are high-confidence but different platforms → null
+  // CMS (Shopify) + framework (Next.js) — valid headless architecture, e.g. Shopify Hydrogen
+  assert.equal(result?.name, 'Shopify');
+  assert.ok(Array.isArray(result?.additionalTechnologies), 'additionalTechnologies should be an array');
+  assert.equal(result?.additionalTechnologies?.[0]?.name, 'Next.js');
+});
+
+test('conflict: WordPress + Next.js returns WordPress primary + Next.js secondary', () => {
+  const html = `
+    <script src="/wp-content/themes/mytheme/js/app.js"></script>
+    <script src="/_next/static/chunks/main.js"></script>
+  `;
+  const result = detectPlatform(html);
+  // Headless WordPress with Next.js frontend — valid co-existence
+  assert.equal(result?.name, 'WordPress');
+  assert.ok(Array.isArray(result?.additionalTechnologies));
+  assert.equal(result?.additionalTechnologies?.[0]?.name, 'Next.js');
+});
+
+test('conflict: two high-confidence CMSes returns null', () => {
+  const html = `
+    <script src="/wp-content/themes/x/app.js"></script>
+    <link href="//cdn.shopifycdn.com/s/files/1/theme.css" rel="stylesheet">
+  `;
+  const result = detectPlatform(html);
+  // Two different CMSes detected at high confidence — genuinely conflicting
   assert.equal(result, null);
 });
 
@@ -235,6 +259,27 @@ test('normalize: rejects missing evidence', () => {
   assert.equal(normalizeObservedPlatform(p), null);
 });
 
+test('normalize: preserves additionalTechnologies when present', () => {
+  const p = {
+    name: 'WordPress', category: 'cms', confidence: 'high', source: 'asset-url',
+    evidence: [{ type: 'asset-url', value: '/wp-content/x.js' }],
+    additionalTechnologies: [{ name: 'Next.js', category: 'framework', confidence: 'high' }],
+  };
+  const result = normalizeObservedPlatform(p);
+  assert.ok(Array.isArray(result?.additionalTechnologies));
+  assert.equal(result?.additionalTechnologies?.[0]?.name, 'Next.js');
+  assert.equal(result?.additionalTechnologies?.[0]?.category, 'framework');
+});
+
+test('normalize: omits additionalTechnologies when absent', () => {
+  const p = {
+    name: 'WordPress', category: 'cms', confidence: 'high', source: 'asset-url',
+    evidence: [{ type: 'asset-url', value: '/wp-content/x.js' }],
+  };
+  const result = normalizeObservedPlatform(p);
+  assert.equal(result?.additionalTechnologies, undefined);
+});
+
 // ---------------------------------------------------------------------------
 // formatPlatformContext
 // ---------------------------------------------------------------------------
@@ -263,6 +308,27 @@ test('formatPlatformContext: medium confidence includes note', () => {
     source: 'class-pattern', evidence: [{ type: 'class-pattern', value: 'w-container' }] };
   const ctx = formatPlatformContext(p);
   assert.ok(ctx.includes('medium-confidence'));
+});
+
+test('formatPlatformContext: includes additional technologies when present', () => {
+  const p = {
+    name: 'WordPress', category: 'cms', confidence: 'high', source: 'asset-url',
+    evidence: [{ type: 'asset-url', value: '/wp-content/x.js' }],
+    additionalTechnologies: [{ name: 'Next.js', category: 'framework', confidence: 'high' }],
+  };
+  const ctx = formatPlatformContext(p);
+  assert.ok(ctx.includes('Additionally detected'), `expected "Additionally detected" in: ${ctx}`);
+  assert.ok(ctx.includes('Next.js'), `expected "Next.js" in: ${ctx}`);
+  assert.ok(ctx.includes('headless') || ctx.includes('decoupled'), `expected headless/decoupled note in: ${ctx}`);
+});
+
+test('formatPlatformContext: no additional technologies note when absent', () => {
+  const p = {
+    name: 'WordPress', category: 'cms', confidence: 'high', source: 'asset-url',
+    evidence: [{ type: 'asset-url', value: '/wp-content/x.js' }],
+  };
+  const ctx = formatPlatformContext(p);
+  assert.ok(!ctx.includes('Additionally detected'), `should not include "Additionally detected" when none present`);
 });
 
 // ---------------------------------------------------------------------------

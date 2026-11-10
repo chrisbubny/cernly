@@ -925,8 +925,15 @@ export default function GuidedFix({
       const updated = { name, category };
       setLocalUserPlatform(updated);
       if (onUserPlatformChange) onUserPlatformChange(updated);
-      // Reset plan fetch so it regenerates with the platform context
+      // Reset plan fetch so it regenerates with the new platform context.
+      // Also reset step navigation — the new plan will have different steps.
+      // We do NOT persist this reset: the work-item DB record is not cleared.
+      // Old step-key completions won't match new plan step IDs, so they're
+      // naturally inert. When the user completes steps in the new plan,
+      // persistProgress will overwrite the DB with the correct new state.
       planFetchedForPersona.current = null;
+      setCurrentStep(0);
+      setCompletedSteps([]);
     } catch (err) {
       console.warn('[GuidedFix] platform save failed', err.message);
     } finally {

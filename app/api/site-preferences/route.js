@@ -3,6 +3,27 @@ import { getSitePreference, setSitePreference } from '@/lib/store';
 import { KNOWN_PLATFORMS } from '@/lib/platform';
 
 // ---------------------------------------------------------------------------
+// Domain validation helpers
+// ---------------------------------------------------------------------------
+
+/** Strip port number, lowercase, and trim whitespace. */
+function normalizeDomain(raw) {
+  return (raw || '').trim().toLowerCase().split(':')[0];
+}
+
+/**
+ * Returns true for syntactically valid hostnames (RFC 1123 / common practice):
+ * - 1–253 chars total
+ * - Labels separated by dots; each label 1–63 chars
+ * - Labels start and end with a letter or digit; may contain hyphens
+ * - No consecutive dots or leading/trailing dots
+ */
+const DOMAIN_RE = /^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)*[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/;
+function isValidDomain(domain) {
+  return typeof domain === 'string' && domain.length >= 1 && domain.length <= 253 && DOMAIN_RE.test(domain);
+}
+
+// ---------------------------------------------------------------------------
 // GET /api/site-preferences?domain=example.com
 // Returns the authenticated user's platform override for a domain, or null.
 // ---------------------------------------------------------------------------
@@ -11,8 +32,9 @@ export async function GET(request) {
   if (!userId) return Response.json({ error: 'Unauthorized' }, { status: 401 });
 
   const { searchParams } = new URL(request.url);
-  const domain = (searchParams.get('domain') || '').trim().toLowerCase();
+  const domain = normalizeDomain(searchParams.get('domain') || '');
   if (!domain) return Response.json({ error: 'domain parameter required' }, { status: 400 });
+  if (!isValidDomain(domain)) return Response.json({ error: 'Invalid domain format' }, { status: 400 });
 
   const pref = await getSitePreference(userId, domain);
   return Response.json({ preference: pref });
@@ -34,11 +56,12 @@ export async function POST(request) {
     return Response.json({ error: 'Invalid JSON body' }, { status: 400 });
   }
 
-  const domain = (body.domain || '').trim().toLowerCase();
+  const domain = normalizeDomain(body.domain || '');
   const platformName = (body.platformName || '').trim();
   const platformCategory = (body.platformCategory || 'unknown').trim();
 
   if (!domain) return Response.json({ error: 'domain is required' }, { status: 400 });
+  if (!isValidDomain(domain)) return Response.json({ error: 'Invalid domain format' }, { status: 400 });
   if (!platformName) return Response.json({ error: 'platformName is required' }, { status: 400 });
 
   // Validate platform name against known list (allow 'Other')
