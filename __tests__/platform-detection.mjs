@@ -225,6 +225,63 @@ test('conflict: medium-only conflicting signals = null', () => {
 // normalizeObservedPlatform
 // ---------------------------------------------------------------------------
 
+// ── Asset URL origin classification ──────────────────────────────────────────
+
+test('asset-origin: relative /wp-content/ path always matches WordPress', () => {
+  const html = `<link href="/wp-content/themes/x/style.css" rel="stylesheet">`;
+  const result = detectPlatform(html, 'https://example.com');
+  assert.equal(result?.name, 'WordPress', `expected WordPress, got ${result?.name}`);
+});
+
+test('asset-origin: same-origin absolute URL matches WordPress when pageUrl provided', () => {
+  const html = `<link href="https://example.com/wp-content/themes/x/style.css" rel="stylesheet">`;
+  const result = detectPlatform(html, 'https://example.com');
+  assert.equal(result?.name, 'WordPress', `expected WordPress, got ${result?.name}`);
+});
+
+test('asset-origin: cross-origin /wp-content/ URL does NOT match WordPress', () => {
+  const html = `<img src="https://elsewhere.test/wp-content/logo.png">`;
+  const result = detectPlatform(html, 'https://example.com');
+  assert.equal(result, null, `expected null for cross-origin wp-content, got ${result?.name}`);
+});
+
+test('asset-origin: cross-origin /wp-content/ URL does NOT match without pageUrl', () => {
+  // No pageUrl supplied — absolute URLs for path-based signals must be rejected
+  // to avoid false positives from cross-origin links
+  const html = `<img src="https://elsewhere.test/wp-content/logo.png">`;
+  const result = detectPlatform(html);
+  assert.equal(result, null, `expected null when no pageUrl and absolute URL, got ${result?.name}`);
+});
+
+test('asset-origin: protocol-relative same-origin matches', () => {
+  const html = `<script src="//example.com/wp-content/themes/x/app.js"></script>`;
+  const result = detectPlatform(html, 'https://example.com');
+  assert.equal(result?.name, 'WordPress', `expected WordPress for same-origin //, got ${result?.name}`);
+});
+
+test('asset-origin: protocol-relative cross-origin does NOT match path-based signal', () => {
+  const html = `<script src="//other-site.com/_next/static/chunks/main.js"></script>`;
+  const result = detectPlatform(html, 'https://example.com');
+  assert.equal(result, null, `expected null for cross-origin //_next/, got ${result?.name}`);
+});
+
+test('asset-origin: Shopify CDN matches even though it is cross-origin (domain-based signal)', () => {
+  const html = `<link href="https://cdn.shopifycdn.com/s/files/1/theme.css" rel="stylesheet">`;
+  const result = detectPlatform(html, 'https://my-store.com');
+  assert.equal(result?.name, 'Shopify', `expected Shopify for domain-based CDN signal, got ${result?.name}`);
+});
+
+test('asset-origin: same-origin /wp-content/ + cross-origin /_next/ returns WordPress only', () => {
+  // WordPress is same-origin; Next.js reference is cross-origin — should not trigger
+  const html = `
+    <link href="/wp-content/themes/x/style.css" rel="stylesheet">
+    <script src="https://other.com/_next/static/chunks/main.js"></script>
+  `;
+  const result = detectPlatform(html, 'https://example.com');
+  assert.equal(result?.name, 'WordPress', `expected only WordPress, got ${result?.name}`);
+  assert.equal(result?.additionalTechnologies, undefined, 'should have no additionalTechnologies');
+});
+
 test('normalize: accepts html-generator source', () => {
   const p = { name: 'WordPress', category: 'cms', confidence: 'definitive',
     source: 'html-generator', evidence: [{ type: 'meta-generator', value: 'WordPress 6.5' }] };

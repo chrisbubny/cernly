@@ -667,6 +667,17 @@ export default function GuidedFix({
   const [completedSteps, setCompletedSteps] = useState([]);
   const [plan,           setPlan]           = useState(null);
   const [planStatus,     setPlanStatus]     = useState('idle'); // idle|loading|ready|fallback|error
+
+  // After any plan load, discard completedStep IDs that don't belong to the
+  // new plan — they are ghost IDs from a previous platform-specific plan and
+  // must not contribute to the "N of M steps complete" counter.
+  const applyPlan = useCallback((newPlan) => {
+    setPlan(newPlan);
+    if (newPlan?.steps?.length) {
+      const validIds = new Set(newPlan.steps.map((s, i) => s.id || String(i)));
+      setCompletedSteps(prev => prev.filter(id => validIds.has(id)));
+    }
+  }, []);
   const [fallbackActions, setFallbackActions] = useState([]);
   const [showAllEvidence, setShowAllEvidence] = useState(false);
   // planFetched tracks which persona we last fetched for, so we re-fetch when
@@ -748,7 +759,7 @@ export default function GuidedFix({
           setFallbackActions(rec?.actions || []);
           setPlanStatus('fallback');
         } else if (data.plan) {
-          setPlan(data.plan);
+          applyPlan(data.plan);
           setPlanStatus('ready');
         } else if (data.fallback) {
           // Bare fallback — group key not covered by static templates
@@ -764,7 +775,7 @@ export default function GuidedFix({
         setPlanStatus('error');
       });
   // Re-run when persona changes (selectedRole) or the rec/report changes
-  }, [selectedRole, rec?.fingerprint, reportId]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [selectedRole, rec?.fingerprint, reportId, applyPlan]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── persist progress ───────────────────────────────────────────────────────
   const persistProgress = useCallback(async (updates) => {
@@ -834,7 +845,7 @@ export default function GuidedFix({
           setFallbackActions(rec?.actions || []);
           setPlanStatus('fallback');
         } else if (data.plan) {
-          setPlan(data.plan);
+          applyPlan(data.plan);
           setPlanStatus('ready');
         } else if (data.fallback) {
           setFallbackActions(data.actions || rec?.actions || []);
@@ -848,7 +859,7 @@ export default function GuidedFix({
         setFallbackActions(rec?.actions || []);
         setPlanStatus('error');
       });
-  }, [issue, selectedRole, rec?.fingerprint, rec?.actions, reportId]);
+  }, [issue, selectedRole, rec?.fingerprint, rec?.actions, reportId, applyPlan]);
 
   // Open inline chat for a specific step
   const handleAskStep = useCallback((step) => {
