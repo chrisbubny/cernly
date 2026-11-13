@@ -1023,7 +1023,7 @@ function UxCard({ uxScore, uxInsights, uxAnnotations, visionStatus, siteType, ur
 }
 
 /* ─── Ask Cernly drawer ─── */
-function AskCernlyDrawer({ reportId, domain, onClose, initialContext, initialMessage, recFingerprint, findingFingerprintId, activeStep, elementContext, seedMessages, initialExpanded }) {
+function AskCernlyDrawer({ reportId, domain, onClose, initialContext, initialMessage, recFingerprint, findingFingerprintId, activeStep, elementContext, seedMessages, initialExpanded, detectedPlatform, userPlatform }) {
   const [expanded, setExpanded] = useState(!!initialExpanded);
   const openingMsg = initialContext
     ? `I'm looking at the **${initialContext.category || 'finding'}** issue: **${initialContext.title}**.\n\n${initialContext.detail ? initialContext.detail.replace(/\[([^\]]+)\]\([^)]+\)/g, '$1').slice(0, 200) : 'What would you like to know about this finding?'}`
@@ -1069,6 +1069,7 @@ function AskCernlyDrawer({ reportId, domain, onClose, initialContext, initialMes
           ...(recFingerprint ? { recFingerprint } : {}),
           ...(activeStep ? { activeStep } : {}),
           ...(elementContext ? { elementContext } : {}),
+          ...(!detectedPlatform && userPlatform?.name ? { userPlatform } : {}),
         }),
       });
       const data = await res.json();
@@ -1396,9 +1397,11 @@ export default function ReportClient({ isPro, userName, userAvatar }) {
   const [workItems, setWorkItems]         = useState({}); // fingerprint → DB row
   const [workItemsLoaded, setWorkItemsLoaded] = useState(false);
   const [workItemError, setWorkItemError] = useState(null); // { fingerprint, message } for visible error
-  // Onboarding: first-report tip
+  // Onboarding: first-report tip — scoped per report slug so each new scan/rescan
+  // gets a fresh banner. The global key 'cernly_tip_dismissed' (no suffix) would
+  // permanently suppress the banner across ALL reports after one dismiss.
   const [tipDismissed, setTipDismissed] = useState(() => {
-    try { return !!localStorage.getItem('cernly_tip_dismissed'); } catch { return true; }
+    try { return !!localStorage.getItem('cernly_tip_dismissed_' + slug); } catch { return true; }
   });
   // Resume banner: session-scoped dismissal per report so returning visits re-show it
   const [resumeDismissed, setResumeDismissed] = useState(false);
@@ -1408,6 +1411,9 @@ export default function ReportClient({ isPro, userName, userAvatar }) {
   const [highlightedFp, setHighlightedFp]   = useState(null);            // pre-selected rec from ?rec= param
   // Stage 6: guided fix panel — null = closed, rec object = open
   const [guidedFixRec, setGuidedFixRec]     = useState(null);
+
+  // Site-level platform override — loaded after report, used in GuidedFix + Ask
+  const [userPlatformPref, setUserPlatformPref] = useState(null);
 
   const RESCAN_STAGES = [
     'Fetching page…',
@@ -1667,6 +1673,19 @@ export default function ReportClient({ isPro, userName, userAvatar }) {
   const domain = (() => {
     try { return new URL(report?.url || '').hostname; } catch { return report?.url || ''; }
   })();
+
+  // Load user-confirmed platform preference for this domain once domain is known
+  useEffect(() => {
+    if (!domain) return;
+    fetch(`/api/site-preferences?domain=${encodeURIComponent(domain)}`)
+      .then(r => r.ok ? r.json() : null)
+      .then(d => {
+        if (d?.preference) {
+          setUserPlatformPref({ name: d.preference.platformName, category: d.preference.platformCategory });
+        }
+      })
+      .catch(() => {}); // non-critical; GuidedFix works without it
+  }, [domain]);
 
   const createdAt = report?.createdAt
     ? new Date(report.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
@@ -2568,6 +2587,8 @@ export default function ReportClient({ isPro, userName, userAvatar }) {
           recFingerprint={drawerContext?._recFingerprint || null}
           activeStep={drawerContext?._activeStep || null}
           elementContext={drawerContext?._elementContext || null}
+          detectedPlatform={report?.seoData?.platform || null}
+          userPlatform={userPlatformPref}
           onClose={() => {
             setDrawerOpen(false);
             setDrawerContext(null);
@@ -2583,6 +2604,10 @@ export default function ReportClient({ isPro, userName, userAvatar }) {
           reportIntegerId={report.id}
           pageUrl={report.url}
           workItem={workItems[guidedFixRec.fingerprint] || null}
+          domain={domain}
+          detectedPlatform={report.seoData?.platform || null}
+          userPlatform={userPlatformPref}
+          onUserPlatformChange={updated => setUserPlatformPref(updated)}
           onClose={() => { setGuidedFixRec(null); setGuidedFixIssue(null); }}
           onStatusChange={(recFp, newStatus) => {
             // Adapt fingerprint-based call to issue-based handleStatusChange
@@ -3038,10 +3063,11 @@ export default function ReportClient({ isPro, userName, userAvatar }) {
                   );
                 })()}
 
-                {/* First-report tip — shown once, dismissed via localStorage.
-                    Suppressed when Cernly's Take already has a completed assessment
-                    with a top_opportunity CTA (avoids duplicating that nudge). */}
-                {!tipDismissed && !(report?.assessmentStatus === 'completed' && report?.assessment?.top_opportunity) && (
+                {/* Action Plan banner — shown once per report, dismissed per slug via localStorage.
+                    Previously suppressed when assessment had top_opportunity, but that hid the banner
+                    precisely when the report had the most useful content. The banner and Cernly's Take
+                    serve different locations (above-tab vs Overview tab content), so both can coexist. */}
+                {!tipDismissed && (
                   <div style={{
                     display: 'flex', alignItems: 'center', gap: 12,
                     background: 'linear-gradient(135deg, rgb(138, 70, 248), rgb(54, 135, 250))',
@@ -3075,7 +3101,7 @@ export default function ReportClient({ isPro, userName, userAvatar }) {
                     <button
                       onClick={() => {
                         setTipDismissed(true);
-                        try { localStorage.setItem('cernly_tip_dismissed', '1'); } catch {}
+                        try { localStorage.setItem('cernly_tip_dismissed_' + slug, '1'); } catch {}
                       }}
                       aria-label="Dismiss tip"
                       style={{ border: 0, background: 'transparent', color: 'rgba(255,255,255,0.7)',

@@ -75,6 +75,31 @@ const migrations = [
           CHECK (rec_type IN ('group', 'finding'));
     `,
   },
+  {
+    name: '004_create_site_preferences',
+    sql: `
+      -- Stores user-identified platform overrides at the site (domain) level.
+      -- Used when automatic scan detection returns null and the user confirms
+      -- their platform manually. Scoped to (user_id, domain) so a user's
+      -- preference for one domain doesn't bleed into another.
+      --
+      -- domain is the hostname only (e.g. 'example.com'), no scheme or path.
+      -- platform_name is a string from the KNOWN_PLATFORMS list in lib/platform.js.
+      -- platform_category is 'cms' | 'framework' | 'page-builder' | 'unknown'.
+      -- confirmed_at is updated on every write.
+      CREATE TABLE IF NOT EXISTS site_preferences (
+        user_id          TEXT        NOT NULL,
+        domain           TEXT        NOT NULL,
+        platform_name    TEXT        NOT NULL,
+        platform_category TEXT       NOT NULL DEFAULT 'unknown',
+        confirmed_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        PRIMARY KEY (user_id, domain)
+      );
+
+      -- Index for domain-only lookups (admin queries).
+      CREATE INDEX IF NOT EXISTS site_preferences_domain_idx ON site_preferences (domain);
+    `,
+  },
 ];
 
 async function run() {

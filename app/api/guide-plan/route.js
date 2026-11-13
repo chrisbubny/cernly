@@ -30,7 +30,9 @@ export async function POST(request) {
   let body = {};
   try { body = await request.json(); } catch {}
 
-  const { recFingerprint, reportId, focusIssue } = body;
+  const { recFingerprint, reportId, focusIssue, userPlatform } = body;
+  // userPlatform: { name, category } — user-confirmed override forwarded from the UI
+  // when scan detection returned null. Validated below after report load.
   // focusIssue is optional: { message, fingerprintId, description?, detail? }
   // When present, guidance generation is grounded in the specific selected finding.
   // Normalise persona — 'cms' is a legacy alias for 'cms-admin'; default to 'owner'
@@ -125,9 +127,13 @@ export async function POST(request) {
   const rawUrl   = report.url || '';
   const domain   = extractDomain(rawUrl);
   const siteUrl  = extractSiteUrl(rawUrl);
-  const platform = getDetectedPlatform(report.seoData);
+  const detectedPlatform = getDetectedPlatform(report.seoData);
+  // Use detected platform first; fall back to user-confirmed override when scan returned null
+  const platform = detectedPlatform || (userPlatform?.name ? userPlatform : null);
   console.info('[guide-plan:diag] generating plan | rec:', recFingerprint,
-    '| group_key:', rec.group_key || 'null', '| platform:', platform || 'unknown');
+    '| group_key:', rec.group_key || 'null',
+    '| platform:', platform?.name || 'unknown',
+    '| platformSource:', detectedPlatform ? 'scan' : userPlatform?.name ? 'user' : 'none');
   const plan     = await generateGuidancePlan(rec, domain, persona, platform, safeFocusIssue, siteUrl);
 
   // ── Diagnostic: log generation outcome ──────────────────────────────────────

@@ -16,6 +16,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import AffectedElements from './AffectedElements';
 import AskMarkdown from './AskMarkdown';
+import { KNOWN_PLATFORMS } from '@/lib/platform';
 
 // ---------------------------------------------------------------------------
 // Design tokens — light theme
@@ -655,6 +656,10 @@ export default function GuidedFix({
   onRescan,          // handleRescan(verifyFp) from ReportClient — triggers scan + navigate + verify
   onAskCernly,
   onSwitchTab,       // (tabKey: string) => void — closes GuidedFix and switches report tab
+  detectedPlatform,  // { name, category, confidence, source } from scan, or null
+  userPlatform,      // { name, category } from site_preferences DB, or null
+  onUserPlatformChange, // (platform) => void — notify parent when user confirms platform
+  domain,            // bare hostname for platform preference API calls
 }) {
   const [expanded, setExpanded] = useState(false);
   const [currentStep,    setCurrentStep]    = useState(0);
@@ -662,11 +667,31 @@ export default function GuidedFix({
   const [completedSteps, setCompletedSteps] = useState([]);
   const [plan,           setPlan]           = useState(null);
   const [planStatus,     setPlanStatus]     = useState('idle'); // idle|loading|ready|fallback|error
+
+  // After any plan load, discard completedStep IDs that don't belong to the
+  // new plan — they are ghost IDs from a previous platform-specific plan and
+  // must not contribute to the "N of M steps complete" counter.
+  const applyPlan = useCallback((newPlan) => {
+    setPlan(newPlan);
+    if (newPlan?.steps?.length) {
+      const validIds = new Set(newPlan.steps.map((s, i) => s.id || String(i)));
+      setCompletedSteps(prev => prev.filter(id => validIds.has(id)));
+    }
+  }, []);
   const [fallbackActions, setFallbackActions] = useState([]);
   const [showAllEvidence, setShowAllEvidence] = useState(false);
   // planFetched tracks which persona we last fetched for, so we re-fetch when
   // the user switches persona.  null = never fetched, string = last persona fetched.
   const planFetchedForPersona = useRef(null);
+
+  // ── Platform selector state ────────────────────────────────────────────────
+  // effectivePlatform: whichever platform we have (detected > user override)
+  // platformPickerOpen: whether the inline dropdown is visible
+  const [localUserPlatform, setLocalUserPlatform] = useState(userPlatform || null);
+  const [platformPickerOpen, setPlatformPickerOpen] = useState(false);
+  const [platformSaving, setPlatformSaving] = useState(false);
+  // Merge detected + user override; detected takes precedence
+  const effectivePlatform = detectedPlatform || localUserPlatform;
 
   // Inline chat state — null = closed, object = open for a specific step
   const [chatStep,     setChatStep]     = useState(null); // step object
@@ -709,6 +734,8 @@ export default function GuidedFix({
         recFingerprint: rec.fingerprint,
         reportId,
         persona,
+        // Pass user-confirmed platform when scan detection returned null
+        ...(!detectedPlatform && localUserPlatform ? { userPlatform: localUserPlatform } : {}),
         // Pass the specific issue so guidance is grounded in the selected finding
         ...(issue ? {
           focusIssue: {
@@ -732,7 +759,7 @@ export default function GuidedFix({
           setFallbackActions(rec?.actions || []);
           setPlanStatus('fallback');
         } else if (data.plan) {
-          setPlan(data.plan);
+          applyPlan(data.plan);
           setPlanStatus('ready');
         } else if (data.fallback) {
           // Bare fallback — group key not covered by static templates
@@ -748,7 +775,7 @@ export default function GuidedFix({
         setPlanStatus('error');
       });
   // Re-run when persona changes (selectedRole) or the rec/report changes
-  }, [selectedRole, rec?.fingerprint, reportId]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [selectedRole, rec?.fingerprint, reportId, applyPlan]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── persist progress ───────────────────────────────────────────────────────
   const persistProgress = useCallback(async (updates) => {
@@ -800,6 +827,7 @@ export default function GuidedFix({
         recFingerprint: rec.fingerprint,
         reportId,
         persona,
+        ...(!detectedPlatform && localUserPlatform ? { userPlatform: localUserPlatform } : {}),
         ...(issue ? {
           focusIssue: {
             message:       issue.message       || undefined,
@@ -817,7 +845,7 @@ export default function GuidedFix({
           setFallbackActions(rec?.actions || []);
           setPlanStatus('fallback');
         } else if (data.plan) {
-          setPlan(data.plan);
+          applyPlan(data.plan);
           setPlanStatus('ready');
         } else if (data.fallback) {
           setFallbackActions(data.actions || rec?.actions || []);
@@ -831,7 +859,7 @@ export default function GuidedFix({
         setFallbackActions(rec?.actions || []);
         setPlanStatus('error');
       });
-  }, [issue, selectedRole, rec?.fingerprint, rec?.actions, reportId]);
+  }, [issue, selectedRole, rec?.fingerprint, rec?.actions, reportId, applyPlan]);
 
   // Open inline chat for a specific step
   const handleAskStep = useCallback((step) => {
@@ -880,6 +908,8 @@ export default function GuidedFix({
           activeStep: chatStep,
           messages: chatMessages.slice(-6),
           ...(opts.elementContext ? { elementContext: opts.elementContext } : {}),
+          // Forward user-confirmed platform when scan detected nothing
+          ...(!detectedPlatform && localUserPlatform ? { userPlatform: localUserPlatform } : {}),
         }),
       });
       const data = await res.json().catch(() => ({}));
@@ -892,6 +922,36 @@ export default function GuidedFix({
       setChatLoading(false);
     }
   }, [chatLoading, chatMessages, chatStep, issue?.fingerprintId, rec?.fingerprint, reportId]);
+
+  // ── Platform confirmation handler ──────────────────────────────────────────
+  const handlePlatformSelect = useCallback(async (name, category) => {
+    if (!domain || !name) return;
+    setPlatformSaving(true);
+    try {
+      await fetch('/api/site-preferences', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ domain, platformName: name, platformCategory: category }),
+      });
+      const updated = { name, category };
+      setLocalUserPlatform(updated);
+      if (onUserPlatformChange) onUserPlatformChange(updated);
+      // Reset plan fetch so it regenerates with the new platform context.
+      // Also reset step navigation — the new plan will have different steps.
+      // We do NOT persist this reset: the work-item DB record is not cleared.
+      // Old step-key completions won't match new plan step IDs, so they're
+      // naturally inert. When the user completes steps in the new plan,
+      // persistProgress will overwrite the DB with the correct new state.
+      planFetchedForPersona.current = null;
+      setCurrentStep(0);
+      setCompletedSteps([]);
+    } catch (err) {
+      console.warn('[GuidedFix] platform save failed', err.message);
+    } finally {
+      setPlatformSaving(false);
+      setPlatformPickerOpen(false);
+    }
+  }, [domain, onUserPlatformChange]);
 
   const handleRescan = useCallback(() => {
     const fp = rec?.fingerprint;
@@ -1359,6 +1419,64 @@ export default function GuidedFix({
                   />
                 ))}
               </div>
+
+              {/* ── Platform selector — only shown when scan couldn't detect platform ── */}
+              {!detectedPlatform && (
+                <div style={{ marginBottom:16, background:'rgba(55,80,120,.07)',
+                  border:'1px solid rgba(55,80,120,.2)', borderRadius:10, padding:'12px 14px' }}>
+                  <div style={{ fontSize:10, fontWeight:800, letterSpacing:'.08em',
+                    textTransform:'uppercase', color: effectivePlatform ? GREEN : AMBER,
+                    marginBottom:6 }}>
+                    {effectivePlatform ? '✓ Platform identified' : 'Platform unknown'}
+                  </div>
+                  {effectivePlatform ? (
+                    <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+                      <span style={{ fontSize:13, color:'#1e2a3a', fontWeight:600 }}>
+                        {effectivePlatform.name}
+                      </span>
+                      <span style={{ fontSize:11, color:'#6b7a90',
+                        background:'rgba(0,0,0,.06)', borderRadius:4, padding:'2px 6px' }}>
+                        {effectivePlatform.category}
+                      </span>
+                      <button
+                        onClick={() => setPlatformPickerOpen(v => !v)}
+                        style={{ marginLeft:'auto', fontSize:11, color:BLUE, background:'none',
+                          border:'none', cursor:'pointer', padding:0, fontWeight:600 }}>
+                        Change
+                      </button>
+                    </div>
+                  ) : (
+                    <p style={{ fontSize:12, color:'#6b7a90', margin:'0 0 8px', lineHeight:1.5 }}>
+                      We couldn&apos;t detect your platform automatically. Identifying it helps
+                      Cernly give platform-specific fix instructions.
+                    </p>
+                  )}
+                  {(!effectivePlatform || platformPickerOpen) && (
+                    <div style={{ marginTop:8 }}>
+                      <select
+                        disabled={platformSaving}
+                        defaultValue=""
+                        onChange={e => {
+                          const val = e.target.value;
+                          if (!val) return;
+                          const p = KNOWN_PLATFORMS.find(x => x.name === val);
+                          if (p) handlePlatformSelect(p.name, p.category);
+                        }}
+                        style={{ width:'100%', fontSize:13, padding:'7px 10px',
+                          borderRadius:7, border:'1px solid rgba(55,80,120,.3)',
+                          background:'#fff', color:'#1e2a3a', cursor:'pointer' }}>
+                        <option value="">Select your platform…</option>
+                        {KNOWN_PLATFORMS.map(p => (
+                          <option key={p.name} value={p.name}>{p.name}</option>
+                        ))}
+                      </select>
+                      {platformSaving && (
+                        <p style={{ fontSize:11, color:BLUE, margin:'4px 0 0' }}>Saving…</p>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
 
               {rec?.actions?.length > 0 && (
                 <div style={{ background:'rgba(239,166,66,.06)',
