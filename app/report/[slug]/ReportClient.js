@@ -347,6 +347,10 @@ function FixCard({ issue, n, impact, rec, workItem, onStatusChange, onAskCernly,
   const catColor = { Performance: '#7948f6', SEO: '#3687fa', Security: '#19b987', Accessibility: '#efa642' };
   const cat = issue.area?.replace(/best.practices?/i, 'Performance') || 'Performance';
   const accent = catColor[cat] || '#7948f6';
+  // Multi-category badges for rec-backed tasks that span multiple finding categories
+  const extraCategories = Array.isArray(issue._categories) && issue._categories.length > 1
+    ? issue._categories.filter(c => c !== cat && catColor[c])
+    : [];
   const sevDotColor = { critical: '#ef6473', warning: '#efa642', info: '#b0b4c8', good: '#19b987' };
   const sevDot = sevDotColor[issue.severity] || sevDotColor.info;
 
@@ -392,6 +396,9 @@ function FixCard({ issue, n, impact, rec, workItem, onStatusChange, onAskCernly,
         {/* Meta chips */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
           <span style={{ fontSize: 10, color: '#83899c', fontWeight: 600 }}>{cat}</span>
+          {extraCategories.map(c => (
+            <span key={c} style={{ fontSize: 10, color: catColor[c] || '#83899c', fontWeight: 600 }}>{c}</span>
+          ))}
           <span style={{ fontSize: 10, background: st.bg, color: st.color,
             borderRadius: 6, padding: '2px 8px', fontWeight: 700 }}>{st.label}</span>
           <ImpactBadge level={impact} />
@@ -1488,7 +1495,9 @@ export default function ReportClient({ isPro, userName, userAvatar }) {
    */
   async function handleStatusChange(issue, newStatus) {
     if (!report?.url) return;
-    const fingerprint = issue.fingerprintId || issue.fingerprint || '';
+    // Use rec fingerprint when available (action plan tasks); fall back to finding fingerprint.
+    // This ensures work items are stored under the same key used by Guided Fix.
+    const fingerprint = issue._recFingerprint || issue.fingerprintId || issue.fingerprint || '';
     if (!fingerprint) return;
 
     // Optimistic update
@@ -1693,12 +1702,122 @@ export default function ReportClient({ isPro, userName, userAvatar }) {
 
   const allIssues = report?.issues || [];
 
-  const priorities = allIssues
-    .filter(i => i.severity === 'critical' || i.severity === 'warning')
-    .slice(0, 7);
-
   // Stage 5: fingerprint → recommendation map, built once per report load
   const recMap = buildRecMap(report?.recommendations || []);
+
+  /**
+   * Build a prioritized, deduplicated list of up to 7 remediation tasks for the Action Plan.
+   *
+   * Sources:
+   *   1. One task per recommendation (using the rec's highest-severity supporting finding
+   *      as the representative issue, with merged deduplicated affected resources).
+   *   2. Ungrouped critical/warning findings not covered by any recommendation.
+   *
+   * Both are placed into a single candidate pool and ranked by unified severity before
+   * slicing to 7. A low-priority rec cannot displace a critical ungrouped finding.
+   *
+   * Work-item compatibility:
+   *   - Rec-backed tasks expose _recFingerprint = rec.fingerprint.
+   *   - Legacy work items keyed by finding fingerprints are checked via ALL
+   *     supporting_findings fingerprints, with deterministic reconciliation:
+   *     rec-keyed status wins; conflicting legacy statuses are not auto-completed.
+   */
+  function buildPriorityTasks(issues, recommendations, recMapArg) {
+    const SEV_ORDER = { critical: 0, warning: 1, info: 2, good: 3 };
+    const recs = Array.isArray(recommendations) ? recommendations : [];
+
+    // Track which issue fingerprints are covered by a rec
+    const coveredFps = new Set();
+    const tasks = [];
+
+    for (const rec of recs) {
+      const findings = Array.isArray(rec.supporting_findings) ? rec.supporting_findings : [];
+      // Find highest severity among supporting findings
+      let topSeverity = 'info';
+      for (const f of findings) {
+        if ((SEV_ORDER[f.severity] ?? 99) < (SEV_ORDER[topSeverity] ?? 99)) {
+          topSeverity = f.severity;
+        }
+      }
+      // Only surface recs that have at least one critical or warning finding
+      if (topSeverity !== 'critical' && topSeverity !== 'warning') continue;
+
+      // Mark all supporting finding fingerprints as covered
+      if (Array.isArray(rec.finding_fingerprints)) {
+        for (const fp of rec.finding_fingerprints) coveredFps.add(fp);
+      }
+      for (const f of findings) {
+        const fp = f.fingerprintId || f.fingerprint || '';
+        if (fp) coveredFps.add(fp);
+      }
+
+      // Pick the highest-severity finding as the representative issue
+      const repFinding = findings
+        .filter(f => f.severity === 'critical' || f.severity === 'warning')
+        .sort((a, b) => (SEV_ORDER[a.severity] ?? 99) - (SEV_ORDER[b.severity] ?? 99))[0]
+        || findings[0]
+        || null;
+
+      // Merge deduplicated affected resources from all supporting findings
+      const seenUrls = new Set();
+      const mergedItems = [];
+      for (const f of findings) {
+        for (const item of (f.items || [])) {
+          const key = item.url || item.label || JSON.stringify(item);
+          if (!seenUrls.has(key)) {
+            seenUrls.add(key);
+            mergedItems.push(item);
+          }
+        }
+      }
+
+      // Collect unique categories across supporting findings
+      const categories = [...new Set(findings.map(f => f.area || f.source || '').filter(Boolean))];
+
+      tasks.push({
+        // Minimum fields FixCard reads from issue
+        fingerprintId:  rec.fingerprint,
+        severity:       topSeverity,
+        message:        rec.title || (repFinding?.message ?? ''),
+        description:    rec.what_we_found || rec.explanation || (repFinding?.description ?? ''),
+        fix:            repFinding?.fix ?? null,
+        source:         repFinding?.source ?? 'lh',
+        area:           repFinding?.area ?? (categories[0] ?? 'Performance'),
+        items:          mergedItems,
+        // Extras for the action plan
+        _recFingerprint: rec.fingerprint,
+        _categories:    categories,
+        _rec:           rec,
+      });
+    }
+
+    // Ungrouped critical/warning findings not covered by any rec
+    for (const issue of issues) {
+      if (issue.severity !== 'critical' && issue.severity !== 'warning') continue;
+      const fp = issue.fingerprintId || issue.fingerprint || '';
+      const cid = issue.canonicalFingerprintId || fp;
+      if (coveredFps.has(fp) || coveredFps.has(cid)) continue;
+      tasks.push({ ...issue, _recFingerprint: null, _categories: null, _rec: null });
+    }
+
+    // Priority order for secondary sort within a severity tier.
+    // Recs carry a computed `priority` field from calcPriority (persisted to DB).
+    // Ungrouped findings don't have this field; they fall through to 'medium'.
+    const PRIO_ORDER = { critical: 0, high: 1, medium: 2, low: 3 };
+    const taskPrio = t => PRIO_ORDER[t._rec?.priority || t.priority || 'medium'] ?? 2;
+
+    // Unified ranking: severity first (critical < warning), then rec priority within tier,
+    // then insertion order (stable — preserves analyzer ordering within equal priority).
+    tasks.sort((a, b) => {
+      const sevDiff = (SEV_ORDER[a.severity] ?? 99) - (SEV_ORDER[b.severity] ?? 99);
+      if (sevDiff !== 0) return sevDiff;
+      return taskPrio(a) - taskPrio(b);
+    });
+
+    return tasks.slice(0, 7);
+  }
+
+  const priorities = buildPriorityTasks(allIssues, report?.recommendations, recMap);
 
   const getImpact = (issue, idx) =>
     issue.severity === 'critical' || idx < 2 ? 'high' : idx < 5 ? 'medium' : 'low';
@@ -2477,14 +2596,34 @@ export default function ReportClient({ isPro, userName, userAvatar }) {
         </div>
       ) : (
         priorities.map((issue, i) => {
-          // Resolve rec from the fingerprint map using issue's own fingerprint or fingerprintId.
-          // Also try canonicalFingerprintId so finding-level recs (keyed by canonical ID) are
-          // found even when the issue has an ordinal suffix like :2.
+          // For rec-backed tasks, _rec and _recFingerprint are pre-resolved by buildPriorityTasks.
+          // For ungrouped findings, fall back to the recMap lookup by fingerprint.
           const fp  = issue.fingerprintId || issue.fingerprint || '';
           const cid = issue.canonicalFingerprintId || fp;
-          // Find the matched rec: try exact fingerprint first, then canonical (for finding recs)
-          const matchedRec = recMap[fp] || recMap[cid] || null;
-          const workItem = workItems[fp] || null;
+          const matchedRec = issue._rec || recMap[fp] || recMap[cid] || null;
+          // Work item is keyed by rec fingerprint (from DB) — use _recFingerprint when available.
+          const wiKey = issue._recFingerprint || fp;
+          const workItem = workItems[wiKey] || (() => {
+            // Legacy fallback: check all supporting finding fingerprints and pick the
+            // most conservative (least-committed) status. This prevents a 'verify'
+            // status on one finding from hiding 'in_progress' work on another.
+            // Status order (most work remaining = lowest index = wins):
+            //   in_progress=0, open=1, verify=2, dismissed=3
+            const STATUS_CONSERVATISM = { in_progress: 0, open: 1, verify: 2, dismissed: 3 };
+            if (issue._rec && Array.isArray(issue._rec.finding_fingerprints)) {
+              let best = null;
+              for (const sfp of issue._rec.finding_fingerprints) {
+                const wi = workItems[sfp];
+                if (!wi) continue;
+                if (!best) { best = wi; continue; }
+                const curRank = STATUS_CONSERVATISM[wi.userStatus]   ?? 99;
+                const bestRank = STATUS_CONSERVATISM[best.userStatus] ?? 99;
+                if (curRank < bestRank) best = wi;
+              }
+              return best;
+            }
+            return null;
+          })();
           return (
             <FixCard key={i} issue={issue} n={i + 1} impact={getImpact(issue, i)}
               rec={matchedRec}
