@@ -1079,8 +1079,17 @@ function AskCernlyDrawer({ reportId, domain, onClose, initialContext, initialMes
           ...(!detectedPlatform && userPlatform?.name ? { userPlatform } : {}),
         }),
       });
-      const data = await res.json();
-      setMessages(m => [...m, { role: 'assistant', content: data.answer || 'Sorry, something went wrong.' }]);
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        const userMsg = data.message
+          || (res.status === 422 ? 'The selected finding is no longer available in this report.'
+            : res.status === 429 ? 'You\'ve reached your Ask Cernly limit for this month.'
+            : res.status === 401 ? 'Sign in to use Ask Cernly.'
+            : 'Ask Cernly is temporarily unavailable — please try again shortly.');
+        setMessages(m => [...m, { role: 'assistant', content: userMsg }]);
+      } else {
+        setMessages(m => [...m, { role: 'assistant', content: data.answer || 'Ask Cernly couldn\'t generate a response — please try rephrasing your question.' }]);
+      }
     } catch {
       setMessages(m => [...m, { role: 'assistant', content: 'Network error — please try again.' }]);
     }
@@ -1717,7 +1726,12 @@ export default function ReportClient({ isPro, userName, userAvatar }) {
    * slicing to 7. A low-priority rec cannot displace a critical ungrouped finding.
    *
    * Work-item compatibility:
-   *   - Rec-backed tasks expose _recFingerprint = rec.fingerprint.
+   *   - Rec-backed tasks expose _recFingerprint = rec.fingerprint (stable work-item key).
+   *   - fingerprintId is a genuine supporting finding fingerprint (or null) — never the
+   *     rec fingerprint. Downstream code (GuidedFix affected-elements, /api/ask focusIssue)
+   *     relies on fingerprintId being a real finding identifier.
+   *   - area uses the rec's declared category so the primary badge is always correct
+   *     regardless of which supporting finding wins the rep-finding slot.
    *   - Legacy work items keyed by finding fingerprints are checked via ALL
    *     supporting_findings fingerprints, with deterministic reconciliation:
    *     rec-keyed status wins; conflicting legacy statuses are not auto-completed.
@@ -1751,11 +1765,20 @@ export default function ReportClient({ isPro, userName, userAvatar }) {
         if (fp) coveredFps.add(fp);
       }
 
-      // Pick the highest-severity finding as the representative issue
+      // Pick the highest-severity finding as the representative issue.
+      // Used for fix text and description only — NOT for fingerprintId.
       const repFinding = findings
         .filter(f => f.severity === 'critical' || f.severity === 'warning')
         .sort((a, b) => (SEV_ORDER[a.severity] ?? 99) - (SEV_ORDER[b.severity] ?? 99))[0]
         || findings[0]
+        || null;
+
+      // Stable finding fingerprint for downstream code that expects a real finding ID
+      // (GuidedFix affected-elements filter, /api/ask focusIssue lookup).
+      // Intentionally null when no genuine finding exists — callers must handle null.
+      // NEVER set to rec.fingerprint: rec fingerprints are not finding fingerprints.
+      const repFindingFp = repFinding?.fingerprintId
+        || repFinding?.canonicalFingerprintId
         || null;
 
       // Merge deduplicated affected resources from all supporting findings
@@ -1771,22 +1794,37 @@ export default function ReportClient({ isPro, userName, userAvatar }) {
         }
       }
 
-      // Collect unique categories across supporting findings
-      const categories = [...new Set(findings.map(f => f.area || f.source || '').filter(Boolean))];
+      // Collect unique categories across supporting findings.
+      // The rec's declared category (from RECOMMENDATION_GROUPS) is the primary
+      // badge so it is always correct (e.g. 'Accessibility' for accessibility-barriers)
+      // regardless of iteration order among supporting findings.
+      const recCategory = rec.category || null;
+      const findingCategories = [...new Set(findings.map(f => f.area || f.source || '').filter(Boolean))];
+      // Primary category: rec.category first; fall back to finding areas
+      const primaryCategory = recCategory || findingCategories[0] || 'Performance';
+      // All categories for multi-badge: include rec category + all finding areas, deduped
+      const allCategories = recCategory
+        ? [recCategory, ...findingCategories.filter(c => c !== recCategory)]
+        : findingCategories;
 
       tasks.push({
-        // Minimum fields FixCard reads from issue
-        fingerprintId:  rec.fingerprint,
+        // fingerprintId is a real finding fingerprint (or null) — never the rec fingerprint.
+        // GuidedFix uses this to scope affected-elements to the selected finding.
+        // /api/ask uses this to look up focusIssue in allIssues.
+        // null means "rec-level context only" — both callers handle null correctly.
+        fingerprintId:  repFindingFp,
         severity:       topSeverity,
         message:        rec.title || (repFinding?.message ?? ''),
         description:    rec.what_we_found || rec.explanation || (repFinding?.description ?? ''),
         fix:            repFinding?.fix ?? null,
         source:         repFinding?.source ?? 'lh',
-        area:           repFinding?.area ?? (categories[0] ?? 'Performance'),
+        // Primary category from rec declaration (not from rep finding's area) so the
+        // badge is always correct regardless of which supporting finding sorts first.
+        area:           primaryCategory,
         items:          mergedItems,
         // Extras for the action plan
         _recFingerprint: rec.fingerprint,
-        _categories:    categories,
+        _categories:    allCategories,
         _rec:           rec,
       });
     }

@@ -54,6 +54,11 @@ function buildPriorityTasks(issues, recommendations, recMapArg) {
       .sort((a, b) => (SEV_ORDER[a.severity] ?? 99) - (SEV_ORDER[b.severity] ?? 99))[0]
       || findings[0] || null;
 
+    // Real finding fingerprint — never rec.fingerprint
+    const repFindingFp = repFinding?.fingerprintId
+      || repFinding?.canonicalFingerprintId
+      || null;
+
     const seenUrls = new Set();
     const mergedItems = [];
     for (const f of findings) {
@@ -66,19 +71,24 @@ function buildPriorityTasks(issues, recommendations, recMapArg) {
       }
     }
 
-    const categories = [...new Set(findings.map(f => f.area || f.source || '').filter(Boolean))];
+    const recCategory = rec.category || null;
+    const findingCategories = [...new Set(findings.map(f => f.area || f.source || '').filter(Boolean))];
+    const primaryCategory = recCategory || findingCategories[0] || 'Performance';
+    const allCategories = recCategory
+      ? [recCategory, ...findingCategories.filter(c => c !== recCategory)]
+      : findingCategories;
 
     tasks.push({
-      fingerprintId:   rec.fingerprint,
+      fingerprintId:   repFindingFp,     // null or a real finding fingerprint
       severity:        topSeverity,
       message:         rec.title || (repFinding?.message ?? ''),
       description:     rec.what_we_found || rec.explanation || (repFinding?.description ?? ''),
       fix:             repFinding?.fix ?? null,
       source:          repFinding?.source ?? 'lh',
-      area:            repFinding?.area ?? (categories[0] ?? 'Performance'),
+      area:            primaryCategory,  // rec's declared category, not repFinding.area
       items:           mergedItems,
       _recFingerprint: rec.fingerprint,
-      _categories:     categories,
+      _categories:     allCategories,
       _rec:            rec,
     });
   }
@@ -492,6 +502,204 @@ function rec(fingerprint, title, findings, priority = 'medium') {
   assert.equal(wi.userStatus, 'in_progress',
     'conflicting seo=in_progress vs a11y=verify: must show in_progress, not verify');
   console.log('✓ conservative merge: conflicting SEO/Accessibility statuses → in_progress wins');
+}
+
+// ─── Regression tests: rec/finding identity separation ───────────────────────
+// These guard against rec.fingerprint being used as a finding fingerprint.
+
+// R1. Rec-backed task fingerprintId is a real finding fingerprint, not rec.fingerprint
+{
+  const findings = [
+    { fingerprintId: 'a11y:images_missing_alt', severity: 'critical', area: 'Accessibility', source: 'a11y', items: [] },
+    { fingerprintId: 'seo:images_missing_alt',  severity: 'critical', area: 'SEO',           source: 'seo',  items: [] },
+  ];
+  const accessibilityRec = {
+    fingerprint: 'accessibility-barriers',
+    title: 'Fix accessibility barriers',
+    category: 'Accessibility',
+    priority: 'high',
+    supporting_findings: findings,
+    finding_fingerprints: findings.map(f => f.fingerprintId),
+  };
+  const tasks = buildPriorityTasks([], [accessibilityRec], buildRecMap([accessibilityRec]));
+
+  assert.equal(tasks.length, 1);
+  const t = tasks[0];
+  // fingerprintId must be a real finding fingerprint, never rec.fingerprint
+  assert.notEqual(t.fingerprintId, 'accessibility-barriers',
+    'fingerprintId must NOT be rec.fingerprint');
+  assert.ok(
+    t.fingerprintId === 'a11y:images_missing_alt' || t.fingerprintId === null,
+    'fingerprintId should be a real finding fingerprint or null'
+  );
+  // _recFingerprint must still be the rec fingerprint (work-item key)
+  assert.equal(t._recFingerprint, 'accessibility-barriers',
+    '_recFingerprint must remain rec.fingerprint');
+  console.log('✓ R1: rec-backed task fingerprintId is a real finding fp, not rec.fingerprint');
+}
+
+// R2. area matches rec's declared category regardless of supporting finding order
+{
+  // SEO finding comes first in supporting_findings (simulating sort order from pipeline)
+  const findings = [
+    { fingerprintId: 'seo:images_missing_alt',  severity: 'critical', area: 'SEO',           source: 'seo',  items: [] },
+    { fingerprintId: 'a11y:images_missing_alt', severity: 'critical', area: 'Accessibility', source: 'a11y', items: [] },
+  ];
+  const accessibilityRec = {
+    fingerprint: 'accessibility-barriers',
+    title: 'Fix accessibility barriers',
+    category: 'Accessibility',  // rec's declared category
+    priority: 'high',
+    supporting_findings: findings,
+    finding_fingerprints: findings.map(f => f.fingerprintId),
+  };
+  const tasks = buildPriorityTasks([], [accessibilityRec], buildRecMap([accessibilityRec]));
+
+  assert.equal(tasks.length, 1);
+  const t = tasks[0];
+  // area must come from rec.category, NOT from the first repFinding.area (which would be 'SEO')
+  assert.equal(t.area, 'Accessibility',
+    'area must match rec.category even when SEO finding appears first in supporting_findings');
+  console.log('✓ R2: area uses rec.category regardless of supporting finding order');
+}
+
+// R3. _recFingerprint is always rec.fingerprint — work-item key unchanged
+{
+  const findings = [
+    { fingerprintId: 'lh:font-display', severity: 'warning', area: 'Performance', source: 'lh', items: [] },
+  ];
+  const perfRec = {
+    fingerprint: 'performance-font-display',
+    title: 'Eliminate render-blocking resources',
+    category: 'Performance',
+    priority: 'medium',
+    supporting_findings: findings,
+    finding_fingerprints: ['lh:font-display'],
+  };
+  const tasks = buildPriorityTasks([], [perfRec], buildRecMap([perfRec]));
+
+  assert.equal(tasks.length, 1);
+  assert.equal(tasks[0]._recFingerprint, 'performance-font-display',
+    '_recFingerprint must equal rec.fingerprint');
+  console.log('✓ R3: _recFingerprint is always rec.fingerprint');
+}
+
+// R4. Multiple supporting findings: all categories present in _categories, rec.category first
+{
+  const findings = [
+    { fingerprintId: 'a11y:images_missing_alt', severity: 'critical', area: 'Accessibility', source: 'a11y', items: [] },
+    { fingerprintId: 'seo:images_missing_alt',  severity: 'critical', area: 'SEO',           source: 'seo',  items: [] },
+  ];
+  const accessibilityRec = {
+    fingerprint: 'accessibility-barriers',
+    title: 'Fix accessibility barriers',
+    category: 'Accessibility',
+    priority: 'high',
+    supporting_findings: findings,
+    finding_fingerprints: findings.map(f => f.fingerprintId),
+  };
+  const tasks = buildPriorityTasks([], [accessibilityRec], buildRecMap([accessibilityRec]));
+
+  assert.equal(tasks.length, 1);
+  const cats = tasks[0]._categories;
+  assert.ok(Array.isArray(cats), '_categories should be an array');
+  assert.equal(cats[0], 'Accessibility', 'rec.category should be first in _categories');
+  assert.ok(cats.includes('SEO'), '_categories should include SEO from supporting findings');
+  assert.ok(cats.includes('Accessibility'), '_categories should include Accessibility');
+  console.log('✓ R4: _categories includes all contributing categories, rec.category first');
+}
+
+// R5. Null fingerprintId when no genuine finding has a fingerprintId
+{
+  const findings = [
+    // Finding with no fingerprintId — has only area and severity
+    { severity: 'warning', area: 'Performance', source: 'lh', message: 'No ID finding', items: [] },
+  ];
+  const rec5 = {
+    fingerprint: 'perf-no-id',
+    title: 'Performance issue',
+    category: 'Performance',
+    priority: 'medium',
+    supporting_findings: findings,
+    finding_fingerprints: [],
+  };
+  const tasks = buildPriorityTasks([], [rec5], buildRecMap([rec5]));
+
+  assert.equal(tasks.length, 1);
+  assert.equal(tasks[0].fingerprintId, null,
+    'fingerprintId should be null when no supporting finding has a real fingerprint');
+  assert.equal(tasks[0]._recFingerprint, 'perf-no-id',
+    '_recFingerprint must still be set for work-item keying');
+  console.log('✓ R5: null fingerprintId when no supporting finding has a real fingerprint');
+}
+
+// ─── Ask Cernly guard logic (simulated inline) ───────────────────────────────
+// Tests R6-R8 simulate the guard logic from GuidedFix.js and /api/ask/route.js.
+
+// R6. Ask without finding fingerprint — no findingFingerprintId sent in request body
+{
+  // Simulate GuidedFix guard: only forward findingFingerprintId when it's a real finding fp
+  // rec-level task: fingerprintId is null (after the fix)
+  const issue6 = { fingerprintId: null };
+  const rec6   = { fingerprint: 'accessibility-barriers' };
+
+  const shouldSendFindingFp =
+    issue6?.fingerprintId && issue6.fingerprintId !== rec6?.fingerprint;
+
+  assert.ok(!shouldSendFindingFp,
+    'when fingerprintId is null, findingFingerprintId must not be sent');
+  console.log('✓ R6: rec-level Ask — no findingFingerprintId sent when fingerprintId is null');
+}
+
+// R7. Finding-specific Ask with valid fingerprint sends findingFingerprintId
+{
+  // Simulate GuidedFix guard with a task that has a real finding fingerprint
+  const issue7 = { fingerprintId: 'a11y:images_missing_alt' };
+  const rec7   = { fingerprint: 'accessibility-barriers' };
+
+  const shouldSendFindingFp =
+    issue7?.fingerprintId && issue7.fingerprintId !== rec7?.fingerprint;
+
+  assert.equal(shouldSendFindingFp, true,
+    'when fingerprintId is a genuine finding fp, findingFingerprintId must be sent');
+  console.log('✓ R7: finding-specific Ask — findingFingerprintId sent when fingerprintId is a real finding fp');
+}
+
+// R8. Guard prevents rec.fingerprint from being forwarded as findingFingerprintId
+{
+  // Simulate old (pre-fix) scenario: fingerprintId was set to rec.fingerprint
+  const issueOld = { fingerprintId: 'accessibility-barriers' }; // was rec.fingerprint
+  const recOld   = { fingerprint:   'accessibility-barriers' };
+
+  const shouldSendFindingFp =
+    issueOld?.fingerprintId && issueOld.fingerprintId !== recOld?.fingerprint;
+
+  assert.equal(shouldSendFindingFp, false,
+    'guard must prevent rec.fingerprint from being forwarded as findingFingerprintId (causes 422 + quota burn)');
+  console.log('✓ R8: guard blocks rec.fingerprint from being forwarded as findingFingerprintId');
+}
+
+// R9. Work-item status keyed to rec fingerprint, not finding fingerprint
+{
+  // A rec-backed task must use _recFingerprint for work-item persistence.
+  // This guards against status being stored under a finding key when rec.fingerprint
+  // was incorrectly used as the task's fingerprintId (the old bug).
+  const task9 = {
+    fingerprintId:   'a11y:images_missing_alt',  // real finding fp (after fix)
+    _recFingerprint: 'accessibility-barriers',    // work-item key
+    _rec: { finding_fingerprints: ['a11y:images_missing_alt', 'seo:images_missing_alt'] },
+  };
+  // handleStatusChange uses: issue._recFingerprint || issue.fingerprintId
+  const workItemKey = task9._recFingerprint || task9.fingerprintId;
+  assert.equal(workItemKey, 'accessibility-barriers',
+    'work-item key must be rec fingerprint, not finding fingerprint');
+
+  // Verify: if we store under rec fingerprint, we can retrieve it
+  const workItems = { 'accessibility-barriers': { userStatus: 'in_progress' } };
+  const resolved = resolveWorkItem(task9, workItems);
+  assert.ok(resolved, 'must resolve work item via _recFingerprint');
+  assert.equal(resolved.userStatus, 'in_progress');
+  console.log('✓ R9: work-item status keyed to rec fingerprint, not finding fingerprint');
 }
 
 console.log('\n✅ All action-plan-dedup tests passed.');

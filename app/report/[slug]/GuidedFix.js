@@ -902,9 +902,13 @@ export default function GuidedFix({
           question: q,
           reportId,
           recFingerprint: rec?.fingerprint,
-          // Forward the specific issue fingerprint so /api/ask builds context grounded
-          // in the selected finding, not just the parent recommendation group.
-          ...(issue?.fingerprintId ? { findingFingerprintId: issue.fingerprintId } : {}),
+          // Only forward a finding fingerprint when it is a genuine finding ID —
+          // i.e. issue.fingerprintId is set and is NOT the rec's own fingerprint.
+          // When issue comes from a rec-backed Action Plan task, fingerprintId is null
+          // (set intentionally in buildPriorityTasks); we send rec context only.
+          ...(issue?.fingerprintId && issue.fingerprintId !== rec?.fingerprint
+            ? { findingFingerprintId: issue.fingerprintId }
+            : {}),
           activeStep: chatStep,
           messages: chatMessages.slice(-6),
           ...(opts.elementContext ? { elementContext: opts.elementContext } : {}),
@@ -913,7 +917,18 @@ export default function GuidedFix({
         }),
       });
       const data = await res.json().catch(() => ({}));
-      const answer = data.answer || 'Sorry, I couldn\'t get a response.';
+      if (!res.ok) {
+        // Surface API errors clearly. 422 = finding unavailable; 429 = quota reached.
+        // Other non-2xx errors indicate a server or auth problem.
+        const userMsg = data.message
+          || (res.status === 422 ? 'The selected finding is no longer available in this report.'
+            : res.status === 429 ? 'You\'ve reached your Ask Cernly limit for this month.'
+            : res.status === 401 ? 'Sign in to use Ask Cernly.'
+            : 'Ask Cernly is temporarily unavailable — please try again shortly.');
+        setChatMessages(prev => [...prev, { role: 'assistant', content: userMsg }]);
+        return;
+      }
+      const answer = data.answer || 'Ask Cernly couldn\'t generate a response — please try rephrasing your question.';
       setChatMessages(prev => [...prev, { role: 'assistant', content: answer }]);
     } catch {
       setChatError('Could not reach the assistant — check your connection and try again.');

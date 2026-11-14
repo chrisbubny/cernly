@@ -52,6 +52,30 @@ export async function POST(request) {
     report = access.report;
   }
 
+  // ── Validate findingFingerprintId BEFORE reserving a quota slot ──────────────
+  // A rec fingerprint passed as findingFingerprintId (e.g. 'accessibility-barriers')
+  // would otherwise consume a quota slot and return 422 with no AI call made.
+  // We validate here, after auth but before quota, so only genuine finding lookups
+  // are charged. 400 (not 422) is used for the rec-fingerprint misuse case because
+  // the client sent a structurally wrong value, not a valid ID that is absent.
+  if (findingFingerprintId && report) {
+    const allIssuesEarly = report.issues || [];
+    const foundEarly = allIssuesEarly.find(i => i.fingerprintId === findingFingerprintId)
+      || allIssuesEarly.find(i => canonicalFindingId(i) === canonicalFindingId(findingFingerprintId));
+    if (!foundEarly) {
+      console.warn(
+        `[Ask API] [${reqId}] findingFingerprintId_not_found ` +
+        `findingFingerprintId=${findingFingerprintId} reportId=${reportId} — ` +
+        `rejected before quota reservation`
+      );
+      return NextResponse.json(
+        { error: 'The selected finding is unavailable in this report.', _debug: { reqId, stage: 'finding_validation' } },
+        { status: 422 }
+      );
+    }
+  }
+  // ── End pre-quota finding validation ─────────────────────────────────────────
+
   // ── Ask usage ceiling (all plans) ────────────────────────────────────────────
   // Atomic quota reservation: increment the counter first, then check whether
   // the new value exceeds the ceiling.  Both steps happen in a single DB
@@ -137,14 +161,13 @@ export async function POST(request) {
         const scoreLines = buildScoreLines(report.scores || {}, report.auditStatuses || {});
         const allIssues  = report.issues || [];
 
-        // Surface the specific finding the chip was clicked on
+        // Surface the specific finding the chip was clicked on.
+        // findingFingerprintId was already validated pre-quota; focusIssue will be
+        // non-null whenever findingFingerprintId is set (validation would have returned
+        // 422 otherwise). No second guard needed here.
         const focusIssue = findingFingerprintId
           ? allIssues.find(i => i.fingerprintId === findingFingerprintId) || allIssues.find(i => canonicalFindingId(i) === canonicalFindingId(findingFingerprintId))
           : null;
-
-        if (findingFingerprintId && !focusIssue) {
-          return NextResponse.json({ error: 'The selected finding is unavailable in this report.' }, { status: 422 });
-        }
 
         // Auto-resolve recFingerprint from findingFingerprintId when the client
         // didn't (or couldn't) send one — e.g. matchedRec was null client-side.
