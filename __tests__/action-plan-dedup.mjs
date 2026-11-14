@@ -91,27 +91,45 @@ function buildPriorityTasks(issues, recommendations, recMapArg) {
     tasks.push({ ...issue, _recFingerprint: null, _categories: null, _rec: null });
   }
 
-  tasks.sort((a, b) => (SEV_ORDER[a.severity] ?? 99) - (SEV_ORDER[b.severity] ?? 99));
+  // Secondary sort within severity tier by rec priority
+  const PRIO_ORDER = { critical: 0, high: 1, medium: 2, low: 3 };
+  const taskPrio = t => PRIO_ORDER[t._rec?.priority || t.priority || 'medium'] ?? 2;
+
+  tasks.sort((a, b) => {
+    const sevDiff = (SEV_ORDER[a.severity] ?? 99) - (SEV_ORDER[b.severity] ?? 99);
+    if (sevDiff !== 0) return sevDiff;
+    return taskPrio(a) - taskPrio(b);
+  });
   return tasks.slice(0, 7);
 }
 
-// ─── Legacy work-item reconciliation (pure function) ─────────────────────────
+// ─── Legacy work-item reconciliation (conservative merge) ────────────────────
+
+// Status conservatism: most work remaining = lowest number = wins
+const STATUS_CONSERVATISM = { in_progress: 0, open: 1, verify: 2, dismissed: 3 };
 
 /**
  * Determine which workItems entry to use for a task.
- * Rec-keyed takes precedence; fall back to ALL supporting finding fingerprints.
- * Conflicting legacy statuses are NOT auto-completed.
+ * Rec-keyed takes precedence; fall back to ALL supporting finding fingerprints
+ * with conservative (least-committed) merge.
  */
 function resolveWorkItem(task, workItems) {
   // rec-keyed wins
   if (task._recFingerprint && workItems[task._recFingerprint]) {
     return workItems[task._recFingerprint];
   }
-  // legacy fallback
+  // legacy fallback: conservative merge (most work remaining wins)
   if (task._rec && Array.isArray(task._rec.finding_fingerprints)) {
+    let best = null;
     for (const sfp of task._rec.finding_fingerprints) {
-      if (workItems[sfp]) return workItems[sfp];
+      const wi = workItems[sfp];
+      if (!wi) continue;
+      if (!best) { best = wi; continue; }
+      const curRank  = STATUS_CONSERVATISM[wi.userStatus]   ?? 99;
+      const bestRank = STATUS_CONSERVATISM[best.userStatus] ?? 99;
+      if (curRank < bestRank) best = wi;
     }
+    return best;
   }
   return null;
 }
@@ -364,6 +382,116 @@ function rec(fingerprint, title, findings, priority = 'medium') {
   assert.ok(wi, 'should find work item at last fingerprint position');
   assert.equal(wi.userStatus, 'dismissed');
   console.log('✓ all supporting finding fingerprints inspected for legacy fallback');
+}
+
+// ─── Check 1: Secondary sort within severity tier ────────────────────────────
+
+// 17. Within the same severity tier, high-priority rec ranks before medium-priority rec
+{
+  const findings = [{ fingerprintId: 'lh:warn', severity: 'warning', area: 'Performance', items: [] }];
+  const highRec  = { ...rec('perf-high',  'High prio rec',  findings, 'high'),   priority: 'high'   };
+  const medRec   = { ...rec('perf-med',   'Medium prio rec', findings, 'medium'), priority: 'medium' };
+  const lowRec   = { ...rec('perf-low',   'Low prio rec',    findings, 'low'),    priority: 'low'    };
+  // Add in reverse priority order
+  const tasks = buildPriorityTasks([], [lowRec, medRec, highRec], {});
+  assert.equal(tasks.length, 3, 'should have 3 tasks');
+  assert.equal(tasks[0]._recFingerprint, 'perf-high',  'high-priority rec should rank first');
+  assert.equal(tasks[1]._recFingerprint, 'perf-med',   'medium-priority rec should rank second');
+  assert.equal(tasks[2]._recFingerprint, 'perf-low',   'low-priority rec should rank third');
+  console.log('✓ secondary sort: high-priority rec before medium before low within same severity');
+}
+
+// 18. Critical rec with low priority ranks below critical rec with high priority
+{
+  const findings = [{ fingerprintId: 'lh:crit', severity: 'critical', area: 'Performance', items: [] }];
+  const highCrit = { ...rec('crit-high', 'Critical high', findings, 'high'),   priority: 'high'   };
+  const medCrit  = { ...rec('crit-med',  'Critical med',  findings, 'medium'), priority: 'medium' };
+  const tasks = buildPriorityTasks([], [medCrit, highCrit], {});
+  assert.equal(tasks[0]._recFingerprint, 'crit-high', 'high-priority critical rec must rank first');
+  assert.equal(tasks[1]._recFingerprint, 'crit-med',  'medium-priority critical rec must rank second');
+  console.log('✓ secondary sort: within critical tier, high-priority rec ranked before medium');
+}
+
+// 19. Critical ungrouped finding ranks before all warning tasks regardless of rec priority
+{
+  const warnFinding = [{ fingerprintId: 'lh:warn', severity: 'warning', area: 'Performance', items: [] }];
+  const highWarningRec = { ...rec('high-warn', 'High warning rec', warnFinding, 'high'), priority: 'high' };
+  const critIssue = issue('ssl:https_missing', 'critical', 'Security');
+  const tasks = buildPriorityTasks([critIssue], [highWarningRec], {});
+  assert.equal(tasks[0].severity, 'critical', 'critical task must come before all warning tasks');
+  console.log('✓ secondary sort: critical task before all warnings even when warning has high rec priority');
+}
+
+// ─── Check 2: Conservative legacy merge ──────────────────────────────────────
+
+// 20. in_progress beats verify — user has work left to do
+{
+  const task = {
+    _recFingerprint: 'accessibility-barriers',
+    _rec: { finding_fingerprints: ['seo:images_missing_alt', 'a11y:images_missing_alt'] },
+  };
+  const workItems = {
+    'seo:images_missing_alt':  { userStatus: 'verify' },      // first in array: "ready to verify"
+    'a11y:images_missing_alt': { userStatus: 'in_progress' }, // second: still working
+  };
+  const wi = resolveWorkItem(task, workItems);
+  assert.equal(wi.userStatus, 'in_progress',
+    'in_progress must win over verify — user still has work in progress');
+  console.log('✓ conservative merge: in_progress beats verify (seo=verify, a11y=in_progress)');
+}
+
+// 21. verify beats open — in-progress work is not reverted to open
+{
+  const task = {
+    _recFingerprint: 'seo-meta',
+    _rec: { finding_fingerprints: ['seo:title_missing', 'seo:meta_desc_missing'] },
+  };
+  const workItems = {
+    'seo:title_missing':     { userStatus: 'verify' },
+    'seo:meta_desc_missing': { userStatus: 'open' },
+  };
+  const wi = resolveWorkItem(task, workItems);
+  // open (rank 1) is more conservative than verify (rank 2) — open shows more work needed
+  assert.equal(wi.userStatus, 'open',
+    'open must beat verify — open means work has not been started on that finding');
+  console.log('✓ conservative merge: open beats verify (title=verify, desc=open)');
+}
+
+// 22. in_progress beats dismissed — in-progress work is preserved
+{
+  const task = {
+    _recFingerprint: 'security-headers',
+    _rec: { finding_fingerprints: ['ssl:missing_header_csp', 'ssl:missing_header_hsts'] },
+  };
+  const workItems = {
+    'ssl:missing_header_csp':  { userStatus: 'dismissed' },
+    'ssl:missing_header_hsts': { userStatus: 'in_progress' },
+  };
+  const wi = resolveWorkItem(task, workItems);
+  assert.equal(wi.userStatus, 'in_progress',
+    'in_progress must win over dismissed');
+  console.log('✓ conservative merge: in_progress beats dismissed');
+}
+
+// 23. Conflicting SEO/Accessibility work-item statuses
+{
+  // Scenario: accessibility-barriers rec spans both a11y and seo missing-alt findings.
+  // The a11y finding was marked 'verify' (developer thinks they fixed alt tags).
+  // The seo finding was left 'in_progress' (CMS admin is still updating images).
+  // The merged task must show 'in_progress', not 'verify'.
+  const task = {
+    _recFingerprint: 'accessibility-barriers',
+    _rec: { finding_fingerprints: ['a11y:images_missing_alt', 'seo:images_missing_alt'] },
+  };
+  const workItems = {
+    'a11y:images_missing_alt': { userStatus: 'verify',      recFingerprint: 'a11y:images_missing_alt' },
+    'seo:images_missing_alt':  { userStatus: 'in_progress', recFingerprint: 'seo:images_missing_alt'  },
+  };
+  const wi = resolveWorkItem(task, workItems);
+  assert.ok(wi, 'should resolve a work item');
+  assert.equal(wi.userStatus, 'in_progress',
+    'conflicting seo=in_progress vs a11y=verify: must show in_progress, not verify');
+  console.log('✓ conservative merge: conflicting SEO/Accessibility statuses → in_progress wins');
 }
 
 console.log('\n✅ All action-plan-dedup tests passed.');

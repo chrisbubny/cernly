@@ -1800,8 +1800,19 @@ export default function ReportClient({ isPro, userName, userAvatar }) {
       tasks.push({ ...issue, _recFingerprint: null, _categories: null, _rec: null });
     }
 
-    // Unified ranking: critical first, then warning; stable sort (preserve insertion order within tier)
-    tasks.sort((a, b) => (SEV_ORDER[a.severity] ?? 99) - (SEV_ORDER[b.severity] ?? 99));
+    // Priority order for secondary sort within a severity tier.
+    // Recs carry a computed `priority` field from calcPriority (persisted to DB).
+    // Ungrouped findings don't have this field; they fall through to 'medium'.
+    const PRIO_ORDER = { critical: 0, high: 1, medium: 2, low: 3 };
+    const taskPrio = t => PRIO_ORDER[t._rec?.priority || t.priority || 'medium'] ?? 2;
+
+    // Unified ranking: severity first (critical < warning), then rec priority within tier,
+    // then insertion order (stable — preserves analyzer ordering within equal priority).
+    tasks.sort((a, b) => {
+      const sevDiff = (SEV_ORDER[a.severity] ?? 99) - (SEV_ORDER[b.severity] ?? 99);
+      if (sevDiff !== 0) return sevDiff;
+      return taskPrio(a) - taskPrio(b);
+    });
 
     return tasks.slice(0, 7);
   }
@@ -2593,11 +2604,23 @@ export default function ReportClient({ isPro, userName, userAvatar }) {
           // Work item is keyed by rec fingerprint (from DB) — use _recFingerprint when available.
           const wiKey = issue._recFingerprint || fp;
           const workItem = workItems[wiKey] || (() => {
-            // Legacy fallback: check all supporting finding fingerprints
+            // Legacy fallback: check all supporting finding fingerprints and pick the
+            // most conservative (least-committed) status. This prevents a 'verify'
+            // status on one finding from hiding 'in_progress' work on another.
+            // Status order (most work remaining = lowest index = wins):
+            //   in_progress=0, open=1, verify=2, dismissed=3
+            const STATUS_CONSERVATISM = { in_progress: 0, open: 1, verify: 2, dismissed: 3 };
             if (issue._rec && Array.isArray(issue._rec.finding_fingerprints)) {
+              let best = null;
               for (const sfp of issue._rec.finding_fingerprints) {
-                if (workItems[sfp]) return workItems[sfp];
+                const wi = workItems[sfp];
+                if (!wi) continue;
+                if (!best) { best = wi; continue; }
+                const curRank = STATUS_CONSERVATISM[wi.userStatus]   ?? 99;
+                const bestRank = STATUS_CONSERVATISM[best.userStatus] ?? 99;
+                if (curRank < bestRank) best = wi;
               }
+              return best;
             }
             return null;
           })();
