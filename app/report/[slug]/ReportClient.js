@@ -1809,9 +1809,7 @@ export default function ReportClient({ isPro, userName, userAvatar }) {
 
       tasks.push({
         // fingerprintId is a real finding fingerprint (or null) — never the rec fingerprint.
-        // GuidedFix uses this to scope affected-elements to the selected finding.
-        // /api/ask uses this to look up focusIssue in allIssues.
-        // null means "rec-level context only" — both callers handle null correctly.
+        // Used as additional context, but _isRecLevelContext controls downstream scope.
         fingerprintId:  repFindingFp,
         severity:       topSeverity,
         message:        rec.title || (repFinding?.message ?? ''),
@@ -1823,9 +1821,15 @@ export default function ReportClient({ isPro, userName, userAvatar }) {
         area:           primaryCategory,
         items:          mergedItems,
         // Extras for the action plan
-        _recFingerprint: rec.fingerprint,
-        _categories:    allCategories,
-        _rec:           rec,
+        _recFingerprint:    rec.fingerprint,
+        _categories:        allCategories,
+        _rec:               rec,
+        // Explicit context marker: this task represents a recommendation, not a single
+        // finding. Downstream code (GuidedFix affected-elements, Ask handlers) must use
+        // rec-level scope (show all supporting findings, omit findingFingerprintId) when
+        // this flag is true. Only finding-specific entries from the Findings tab have
+        // _isRecLevelContext === false/undefined.
+        _isRecLevelContext: true,
       });
     }
 
@@ -2674,9 +2678,12 @@ export default function ReportClient({ isPro, userName, userAvatar }) {
                   title: iss.message,
                   category: iss.area,
                   detail: iss.description || iss.detail,
-                  // Always forward the issue's stable fingerprint so /api/ask can build
-                  // focusBlock and auto-resolve the rec even when matchedRec is null.
-                  ...(iss.fingerprintId ? { _findingFingerprintId: iss.fingerprintId } : {}),
+                  // Forward finding fingerprint only for finding-specific context.
+                  // Rec-level tasks (_isRecLevelContext) use rec context only — the rep
+                  // finding fingerprint is NOT forwarded as a focus scope for Ask.
+                  ...(!iss._isRecLevelContext && iss.fingerprintId
+                    ? { _findingFingerprintId: iss.fingerprintId }
+                    : {}),
                   // Forward rec fingerprint for full recommendation context when available
                   ...(matchedRec?.fingerprint ? { _recFingerprint: matchedRec.fingerprint } : {}),
                   ...(suggestedQ ? { _initialMessage: suggestedQ } : {}),

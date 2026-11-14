@@ -736,13 +736,18 @@ export default function GuidedFix({
         persona,
         // Pass user-confirmed platform when scan detection returned null
         ...(!detectedPlatform && localUserPlatform ? { userPlatform: localUserPlatform } : {}),
-        // Pass the specific issue so guidance is grounded in the selected finding
+        // Pass the specific issue so guidance is grounded in the selected finding.
+        // For rec-level context (_isRecLevelContext), omit fingerprintId so the plan
+        // is scoped to the full recommendation, not just the representative finding.
         ...(issue ? {
           focusIssue: {
             message:       issue.message       || undefined,
-            fingerprintId: issue.fingerprintId || undefined,
             description:   issue.description   || undefined,
             detail:        issue.detail        || undefined,
+            // Only send fingerprintId for finding-specific entries (Findings tab).
+            ...(!issue._isRecLevelContext && issue.fingerprintId
+              ? { fingerprintId: issue.fingerprintId }
+              : {}),
           },
         } : {}),
       }),
@@ -831,9 +836,11 @@ export default function GuidedFix({
         ...(issue ? {
           focusIssue: {
             message:       issue.message       || undefined,
-            fingerprintId: issue.fingerprintId || undefined,
             description:   issue.description   || undefined,
             detail:        issue.detail        || undefined,
+            ...(!issue._isRecLevelContext && issue.fingerprintId
+              ? { fingerprintId: issue.fingerprintId }
+              : {}),
           },
         } : {}),
       }),
@@ -902,11 +909,12 @@ export default function GuidedFix({
           question: q,
           reportId,
           recFingerprint: rec?.fingerprint,
-          // Only forward a finding fingerprint when it is a genuine finding ID —
-          // i.e. issue.fingerprintId is set and is NOT the rec's own fingerprint.
-          // When issue comes from a rec-backed Action Plan task, fingerprintId is null
-          // (set intentionally in buildPriorityTasks); we send rec context only.
-          ...(issue?.fingerprintId && issue.fingerprintId !== rec?.fingerprint
+          // Forward findingFingerprintId only for finding-specific context:
+          // - issue._isRecLevelContext: Action Plan rec-backed task → rec context only
+          // - issue.fingerprintId must be a real finding ID (not rec.fingerprint)
+          ...(!issue?._isRecLevelContext
+              && issue?.fingerprintId
+              && issue.fingerprintId !== rec?.fingerprint
             ? { findingFingerprintId: issue.fingerprintId }
             : {}),
           activeStep: chatStep,
@@ -1294,7 +1302,13 @@ export default function GuidedFix({
                 // Derive the canonical fingerprint for the selected issue.
                 // canonicalFingerprintId is the stable unsuffixed form (e.g. 'lh:uses-optimized-images');
                 // fingerprintId may carry a ':2' suffix for duplicated findings.
-                const selectedFp       = issue?.fingerprintId || issue?.fingerprint || null;
+                //
+                // _isRecLevelContext: task originated from the Action Plan rec-level entry.
+                // Show ALL supporting findings in that case — do not scope to a single finding.
+                // Finding-specific entries (Findings tab) continue to filter as before.
+                const selectedFp = issue?._isRecLevelContext
+                  ? null
+                  : (issue?.fingerprintId || issue?.fingerprint || null);
                 const selectedCanonFp  = issue?.canonicalFingerprintId || selectedFp;
                 const allFindings      = rec?.supporting_findings || [];
 

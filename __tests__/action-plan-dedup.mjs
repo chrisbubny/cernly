@@ -79,17 +79,18 @@ function buildPriorityTasks(issues, recommendations, recMapArg) {
       : findingCategories;
 
     tasks.push({
-      fingerprintId:   repFindingFp,     // null or a real finding fingerprint
-      severity:        topSeverity,
-      message:         rec.title || (repFinding?.message ?? ''),
-      description:     rec.what_we_found || rec.explanation || (repFinding?.description ?? ''),
-      fix:             repFinding?.fix ?? null,
-      source:          repFinding?.source ?? 'lh',
-      area:            primaryCategory,  // rec's declared category, not repFinding.area
-      items:           mergedItems,
-      _recFingerprint: rec.fingerprint,
-      _categories:     allCategories,
-      _rec:            rec,
+      fingerprintId:      repFindingFp,     // null or a real finding fingerprint
+      severity:           topSeverity,
+      message:            rec.title || (repFinding?.message ?? ''),
+      description:        rec.what_we_found || rec.explanation || (repFinding?.description ?? ''),
+      fix:                repFinding?.fix ?? null,
+      source:             repFinding?.source ?? 'lh',
+      area:               primaryCategory,  // rec's declared category, not repFinding.area
+      items:              mergedItems,
+      _recFingerprint:    rec.fingerprint,
+      _categories:        allCategories,
+      _rec:               rec,
+      _isRecLevelContext: true,
     });
   }
 
@@ -677,6 +678,138 @@ function rec(fingerprint, title, findings, priority = 'medium') {
   assert.equal(shouldSendFindingFp, false,
     'guard must prevent rec.fingerprint from being forwarded as findingFingerprintId (causes 422 + quota burn)');
   console.log('✓ R8: guard blocks rec.fingerprint from being forwarded as findingFingerprintId');
+}
+
+// ─── Context distinction regression tests ────────────────────────────────────
+// These guard the explicit _isRecLevelContext flag and all four downstream callsites.
+
+// RC1. Rec-backed task has _isRecLevelContext: true; ungrouped finding does not
+{
+  const findings = [
+    { fingerprintId: 'a11y:images_missing_alt', severity: 'critical', area: 'Accessibility', source: 'a11y', items: [] },
+  ];
+  const accessibilityRec = {
+    fingerprint: 'accessibility-barriers',
+    title: 'Fix accessibility barriers',
+    category: 'Accessibility',
+    priority: 'high',
+    supporting_findings: findings,
+    finding_fingerprints: ['a11y:images_missing_alt'],
+  };
+  const ungroupedIssue = {
+    fingerprintId: 'ssl:https_missing', severity: 'critical', area: 'Security', source: 'ssl', items: [],
+  };
+  const tasks = buildPriorityTasks([ungroupedIssue], [accessibilityRec], buildRecMap([accessibilityRec]));
+
+  const recTask      = tasks.find(t => t._recFingerprint === 'accessibility-barriers');
+  const ungroupedTask = tasks.find(t => t.fingerprintId  === 'ssl:https_missing');
+
+  assert.ok(recTask,            'rec-backed task must be present');
+  assert.ok(ungroupedTask,      'ungrouped task must be present');
+  assert.equal(recTask._isRecLevelContext,      true,
+    'rec-backed task must have _isRecLevelContext: true');
+  assert.ok(!ungroupedTask._isRecLevelContext,
+    'ungrouped task must NOT have _isRecLevelContext');
+  console.log('✓ RC1: _isRecLevelContext: true on rec-backed tasks, absent on ungrouped findings');
+}
+
+// RC2. GuidedFix affected-elements: rec-level context shows all findings
+{
+  // Simulate GuidedFix selectedFp derivation with _isRecLevelContext
+  function deriveSelectedFp(issue) {
+    return issue?._isRecLevelContext
+      ? null
+      : (issue?.fingerprintId || issue?.fingerprint || null);
+  }
+
+  // Action Plan rec-backed task: should produce selectedFp = null → show all findings
+  const actionPlanTask = { fingerprintId: 'a11y:images_missing_alt', _isRecLevelContext: true };
+  assert.equal(deriveSelectedFp(actionPlanTask), null,
+    'rec-level context must produce selectedFp = null (show all findings)');
+
+  // Findings tab entry: should produce selectedFp = fingerprint → filter to that finding
+  const findingsTabIssue = { fingerprintId: 'a11y:images_missing_alt', _isRecLevelContext: false };
+  assert.equal(deriveSelectedFp(findingsTabIssue), 'a11y:images_missing_alt',
+    'finding-specific context must produce selectedFp = fingerprint');
+
+  // No issue at all (opened from resumable plan): should show all findings
+  assert.equal(deriveSelectedFp(null), null,
+    'null issue must produce selectedFp = null (show all findings)');
+  console.log('✓ RC2: GuidedFix selectedFp derivation correct for rec-level vs finding-specific');
+}
+
+// RC3. GuidedFix Ask: rec-level context does NOT send findingFingerprintId
+{
+  function guidedFixAskShouldSendFindingFp(issue, rec) {
+    return !issue?._isRecLevelContext
+      && Boolean(issue?.fingerprintId)
+      && issue.fingerprintId !== rec?.fingerprint;
+  }
+
+  const rec3 = { fingerprint: 'accessibility-barriers' };
+
+  // Action Plan task (rec-level): must NOT send findingFingerprintId
+  const recLevelTask = { fingerprintId: 'a11y:images_missing_alt', _isRecLevelContext: true };
+  assert.equal(guidedFixAskShouldSendFindingFp(recLevelTask, rec3), false,
+    'rec-level context must NOT forward findingFingerprintId to /api/ask');
+
+  // Findings tab entry: MUST send findingFingerprintId
+  const findingEntry = { fingerprintId: 'a11y:images_missing_alt', _isRecLevelContext: false };
+  assert.equal(guidedFixAskShouldSendFindingFp(findingEntry, rec3), true,
+    'finding-specific entry must forward findingFingerprintId to /api/ask');
+
+  // No issue: must NOT send (guard handles null gracefully)
+  assert.equal(guidedFixAskShouldSendFindingFp(null, rec3), false,
+    'null issue must not send findingFingerprintId');
+  console.log('✓ RC3: GuidedFix Ask handler respects _isRecLevelContext for findingFingerprintId');
+}
+
+// RC4. AskCernlyDrawer: rec-level task does NOT set _findingFingerprintId in drawerContext
+{
+  function drawerContextShouldIncludeFindingFp(iss) {
+    return !iss._isRecLevelContext && Boolean(iss.fingerprintId);
+  }
+
+  const recTask4 = { fingerprintId: 'a11y:images_missing_alt', _isRecLevelContext: true };
+  assert.equal(drawerContextShouldIncludeFindingFp(recTask4), false,
+    'rec-level task must NOT set _findingFingerprintId in drawerContext');
+
+  const findingIssue4 = { fingerprintId: 'a11y:images_missing_alt', _isRecLevelContext: false };
+  assert.equal(drawerContextShouldIncludeFindingFp(findingIssue4), true,
+    'finding-specific issue MUST set _findingFingerprintId in drawerContext');
+
+  const ungrouped4 = { fingerprintId: 'ssl:https_missing' }; // no _isRecLevelContext
+  assert.equal(drawerContextShouldIncludeFindingFp(ungrouped4), true,
+    'ungrouped finding (no _isRecLevelContext) must set _findingFingerprintId');
+  console.log('✓ RC4: AskCernlyDrawer invocation suppresses _findingFingerprintId for rec-level context');
+}
+
+// RC5. guide-plan focusIssue: rec-level task omits fingerprintId
+{
+  function buildFocusIssue(issue) {
+    if (!issue) return undefined;
+    return {
+      message:     issue.message     || undefined,
+      description: issue.description || undefined,
+      detail:      issue.detail      || undefined,
+      ...(!issue._isRecLevelContext && issue.fingerprintId
+        ? { fingerprintId: issue.fingerprintId }
+        : {}),
+    };
+  }
+
+  const recTask5 = { fingerprintId: 'a11y:images_missing_alt', _isRecLevelContext: true, message: 'Fix alt text' };
+  const fi5 = buildFocusIssue(recTask5);
+  assert.ok(!('fingerprintId' in fi5),
+    'rec-level focusIssue must NOT contain fingerprintId');
+  assert.equal(fi5.message, 'Fix alt text',
+    'rec-level focusIssue must still contain message for context');
+
+  const findingTask5 = { fingerprintId: 'a11y:images_missing_alt', _isRecLevelContext: false, message: 'Missing alt text' };
+  const fi5b = buildFocusIssue(findingTask5);
+  assert.equal(fi5b.fingerprintId, 'a11y:images_missing_alt',
+    'finding-specific focusIssue must include fingerprintId');
+  console.log('✓ RC5: guide-plan focusIssue omits fingerprintId for rec-level context');
 }
 
 // R9. Work-item status keyed to rec fingerprint, not finding fingerprint
