@@ -345,12 +345,14 @@ function FixCard({ issue, n, impact, rec, workItem, onStatusChange, onAskCernly,
   const evidenceKey = (issue.source || issue.area || '').toLowerCase();
   const evidence = EVIDENCE_SOURCE[evidenceKey] || (issue.source ? issue.source.toUpperCase() : 'Audit');
   const catColor = { Performance: '#7948f6', SEO: '#3687fa', Security: '#19b987', Accessibility: '#efa642' };
+  // Light tint backgrounds for category pills (10% opacity of the accent)
+  const catBg    = { Performance: '#f4f0ff', SEO: '#eef4ff', Security: '#edfaf5', Accessibility: '#fff8ed' };
   const cat = issue.area?.replace(/best.practices?/i, 'Performance') || 'Performance';
   const accent = catColor[cat] || '#7948f6';
-  // Multi-category badges for rec-backed tasks that span multiple finding categories
-  const extraCategories = Array.isArray(issue._categories) && issue._categories.length > 1
-    ? issue._categories.filter(c => c !== cat && catColor[c])
-    : [];
+  // All categories to show as pills: primary first, then secondaries from _categories
+  const allCatPills = Array.isArray(issue._categories) && issue._categories.length > 1
+    ? issue._categories.filter(c => catColor[c])   // primary is _categories[0]
+    : [cat].filter(c => catColor[c]);               // single-category: just the primary
   const sevDotColor = { critical: '#ef6473', warning: '#efa642', info: '#b0b4c8', good: '#19b987' };
   const sevDot = sevDotColor[issue.severity] || sevDotColor.info;
 
@@ -394,10 +396,17 @@ function FixCard({ issue, n, impact, rec, workItem, onStatusChange, onAskCernly,
           </div>
         </div>
         {/* Meta chips */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
-          <span style={{ fontSize: 10, color: '#83899c', fontWeight: 600 }}>{cat}</span>
-          {extraCategories.map(c => (
-            <span key={c} style={{ fontSize: 10, color: catColor[c] || '#83899c', fontWeight: 600 }}>{c}</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 5, flexShrink: 0 }}>
+          {allCatPills.map((c, i) => (
+            <span key={c} style={{
+              fontSize: 10, fontWeight: 700, letterSpacing: '.03em',
+              padding: '2px 7px', borderRadius: 5,
+              background: catBg[c] || '#f4f5fb',
+              color: catColor[c] || '#83899c',
+              border: `1px solid ${catColor[c] ? catColor[c] + '30' : '#e9eaf2'}`,
+              // De-emphasise secondary pills slightly to preserve visual hierarchy
+              opacity: i === 0 ? 1 : 0.8,
+            }}>{c}</span>
           ))}
           <span style={{ fontSize: 10, background: st.bg, color: st.color,
             borderRadius: 6, padding: '2px 8px', fontWeight: 700 }}>{st.label}</span>
@@ -2628,6 +2637,26 @@ export default function ReportClient({ isPro, userName, userAvatar }) {
           </div>
         );
       })()}
+
+      {/* Explanation — shown only when at least one task spans multiple categories */}
+      {priorities.some(t => Array.isArray(t._categories) && t._categories.length > 1) && (
+        <div style={{
+          display: 'flex', alignItems: 'flex-start', gap: 8,
+          background: '#f8f9fd', border: '1px solid #ecedf5',
+          borderRadius: 10, padding: '9px 13px', marginBottom: 12,
+        }}>
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#8899b5"
+            strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+            style={{ flexShrink: 0, marginTop: 1 }}>
+            <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/>
+            <line x1="12" y1="16" x2="12.01" y2="16"/>
+          </svg>
+          <p style={{ margin: 0, fontSize: 12, color: '#6b7489', lineHeight: 1.6 }}>
+            Some fixes address issues across more than one category. Cernly consolidates
+            related findings so you only have to fix them once.
+          </p>
+        </div>
+      )}
 
       {priorities.length === 0 ? (
         <div style={{ background: '#edf9f4', borderRadius: 14, padding: '22px 20px', textAlign: 'center' }}>
