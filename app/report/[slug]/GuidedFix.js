@@ -736,13 +736,18 @@ export default function GuidedFix({
         persona,
         // Pass user-confirmed platform when scan detection returned null
         ...(!detectedPlatform && localUserPlatform ? { userPlatform: localUserPlatform } : {}),
-        // Pass the specific issue so guidance is grounded in the selected finding
+        // Pass the specific issue so guidance is grounded in the selected finding.
+        // For rec-level context (_isRecLevelContext), omit fingerprintId so the plan
+        // is scoped to the full recommendation, not just the representative finding.
         ...(issue ? {
           focusIssue: {
             message:       issue.message       || undefined,
-            fingerprintId: issue.fingerprintId || undefined,
             description:   issue.description   || undefined,
             detail:        issue.detail        || undefined,
+            // Only send fingerprintId for finding-specific entries (Findings tab).
+            ...(!issue._isRecLevelContext && issue.fingerprintId
+              ? { fingerprintId: issue.fingerprintId }
+              : {}),
           },
         } : {}),
       }),
@@ -831,9 +836,11 @@ export default function GuidedFix({
         ...(issue ? {
           focusIssue: {
             message:       issue.message       || undefined,
-            fingerprintId: issue.fingerprintId || undefined,
             description:   issue.description   || undefined,
             detail:        issue.detail        || undefined,
+            ...(!issue._isRecLevelContext && issue.fingerprintId
+              ? { fingerprintId: issue.fingerprintId }
+              : {}),
           },
         } : {}),
       }),
@@ -902,9 +909,14 @@ export default function GuidedFix({
           question: q,
           reportId,
           recFingerprint: rec?.fingerprint,
-          // Forward the specific issue fingerprint so /api/ask builds context grounded
-          // in the selected finding, not just the parent recommendation group.
-          ...(issue?.fingerprintId ? { findingFingerprintId: issue.fingerprintId } : {}),
+          // Forward findingFingerprintId only for finding-specific context:
+          // - issue._isRecLevelContext: Action Plan rec-backed task → rec context only
+          // - issue.fingerprintId must be a real finding ID (not rec.fingerprint)
+          ...(!issue?._isRecLevelContext
+              && issue?.fingerprintId
+              && issue.fingerprintId !== rec?.fingerprint
+            ? { findingFingerprintId: issue.fingerprintId }
+            : {}),
           activeStep: chatStep,
           messages: chatMessages.slice(-6),
           ...(opts.elementContext ? { elementContext: opts.elementContext } : {}),
@@ -913,7 +925,18 @@ export default function GuidedFix({
         }),
       });
       const data = await res.json().catch(() => ({}));
-      const answer = data.answer || 'Sorry, I couldn\'t get a response.';
+      if (!res.ok) {
+        // Surface API errors clearly. 422 = finding unavailable; 429 = quota reached.
+        // Other non-2xx errors indicate a server or auth problem.
+        const userMsg = data.message
+          || (res.status === 422 ? 'The selected finding is no longer available in this report.'
+            : res.status === 429 ? 'You\'ve reached your Ask Cernly limit for this month.'
+            : res.status === 401 ? 'Sign in to use Ask Cernly.'
+            : 'Ask Cernly is temporarily unavailable — please try again shortly.');
+        setChatMessages(prev => [...prev, { role: 'assistant', content: userMsg }]);
+        return;
+      }
+      const answer = data.answer || 'Ask Cernly couldn\'t generate a response — please try rephrasing your question.';
       setChatMessages(prev => [...prev, { role: 'assistant', content: answer }]);
     } catch {
       setChatError('Could not reach the assistant — check your connection and try again.');
@@ -1279,7 +1302,13 @@ export default function GuidedFix({
                 // Derive the canonical fingerprint for the selected issue.
                 // canonicalFingerprintId is the stable unsuffixed form (e.g. 'lh:uses-optimized-images');
                 // fingerprintId may carry a ':2' suffix for duplicated findings.
-                const selectedFp       = issue?.fingerprintId || issue?.fingerprint || null;
+                //
+                // _isRecLevelContext: task originated from the Action Plan rec-level entry.
+                // Show ALL supporting findings in that case — do not scope to a single finding.
+                // Finding-specific entries (Findings tab) continue to filter as before.
+                const selectedFp = issue?._isRecLevelContext
+                  ? null
+                  : (issue?.fingerprintId || issue?.fingerprint || null);
                 const selectedCanonFp  = issue?.canonicalFingerprintId || selectedFp;
                 const allFindings      = rec?.supporting_findings || [];
 
