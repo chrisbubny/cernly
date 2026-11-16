@@ -1,12 +1,14 @@
 /**
- * Tests for Action Plan category pills and conditional explanation banner.
+ * Tests for Action Plan category display (plain-text, simplified).
  *
  * Covers:
- *   - allCatPills derivation from _categories (multi-category and single-category tasks)
- *   - Primary pill is always first; secondaries follow in order
- *   - Only known catColor categories are included
- *   - Explanation banner visibility: shown when any task has >1 category, hidden otherwise
- *   - Explanation banner is not shown when all tasks are single-category
+ *   - catText derivation: categories joined with · for multi-category tasks
+ *   - isMultiCat flag: true only when >1 known category
+ *   - Only known categories (KNOWN_CATS) are included
+ *   - Primary category (rec.category / _categories[0]) is always first
+ *   - Single-category tasks: catText equals that one category, isMultiCat false
+ *   - Unknown categories filtered out
+ *   - best-practices normalisation → Performance
  *   - Integration with buildPriorityTasks: _categories populated correctly
  *
  * Run: node __tests__/action-plan-category-pills.mjs
@@ -16,27 +18,21 @@ import assert from 'node:assert/strict';
 
 // ─── Inline helpers (match production logic exactly) ─────────────────────────
 
-const catColor = { Performance: '#7948f6', SEO: '#3687fa', Security: '#19b987', Accessibility: '#efa642' };
-const catBg    = { Performance: '#f4f0ff', SEO: '#eef4ff', Security: '#edfaf5', Accessibility: '#fff8ed' };
+const KNOWN_CATS = new Set(['Performance', 'SEO', 'Security', 'Accessibility']);
 
 /**
- * Derives the ordered category pills for a FixCard task.
+ * Derives catText and isMultiCat for a FixCard task.
  * Matches the production logic in FixCard.
  */
-function deriveAllCatPills(issue) {
-  if (Array.isArray(issue._categories) && issue._categories.length > 1) {
-    return issue._categories.filter(c => catColor[c]);
-  }
+function deriveCatDisplay(issue) {
   const cat = (issue.area || 'Performance').replace(/best.practices?/i, 'Performance');
-  return [cat].filter(c => catColor[c]);
-}
-
-/**
- * Returns true if the explanation banner should be shown for a given priorities array.
- * Matches the production condition.
- */
-function shouldShowExplanation(priorities) {
-  return priorities.some(t => Array.isArray(t._categories) && t._categories.length > 1);
+  const catLabels = Array.isArray(issue._categories) && issue._categories.length > 1
+    ? issue._categories.filter(c => KNOWN_CATS.has(c))
+    : [cat].filter(c => KNOWN_CATS.has(c));
+  return {
+    catText:    catLabels.join(' · '),
+    isMultiCat: catLabels.length > 1,
+  };
 }
 
 // ─── Inline buildPriorityTasks (matches production) ──────────────────────────
@@ -108,104 +104,96 @@ function buildPriorityTasks(issues, recommendations) {
 
 // ─── Tests ────────────────────────────────────────────────────────────────────
 
-// 1. Multi-category task: pills derived from _categories, primary first
+// 1. Multi-category task: catText joined with ·, primary first
 {
-  const task = {
+  const { catText, isMultiCat } = deriveCatDisplay({
     area: 'Accessibility',
     _categories: ['Accessibility', 'SEO'],
-  };
-  const pills = deriveAllCatPills(task);
-  assert.deepEqual(pills, ['Accessibility', 'SEO'],
-    'multi-category task: Accessibility should be first (rec.category), SEO second');
-  console.log('✓ 1: multi-category pills — primary first, secondary after');
+  });
+  assert.equal(catText, 'Accessibility · SEO');
+  assert.equal(isMultiCat, true);
+  console.log('✓ 1: multi-category — catText joined with ·, isMultiCat true');
 }
 
-// 2. Single-category task: only one pill, derived from area
+// 2. Single-category task: catText is just that category, no dot, isMultiCat false
 {
-  const task = { area: 'Performance', _categories: null };
-  const pills = deriveAllCatPills(task);
-  assert.deepEqual(pills, ['Performance'],
-    'single-category task: only the primary area pill');
-  console.log('✓ 2: single-category task — one pill');
+  const { catText, isMultiCat } = deriveCatDisplay({ area: 'Performance', _categories: null });
+  assert.equal(catText, 'Performance');
+  assert.equal(isMultiCat, false);
+  console.log('✓ 2: single-category — catText is plain name, isMultiCat false');
 }
 
-// 3. Single-category with _categories of length 1: still one pill
+// 3. _categories of length 1: still a single pill, isMultiCat false
 {
-  const task = { area: 'SEO', _categories: ['SEO'] };
-  const pills = deriveAllCatPills(task);
-  assert.deepEqual(pills, ['SEO'],
-    '_categories.length === 1 → single pill');
-  console.log('✓ 3: _categories length 1 — one pill, not duplicated');
+  const { catText, isMultiCat } = deriveCatDisplay({ area: 'SEO', _categories: ['SEO'] });
+  assert.equal(catText, 'SEO');
+  assert.equal(isMultiCat, false);
+  console.log('✓ 3: _categories length 1 — single text, isMultiCat false');
 }
 
-// 4. Unknown/unmapped categories are filtered out
+// 4. Unknown categories are filtered out of catText
 {
-  const task = {
+  const { catText, isMultiCat } = deriveCatDisplay({
     area: 'Accessibility',
     _categories: ['Accessibility', 'UnknownCategory', 'SEO'],
-  };
-  const pills = deriveAllCatPills(task);
-  assert.deepEqual(pills, ['Accessibility', 'SEO'],
-    'unknown categories not in catColor must be filtered out');
-  console.log('✓ 4: unknown categories filtered from pills');
+  });
+  assert.equal(catText, 'Accessibility · SEO');
+  assert.equal(isMultiCat, true);
+  console.log('✓ 4: unknown categories filtered from catText');
 }
 
-// 5. Ordering: rec.category is always first regardless of _categories array order
+// 5. All unknown categories → catText falls back to area, isMultiCat false
 {
-  // Simulate a case where SEO would appear first if we just took _categories[0]
-  // but rec.category is Accessibility — buildPriorityTasks puts rec.category first.
-  const task = {
-    area: 'Accessibility',          // area = primaryCategory = rec.category
+  const { catText, isMultiCat } = deriveCatDisplay({
+    area: 'Performance',
+    _categories: ['UnknownA', 'UnknownB'],
+  });
+  // _categories has length > 1 but all filtered → catLabels.length 0
+  // then join of empty array is ''
+  assert.equal(catText, '');
+  assert.equal(isMultiCat, false);
+  console.log('✓ 5: all-unknown _categories → empty catText, isMultiCat false');
+}
+
+// 6. best-practices area normalised to Performance
+{
+  const { catText } = deriveCatDisplay({ area: 'best-practices', _categories: null });
+  assert.equal(catText, 'Performance');
+  console.log('✓ 6: best-practices area → normalised to Performance');
+}
+
+// 7. Ordering: rec.category (_categories[0]) is always first in catText
+{
+  const { catText } = deriveCatDisplay({
+    area: 'Accessibility',
     _categories: ['Accessibility', 'SEO'],
-  };
-  const pills = deriveAllCatPills(task);
-  assert.equal(pills[0], 'Accessibility', 'primary (rec.category) must be pills[0]');
-  assert.equal(pills[1], 'SEO',           'secondary must be pills[1]');
-  console.log('✓ 5: rec.category is always pills[0]');
+  });
+  assert.equal(catText.startsWith('Accessibility'), true,
+    'primary (rec.category) must come first');
+  console.log('✓ 7: rec.category is first in catText');
 }
 
-// 6. Explanation banner shown when any task has multiple categories
+// 8. No explanation banner logic — banner removed; only isMultiCat drives info icon
 {
-  const priorities = [
+  // isMultiCat is per-task; there is no priorities-level banner check any more.
+  // Verify the per-task flag is independently accurate.
+  const tasks = [
     { area: 'Performance', _categories: ['Performance'] },
     { area: 'Accessibility', _categories: ['Accessibility', 'SEO'] },
   ];
-  assert.equal(shouldShowExplanation(priorities), true,
-    'banner should show when at least one task has >1 category');
-  console.log('✓ 6: banner shown when at least one multi-category task present');
+  const flags = tasks.map(t => deriveCatDisplay(t).isMultiCat);
+  assert.deepEqual(flags, [false, true]);
+  console.log('✓ 8: isMultiCat correct per-task; no priorities-level banner');
 }
 
-// 7. Explanation banner hidden when all tasks are single-category
+// 9. Ungrouped findings (_categories: null) → isMultiCat false
 {
-  const priorities = [
-    { area: 'Performance', _categories: ['Performance'] },
-    { area: 'SEO', _categories: ['SEO'] },
-    { area: 'Security', _categories: null },   // ungrouped (no _categories)
-  ];
-  assert.equal(shouldShowExplanation(priorities), false,
-    'banner should NOT show when all tasks are single-category or ungrouped');
-  console.log('✓ 7: banner hidden when all tasks are single-category or ungrouped');
+  const { isMultiCat } = deriveCatDisplay({ area: 'Security', _categories: null });
+  assert.equal(isMultiCat, false);
+  console.log('✓ 9: ungrouped finding (_categories: null) → isMultiCat false');
 }
 
-// 8. Explanation banner hidden when priorities is empty
-{
-  assert.equal(shouldShowExplanation([]), false,
-    'banner should NOT show when priorities is empty');
-  console.log('✓ 8: banner hidden when priorities is empty');
-}
-
-// 9. Ungrouped findings have no _categories — not counted for banner
-{
-  const priorities = [
-    { area: 'Security', _categories: null, _recFingerprint: null },
-    { area: 'Performance', _categories: null, _recFingerprint: null },
-  ];
-  assert.equal(shouldShowExplanation(priorities), false,
-    'ungrouped findings with _categories: null must not trigger banner');
-  console.log('✓ 9: ungrouped findings (_categories: null) do not trigger banner');
-}
-
-// 10. Integration: buildPriorityTasks produces correct _categories for mixed-source rec
+// 10. Integration: mixed-source rec produces correct catText via buildPriorityTasks
 {
   const findings = [
     { fingerprintId: 'a11y:images_missing_alt', severity: 'critical', area: 'Accessibility', source: 'a11y', items: [] },
@@ -221,17 +209,14 @@ function buildPriorityTasks(issues, recommendations) {
   };
   const tasks = buildPriorityTasks([], [accessibilityRec]);
   assert.equal(tasks.length, 1);
-  const t = tasks[0];
 
-  const pills = deriveAllCatPills(t);
-  assert.equal(pills[0], 'Accessibility', 'primary pill must be Accessibility (rec.category)');
-  assert.equal(pills[1], 'SEO',           'secondary pill must be SEO');
-  assert.equal(shouldShowExplanation(tasks), true,
-    'banner should be shown for this report (has multi-category task)');
-  console.log('✓ 10: integration — accessibility-barriers rec produces correct pills and triggers banner');
+  const { catText, isMultiCat } = deriveCatDisplay(tasks[0]);
+  assert.equal(catText, 'Accessibility · SEO');
+  assert.equal(isMultiCat, true);
+  console.log('✓ 10: integration — mixed-source rec → catText "Accessibility · SEO", isMultiCat true');
 }
 
-// 11. Integration: single-source rec does NOT trigger banner
+// 11. Integration: single-source rec → plain catText, isMultiCat false
 {
   const findings = [
     { fingerprintId: 'lh:render-blocking', severity: 'critical', area: 'Performance', source: 'lh', items: [] },
@@ -247,19 +232,32 @@ function buildPriorityTasks(issues, recommendations) {
   };
   const tasks = buildPriorityTasks([], [perfRec]);
   assert.equal(tasks.length, 1);
-  const pills = deriveAllCatPills(tasks[0]);
-  assert.deepEqual(pills, ['Performance'], 'single-source Performance rec: one pill only');
-  assert.equal(shouldShowExplanation(tasks), false,
-    'single-source rec should NOT trigger banner');
-  console.log('✓ 11: single-source rec — one pill, no banner');
+  const { catText, isMultiCat } = deriveCatDisplay(tasks[0]);
+  assert.equal(catText, 'Performance');
+  assert.equal(isMultiCat, false);
+  console.log('✓ 11: single-source rec → "Performance", isMultiCat false');
 }
 
-// 12. catBg values are defined for all catColor keys
+// 12. Three-category rec: catText includes all three in order
 {
-  for (const cat of Object.keys(catColor)) {
-    assert.ok(catBg[cat], `catBg must define a background for category: ${cat}`);
-  }
-  console.log('✓ 12: catBg defined for all catColor keys');
+  const findings = [
+    { fingerprintId: 'lh:render-blocking', severity: 'critical', area: 'Performance',   source: 'lh',   items: [] },
+    { fingerprintId: 'a11y:contrast',      severity: 'warning',  area: 'Accessibility', source: 'a11y', items: [] },
+    { fingerprintId: 'seo:meta',           severity: 'warning',  area: 'SEO',           source: 'seo',  items: [] },
+  ];
+  const rec = {
+    fingerprint: 'cross-category',
+    title: 'Cross-category fix',
+    category: 'Performance',
+    priority: 'high',
+    supporting_findings: findings,
+    finding_fingerprints: findings.map(f => f.fingerprintId),
+  };
+  const tasks = buildPriorityTasks([], [rec]);
+  const { catText, isMultiCat } = deriveCatDisplay(tasks[0]);
+  assert.equal(catText, 'Performance · Accessibility · SEO');
+  assert.equal(isMultiCat, true);
+  console.log('✓ 12: three-category rec → "Performance · Accessibility · SEO"');
 }
 
 console.log('\n✅ All action-plan-category-pills tests passed.');

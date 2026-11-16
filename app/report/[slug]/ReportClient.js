@@ -344,15 +344,14 @@ function FixCard({ issue, n, impact, rec, workItem, onStatusChange, onAskCernly,
   const st = FIX_STATUSES[effectiveStatusKey] || FIX_STATUSES.open;
   const evidenceKey = (issue.source || issue.area || '').toLowerCase();
   const evidence = EVIDENCE_SOURCE[evidenceKey] || (issue.source ? issue.source.toUpperCase() : 'Audit');
-  const catColor = { Performance: '#7948f6', SEO: '#3687fa', Security: '#19b987', Accessibility: '#efa642' };
-  // Light tint backgrounds for category pills (10% opacity of the accent)
-  const catBg    = { Performance: '#f4f0ff', SEO: '#eef4ff', Security: '#edfaf5', Accessibility: '#fff8ed' };
+  const KNOWN_CATS = new Set(['Performance', 'SEO', 'Security', 'Accessibility']);
   const cat = issue.area?.replace(/best.practices?/i, 'Performance') || 'Performance';
-  const accent = catColor[cat] || '#7948f6';
-  // All categories to show as pills: primary first, then secondaries from _categories
-  const allCatPills = Array.isArray(issue._categories) && issue._categories.length > 1
-    ? issue._categories.filter(c => catColor[c])   // primary is _categories[0]
-    : [cat].filter(c => catColor[c]);               // single-category: just the primary
+  // Category text: primary + secondaries joined with · (filtered to known categories)
+  const catLabels = Array.isArray(issue._categories) && issue._categories.length > 1
+    ? issue._categories.filter(c => KNOWN_CATS.has(c))
+    : [cat].filter(c => KNOWN_CATS.has(c));
+  const catText    = catLabels.join(' · ');
+  const isMultiCat = catLabels.length > 1;
   const sevDotColor = { critical: '#ef6473', warning: '#efa642', info: '#b0b4c8', good: '#19b987' };
   const sevDot = sevDotColor[issue.severity] || sevDotColor.info;
 
@@ -395,21 +394,28 @@ function FixCard({ issue, n, impact, rec, workItem, onStatusChange, onAskCernly,
             {issue.message}
           </div>
         </div>
-        {/* Meta chips */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 5, flexShrink: 0 }}>
-          {allCatPills.map((c, i) => (
-            <span key={c} style={{
-              fontSize: 10, fontWeight: 700, letterSpacing: '.03em',
-              padding: '2px 7px', borderRadius: 5,
-              background: catBg[c] || '#f4f5fb',
-              color: catColor[c] || '#83899c',
-              border: `1px solid ${catColor[c] ? catColor[c] + '30' : '#e9eaf2'}`,
-              // De-emphasise secondary pills slightly to preserve visual hierarchy
-              opacity: i === 0 ? 1 : 0.8,
-            }}>{c}</span>
-          ))}
-          <span style={{ fontSize: 10, background: st.bg, color: st.color,
-            borderRadius: 6, padding: '2px 8px', fontWeight: 700 }}>{st.label}</span>
+        {/* Meta row */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+          {/* Category text — muted, with optional multi-category tooltip icon */}
+          <span style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
+            <span style={{ fontSize: 11, color: '#8899b5', fontWeight: 500,
+              whiteSpace: 'nowrap' }}>{catText}</span>
+            {isMultiCat && (
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#b0b4c8"
+                strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+                style={{ flexShrink: 0, cursor: 'default' }}
+                title="One fix addresses findings across multiple categories">
+                <circle cx="12" cy="12" r="10"/>
+                <line x1="12" y1="8" x2="12" y2="12"/>
+                <line x1="12" y1="16" x2="12.01" y2="16"/>
+              </svg>
+            )}
+          </span>
+          {/* Non-default status — subdued text, hidden when Open */}
+          {effectiveStatusKey !== 'open' && (
+            <span style={{ fontSize: 11, color: '#8899b5', fontWeight: 500,
+              whiteSpace: 'nowrap' }}>{st.label}</span>
+          )}
           <ImpactBadge level={impact} />
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#b0b4c8" strokeWidth="2.5" strokeLinecap="round">
             <path d={expanded ? 'm18 15-6-6-6 6' : 'm6 9 6 6 6-6'}/>
@@ -2638,25 +2644,6 @@ export default function ReportClient({ isPro, userName, userAvatar }) {
         );
       })()}
 
-      {/* Explanation — shown only when at least one task spans multiple categories */}
-      {priorities.some(t => Array.isArray(t._categories) && t._categories.length > 1) && (
-        <div style={{
-          display: 'flex', alignItems: 'flex-start', gap: 8,
-          background: '#f8f9fd', border: '1px solid #ecedf5',
-          borderRadius: 10, padding: '9px 13px', marginBottom: 12,
-        }}>
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#8899b5"
-            strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
-            style={{ flexShrink: 0, marginTop: 1 }}>
-            <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/>
-            <line x1="12" y1="16" x2="12.01" y2="16"/>
-          </svg>
-          <p style={{ margin: 0, fontSize: 12, color: '#6b7489', lineHeight: 1.6 }}>
-            Some fixes address issues across more than one category. Cernly consolidates
-            related findings so you only have to fix them once.
-          </p>
-        </div>
-      )}
 
       {priorities.length === 0 ? (
         <div style={{ background: '#edf9f4', borderRadius: 14, padding: '22px 20px', textAlign: 'center' }}>
