@@ -79,19 +79,16 @@ function RunningHeader({ domain, label }) {
   );
 }
 
-/** Evidence list — up to 5 items; "and N more" if truncated */
+/** Evidence list — all items, no cap; paginates naturally */
 function EvidenceList({ items }) {
   if (!Array.isArray(items) || items.length === 0) return null;
-
-  const visible = items.slice(0, 5);
-  const remaining = items.length - visible.length;
 
   return (
     <View style={{ marginBottom: 4 }}>
       <Text style={S.evidenceHeader}>
         {items.length} affected resource{items.length !== 1 ? 's' : ''}
       </Text>
-      {visible.map((item, i) => {
+      {items.map((item, i) => {
         const url   = item?.url   || null;
         const label = item?.label || null;
         const bytes = item?.bytes != null ? formatBytes(item.bytes) : null;
@@ -105,9 +102,6 @@ function EvidenceList({ items }) {
           </View>
         );
       })}
-      {remaining > 0 ? (
-        <Text style={S.evidenceMore}>… and {remaining} more</Text>
-      ) : null}
     </View>
   );
 }
@@ -120,31 +114,35 @@ function FindingItem({ finding, apRef }) {
   const hasItems = Array.isArray(finding.items) && finding.items.length > 0;
 
   return (
-    <View style={S.findingItem} wrap={false}>
-      {/* Title row */}
-      <View style={S.findingTopRow}>
-        <View style={[S.findingSevDot, { backgroundColor: sevClr }]} />
-        <View style={S.findingTitleBlock}>
-          <Text style={S.findingTitle}>{finding.message || finding.title || '—'}</Text>
-          <View style={S.findingMetaRow}>
-            <Text style={[S.findingSevLabel, { color: sevClr }]}>{sevLbl}</Text>
-            {apRef ? (
-              <>
-                <Text style={S.findingMetaDot}>·</Text>
-                <Text style={S.findingRecRef}>Action Plan #{apRef}</Text>
-              </>
-            ) : null}
+    <View style={S.findingItem}>
+      {/* Title + description kept together — wrap={false} prevents an orphaned header */}
+      <View wrap={false}>
+        <View style={S.findingTopRow}>
+          <View style={[S.findingSevDot, { backgroundColor: sevClr }]} />
+          <View style={S.findingTitleBlock}>
+            <Text style={S.findingTitle}>{finding.message || finding.title || '—'}</Text>
+            <View style={S.findingMetaRow}>
+              <Text style={[S.findingSevLabel, { color: sevClr }]}>{sevLbl}</Text>
+              {apRef ? (
+                <>
+                  <Text style={S.findingMetaDot}>·</Text>
+                  <Text style={S.findingRecRef}>Action Plan #{apRef}</Text>
+                </>
+              ) : null}
+            </View>
           </View>
         </View>
+        {hasDesc ? (
+          <View style={S.findingBody}>
+            <Text style={S.findingDesc}>{finding.description}</Text>
+          </View>
+        ) : null}
       </View>
 
-      {/* Body: description + evidence */}
-      {(hasDesc || hasItems) ? (
+      {/* Evidence items — free to paginate across pages */}
+      {hasItems ? (
         <View style={S.findingBody}>
-          {hasDesc ? (
-            <Text style={S.findingDesc}>{finding.description}</Text>
-          ) : null}
-          {hasItems ? <EvidenceList items={finding.items} /> : null}
+          <EvidenceList items={finding.items} />
         </View>
       ) : null}
     </View>

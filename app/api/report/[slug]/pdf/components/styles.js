@@ -539,6 +539,12 @@ export const S = StyleSheet.create({
     lineHeight: 1.55,
     flex: 1,
   },
+  taskNoActions: {
+    fontSize: 8,
+    color: COLORS.muted,
+    marginTop: 5,
+    lineHeight: 1.5,
+  },
 
   // ── Findings: category section ────────────────────────────────────────────
   catSection: {
@@ -742,7 +748,7 @@ export const S = StyleSheet.create({
 
   // ── Methodology ───────────────────────────────────────────────────────────
   methodBlock: {
-    marginBottom: 16,
+    marginBottom: 12,
   },
   methodBlockLabel: {
     fontSize: 7.5,
@@ -778,7 +784,7 @@ export const S = StyleSheet.create({
   analyzerRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    paddingVertical: 5,
+    paddingVertical: 4,
     borderBottomWidth: 0.75,
     borderBottomColor: COLORS.border,
     gap: 8,

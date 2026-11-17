@@ -18,6 +18,7 @@ import {
   scoreColor,
   scoreInterpretation,
 } from './styles.js';
+import { filterAssessmentForDisplay } from '../../../../../../lib/assessment-filter.js';
 
 /** Four canonical score categories — matches CLAUDE.md specification */
 const SCORE_ENTRIES = [
@@ -87,7 +88,15 @@ function ConcernList({ items, limit = 3 }) {
 }
 
 export default function CoverPage({ report, pageSize }) {
-  const { url, scores = {}, aiSummary, assessment, createdAt } = report;
+  const {
+    url,
+    scores = {},
+    aiSummary,
+    assessment: rawAssessment,
+    analyzerStatuses = {},
+    recommendations  = [],
+    createdAt,
+  } = report;
 
   const domain = (() => {
     try { return new URL(url).hostname; } catch { return url; }
@@ -96,6 +105,12 @@ export default function CoverPage({ report, pageSize }) {
   const dateStr = createdAt
     ? new Date(createdAt).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })
     : null;
+
+  // Filter assessment content to remove claims from failed/unavailable analyzers
+  // before surfacing them on the cover page. Never modifies the stored report.
+  const assessment = filterAssessmentForDisplay(
+    rawAssessment, scores, analyzerStatuses, recommendations,
+  );
 
   // Structured assessment fields (null-safe)
   const headline   = assessment?.headline ?? null;

@@ -170,7 +170,7 @@ export default function MethodologyPage({ report, pageSize }) {
       <RunningHeader domain={domain} />
 
       <Text style={S.apSectionTitle}>Methodology &amp; Limitations</Text>
-      <Text style={[S.apSectionSub, { marginBottom: 16 }]}>
+      <Text style={[S.apSectionSub, { marginBottom: 12 }]}>
         How this report was produced and what its findings do and do not establish.
       </Text>
 

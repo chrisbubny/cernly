@@ -33,8 +33,9 @@ const { execSync } = require('child_process');
 
 const ROOT = path.join(__dirname, '..');
 
-const { buildPriorityTasks, getImpact } = require(path.join(ROOT, 'lib/priority-tasks.js'));
-const { resolvePageSize }               = require(path.join(ROOT, 'app/api/report/[slug]/pdf/page-size.js'));
+const { buildPriorityTasks, getImpact }     = require(path.join(ROOT, 'lib/priority-tasks.js'));
+const { filterAssessmentForDisplay }        = require(path.join(ROOT, 'lib/assessment-filter.js'));
+const { resolvePageSize }                   = require(path.join(ROOT, 'app/api/report/[slug]/pdf/page-size.js'));
 
 const PDF = require(path.join(ROOT, 'node_modules/@react-pdf/renderer/lib/react-pdf.js'));
 const { Document, Page, View, Text, Font, StyleSheet, renderToBuffer } = PDF;
@@ -232,12 +233,12 @@ const S2 = StyleSheet.create({
   nsStepBullet:      { fontSize: 8, color: C.teal, flexShrink: 0, marginTop: 1, fontFamily: 'Inter-SemiBold' },
   nsStepItemText:    { fontSize: 8.5, color: C.inkSub, lineHeight: 1.5, flex: 1 },
   // Methodology
-  methodBlock:       { marginBottom: 16 },
+  methodBlock:       { marginBottom: 12 },
   methodBlockLabel:  { fontSize: 7.5, fontFamily: 'Inter-SemiBold', color: C.summaryAccent, textTransform: 'uppercase', letterSpacing: 0.9, marginBottom: 6, paddingBottom: 4, borderBottomWidth: 1, borderBottomColor: C.border },
   methodRow:         { flexDirection: 'row', marginBottom: 5, alignItems: 'flex-start' },
   methodLabel:       { fontSize: 8.5, fontFamily: 'Inter-SemiBold', color: C.ink, width: 90, flexShrink: 0 },
   methodValue:       { fontSize: 8.5, color: C.inkSub, flex: 1, lineHeight: 1.5 },
-  analyzerRow:       { flexDirection: 'row', alignItems: 'flex-start', paddingVertical: 5, borderBottomWidth: 0.75, borderBottomColor: C.border, gap: 8 },
+  analyzerRow:       { flexDirection: 'row', alignItems: 'flex-start', paddingVertical: 4, borderBottomWidth: 0.75, borderBottomColor: C.border, gap: 8 },
   analyzerName:      { fontSize: 8.5, fontFamily: 'Inter-SemiBold', color: C.ink, width: 82, flexShrink: 0 },
   analyzerStatus:    { flexDirection: 'row', alignItems: 'center', gap: 4, width: 76, flexShrink: 0 },
   analyzerStatusDot: { width: 5, height: 5, borderRadius: 3, flexShrink: 0 },
@@ -286,11 +287,17 @@ function concernText(item) {
 
 // ── Cover page ────────────────────────────────────────────────────────────────
 function CoverPage({ report, size }) {
-  const { url, scores = {}, aiSummary, assessment, createdAt } = report;
+  const {
+    url, scores = {}, aiSummary, assessment: rawAssessment,
+    analyzerStatuses = {}, recommendations = [], createdAt,
+  } = report;
   const domain  = (() => { try { return new URL(url).hostname; } catch { return url; } })();
   const dateStr = createdAt
     ? new Date(createdAt).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })
     : null;
+
+  // Filter assessment content to remove claims from failed/unavailable analyzers
+  const assessment = filterAssessmentForDisplay(rawAssessment, scores, analyzerStatuses, recommendations);
 
   const headline  = assessment?.headline ?? null;
   const summary   = assessment?.summary  ?? null;
@@ -437,16 +444,20 @@ function TaskItem({ task, idx }) {
         e(Text, { style: S.taskFixLbl }, 'How to fix'),
         e(Text, { style: S.taskFixTxt }, task.fix)
       ),
-      actions.length > 0 && e(View, null,
-        e(Text, { style: S.taskActLbl }, 'Recommended actions'),
-        ...actions.map((action, i) => {
-          const text = typeof action === 'string' ? action : (action?.action || action?.text || String(action));
-          return e(View, { key: i, style: S.taskActRow },
-            e(Text, { style: S.taskActBullet }, '›'),
-            e(Text, { style: S.taskActText }, text)
-          );
-        })
-      )
+      actions.length > 0
+        ? e(View, null,
+            e(Text, { style: S.taskActLbl }, 'Recommended actions'),
+            ...actions.map((action, i) => {
+              const text = typeof action === 'string' ? action : (action?.action || action?.text || String(action));
+              return e(View, { key: i, style: S.taskActRow },
+                e(Text, { style: S.taskActBullet }, '›'),
+                e(Text, { style: S.taskActText }, text)
+              );
+            })
+          )
+        : e(Text, { style: { fontSize: 8, color: C.muted, marginTop: 5, lineHeight: 1.5 } },
+            'Refer to the Detailed Findings section for context. Consult your development team for a specific remediation plan for this issue.'
+          )
     )
   );
 }
@@ -484,13 +495,11 @@ function FindingsRunningHeader({ domain, label }) {
 
 function EvidenceList_({ items }) {
   if (!Array.isArray(items) || items.length === 0) return null;
-  const visible   = items.slice(0, 5);
-  const remaining = items.length - visible.length;
   return e(View, { style: { marginBottom: 4 } },
     e(Text, { style: S2.evidenceHeader },
       `${items.length} affected resource${items.length !== 1 ? 's' : ''}`
     ),
-    ...visible.map((item, i) => {
+    ...items.map((item, i) => {
       const url   = item?.url   || null;
       const label = item?.label || null;
       const bytes = item?.bytes != null ? formatBytes_(item.bytes) : null;
@@ -501,10 +510,7 @@ function EvidenceList_({ items }) {
         e(Text, { style: S2.evidenceUrl }, display),
         bytes ? e(Text, { style: S2.evidenceSize }, `(${bytes})`) : null
       );
-    }),
-    remaining > 0
-      ? e(Text, { style: S2.evidenceMore }, `… and ${remaining} more`)
-      : null
+    })
   );
 }
 
@@ -513,26 +519,32 @@ function FindingItem_({ finding, apRef }) {
   const sl = sevLabel_(finding.severity);
   const hasDesc  = !!finding.description;
   const hasItems = Array.isArray(finding.items) && finding.items.length > 0;
-  return e(View, { style: S2.findingItem, wrap: false },
-    e(View, { style: S2.findingTopRow },
-      e(View, { style: [S2.findingSevDot, { backgroundColor: sc }] }),
-      e(View, { style: S2.findingTitleBlock },
-        e(Text, { style: S2.findingTitle }, finding.message || finding.title || '—'),
-        e(View, { style: S2.findingMetaRow },
-          e(Text, { style: [S2.findingSevLabel, { color: sc }] }, sl),
-          apRef
-            ? e(React.Fragment, null,
-                e(Text, { style: S2.findingMetaDot }, '·'),
-                e(Text, { style: S2.findingRecRef }, `Action Plan #${apRef}`)
-              )
-            : null
+  return e(View, { style: S2.findingItem },
+    // Title + description kept together — wrap:false prevents an orphaned header
+    e(View, { wrap: false },
+      e(View, { style: S2.findingTopRow },
+        e(View, { style: [S2.findingSevDot, { backgroundColor: sc }] }),
+        e(View, { style: S2.findingTitleBlock },
+          e(Text, { style: S2.findingTitle }, finding.message || finding.title || '—'),
+          e(View, { style: S2.findingMetaRow },
+            e(Text, { style: [S2.findingSevLabel, { color: sc }] }, sl),
+            apRef
+              ? e(React.Fragment, null,
+                  e(Text, { style: S2.findingMetaDot }, '·'),
+                  e(Text, { style: S2.findingRecRef }, `Action Plan #${apRef}`)
+                )
+              : null
+          )
         )
-      )
+      ),
+      hasDesc ? e(View, { style: S2.findingBody },
+        e(Text, { style: S2.findingDesc }, finding.description)
+      ) : null
     ),
-    (hasDesc || hasItems)
+    // Evidence items — free to paginate across pages
+    hasItems
       ? e(View, { style: S2.findingBody },
-          hasDesc ? e(Text, { style: S2.findingDesc }, finding.description) : null,
-          hasItems ? e(EvidenceList_, { items: finding.items }) : null
+          e(EvidenceList_, { items: finding.items })
         )
       : null
   );
@@ -1069,6 +1081,37 @@ const fixtureReport = {
       supporting_findings: [{ fingerprintId: 'a11y:aria-labels', severity: 'warning', area: 'Accessibility', source: 'a11y', items: [], message: 'Interactive elements missing accessible names', description: 'WCAG 2.1 AA 4.1.2' }],
       finding_fingerprints: ['a11y:aria-labels'],
     },
+    {
+      fingerprint: 'security-tls-configuration', title: 'Disable weak cipher suites and legacy TLS versions',
+      category: 'Security', priority: 'critical',
+      what_we_found: 'The server accepts connections using RC4 and 3DES cipher suites and supports TLS 1.0 and 1.1 — all deprecated and prohibited by PCI DSS.',
+      actions: [
+        'Disable RC4 and 3DES cipher suites in your server\'s TLS configuration (nginx: ssl_ciphers; Apache: SSLCipherSuite)',
+        'Disable TLS 1.0 and TLS 1.1 — accept only TLS 1.2 and 1.3',
+        'Use Mozilla SSL Configuration Generator (ssl-config.mozilla.org) for a production-safe cipher list',
+        'Retest with SSL Labs (ssllabs.com/ssltest) to verify an A or A+ rating after changes',
+      ],
+      supporting_findings: [
+        { fingerprintId: 'ssl:weak-cipher', severity: 'critical', area: 'Security', source: 'ssl', items: [], message: 'Weak cipher suites enabled (RC4, 3DES)', description: 'Cryptographically weak ciphers accepted.' },
+        { fingerprintId: 'ssl:tls-version', severity: 'warning',  area: 'Security', source: 'ssl', items: [], message: 'TLS 1.0 and TLS 1.1 still supported', description: 'Deprecated protocols with known vulnerabilities.' },
+      ],
+      finding_fingerprints: ['ssl:weak-cipher', 'ssl:tls-version'],
+    },
+    {
+      fingerprint: 'accessibility-form-labels', title: 'Associate labels with all form inputs — 4 unlabelled inputs',
+      category: 'Accessibility', priority: 'critical',
+      what_we_found: 'Four form inputs in the contact and appointment booking forms have no programmatically associated label, making them inaccessible to screen reader users. Fails WCAG 2.1 AA 1.3.1.',
+      actions: [
+        'Add a <label for="id"> element for each input, or use aria-label / aria-labelledby on the input itself',
+        'Never rely on placeholder text alone — it disappears when the user starts typing',
+        'Test with VoiceOver (macOS/iOS) or NVDA (Windows) to confirm labels are announced on focus',
+        'Run axe DevTools browser extension to verify no remaining label violations',
+      ],
+      supporting_findings: [
+        { fingerprintId: 'a11y:label', severity: 'critical', area: 'Accessibility', source: 'a11y', items: [], message: 'Form elements do not have associated labels', description: 'WCAG 2.1 AA 1.3.1 Info and Relationships.' },
+      ],
+      finding_fingerprints: ['a11y:label'],
+    },
   ],
 };
 
@@ -1093,9 +1136,21 @@ const fixtureFailedLighthouse = {
   issues: fixtureReport.issues.filter(i => i.source !== 'lh'),
   recommendations: fixtureReport.recommendations.filter(r => r.category !== 'Performance'),
   assessment: {
-    ...fixtureReport.assessment,
     headline: 'Performance data unavailable — accessibility and security issues detected',
     summary: 'The Performance analyzer timed out during this scan and could not collect Core Web Vitals data. The SEO, Security, and Accessibility analyzers completed successfully. Address the security cipher suite vulnerabilities and accessibility form-label issues as a priority while the performance analysis is retried.',
+    // Strengths from analyzers that completed — no Performance claims
+    strengths: [
+      { area: 'SEO',      finding: 'Strong meta structure and semantic headings', evidence: 'All pages have unique title tags and meta descriptions' },
+      { area: 'Security', finding: 'Valid SSL certificate with HSTS header present', evidence: 'TLS 1.3, HSTS max-age 31536000' },
+    ],
+    // Only concerns from analyzers that completed (SEO, Security, Accessibility)
+    concerns: [
+      { area: 'Accessibility', finding: 'Missing alt text on 11 images fails WCAG 2.1 AA 1.1.1', severity: 'high', evidence: 'WCAG 2.1 AA 1.1.1' },
+      { area: 'Security',      finding: 'Weak cipher suites (RC4, 3DES) accepted by server',      severity: 'high', evidence: 'PCI DSS prohibition' },
+    ],
+    // top_opportunity was performance-related — suppress it since Performance analyzer failed
+    top_opportunity: null,
+    next_steps: null,
   },
 };
 

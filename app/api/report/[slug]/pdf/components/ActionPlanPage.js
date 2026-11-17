@@ -150,7 +150,13 @@ function TaskItem({ task, idx }) {
               );
             })}
           </View>
-        ) : null}
+        ) : (
+          // Transparent fallback — no fabricated instructions
+          <Text style={S.taskNoActions}>
+            Refer to the Detailed Findings section for context. Consult your
+            development team for a specific remediation plan for this issue.
+          </Text>
+        )}
       </View>
     </View>
   );
