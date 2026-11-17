@@ -63,5 +63,13 @@ export async function GET(request) {
     console.info('[report:diag] no recommendations for report:', slug || reportId);
   }
 
-  return NextResponse.json({ ...report, recommendations, isOwner });
+  // Strip fields that must not be exposed to non-owners:
+  //   userId  — owner's Clerk user ID; irrelevant and privacy-sensitive for viewers
+  //   paid    — entitlement flag; non-owners cannot act on it and shouldn't see it
+  const { userId: _ownerId, paid: _paid, ...publicReport } = report;
+  return NextResponse.json({
+    ...(isOwner ? report : publicReport),
+    recommendations,
+    isOwner,
+  });
 }

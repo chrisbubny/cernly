@@ -1,0 +1,5 @@
+Inter typeface — Copyright 2016 The Inter Project Authors
+Licensed under the SIL Open Font License, Version 1.1
+https://github.com/rsms/inter
+
+Source: @fontsource/inter v5 (npm), latin subset, weights 400/500/600/700

@@ -6,9 +6,9 @@
  */
 
 import assert from 'node:assert/strict';
+import { buildPriorityTasks } from '../lib/priority-tasks.js';
 
-// ─── Inline buildPriorityTasks and buildRecMap ────────────────────────────────
-// We copy the pure logic from ReportClient to test it in isolation.
+// ─── buildRecMap (local — not exported from priority-tasks; used by store.js) ──
 
 function buildRecMap(recommendations) {
   const map = {};
@@ -22,96 +22,6 @@ function buildRecMap(recommendations) {
     }
   }
   return map;
-}
-
-function buildPriorityTasks(issues, recommendations, recMapArg) {
-  const SEV_ORDER = { critical: 0, warning: 1, info: 2, good: 3 };
-  const recs = Array.isArray(recommendations) ? recommendations : [];
-
-  const coveredFps = new Set();
-  const tasks = [];
-
-  for (const rec of recs) {
-    const findings = Array.isArray(rec.supporting_findings) ? rec.supporting_findings : [];
-    let topSeverity = 'info';
-    for (const f of findings) {
-      if ((SEV_ORDER[f.severity] ?? 99) < (SEV_ORDER[topSeverity] ?? 99)) {
-        topSeverity = f.severity;
-      }
-    }
-    if (topSeverity !== 'critical' && topSeverity !== 'warning') continue;
-
-    if (Array.isArray(rec.finding_fingerprints)) {
-      for (const fp of rec.finding_fingerprints) coveredFps.add(fp);
-    }
-    for (const f of findings) {
-      const fp = f.fingerprintId || f.fingerprint || '';
-      if (fp) coveredFps.add(fp);
-    }
-
-    const repFinding = findings
-      .filter(f => f.severity === 'critical' || f.severity === 'warning')
-      .sort((a, b) => (SEV_ORDER[a.severity] ?? 99) - (SEV_ORDER[b.severity] ?? 99))[0]
-      || findings[0] || null;
-
-    // Real finding fingerprint — never rec.fingerprint
-    const repFindingFp = repFinding?.fingerprintId
-      || repFinding?.canonicalFingerprintId
-      || null;
-
-    const seenUrls = new Set();
-    const mergedItems = [];
-    for (const f of findings) {
-      for (const item of (f.items || [])) {
-        const key = item.url || item.label || JSON.stringify(item);
-        if (!seenUrls.has(key)) {
-          seenUrls.add(key);
-          mergedItems.push(item);
-        }
-      }
-    }
-
-    const recCategory = rec.category || null;
-    const findingCategories = [...new Set(findings.map(f => f.area || f.source || '').filter(Boolean))];
-    const primaryCategory = recCategory || findingCategories[0] || 'Performance';
-    const allCategories = recCategory
-      ? [recCategory, ...findingCategories.filter(c => c !== recCategory)]
-      : findingCategories;
-
-    tasks.push({
-      fingerprintId:      repFindingFp,     // null or a real finding fingerprint
-      severity:           topSeverity,
-      message:            rec.title || (repFinding?.message ?? ''),
-      description:        rec.what_we_found || rec.explanation || (repFinding?.description ?? ''),
-      fix:                repFinding?.fix ?? null,
-      source:             repFinding?.source ?? 'lh',
-      area:               primaryCategory,  // rec's declared category, not repFinding.area
-      items:              mergedItems,
-      _recFingerprint:    rec.fingerprint,
-      _categories:        allCategories,
-      _rec:               rec,
-      _isRecLevelContext: true,
-    });
-  }
-
-  for (const issue of issues) {
-    if (issue.severity !== 'critical' && issue.severity !== 'warning') continue;
-    const fp = issue.fingerprintId || issue.fingerprint || '';
-    const cid = issue.canonicalFingerprintId || fp;
-    if (coveredFps.has(fp) || coveredFps.has(cid)) continue;
-    tasks.push({ ...issue, _recFingerprint: null, _categories: null, _rec: null });
-  }
-
-  // Secondary sort within severity tier by rec priority
-  const PRIO_ORDER = { critical: 0, high: 1, medium: 2, low: 3 };
-  const taskPrio = t => PRIO_ORDER[t._rec?.priority || t.priority || 'medium'] ?? 2;
-
-  tasks.sort((a, b) => {
-    const sevDiff = (SEV_ORDER[a.severity] ?? 99) - (SEV_ORDER[b.severity] ?? 99);
-    if (sevDiff !== 0) return sevDiff;
-    return taskPrio(a) - taskPrio(b);
-  });
-  return tasks.slice(0, 7);
 }
 
 // ─── Legacy work-item reconciliation (conservative merge) ────────────────────
