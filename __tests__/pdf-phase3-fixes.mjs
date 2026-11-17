@@ -285,4 +285,143 @@ function makeAnalyzerStatuses(overrides = {}) {
   console.log('TEST 11 PASS: filterAssessmentForDisplay is non-mutating');
 }
 
+// ── Test 12: _unavailableCategories populated when analyzer failed ─────────────
+{
+  const assessment = makeAssessment({
+    concerns: [{ area: 'Performance', finding: 'Slow LCP', severity: 'high' }],
+  });
+  const scores   = makeScores({ performance: null });
+  const statuses = makeAnalyzerStatuses({ lighthouse: { status: 'failed' } });
+
+  const result = filterAssessmentForDisplay(assessment, scores, statuses, []);
+
+  assert.ok(Array.isArray(result._unavailableCategories),
+    'TEST 12 FAIL: _unavailableCategories must be an array');
+  assert.ok(result._unavailableCategories.includes('Performance'),
+    'TEST 12 FAIL: _unavailableCategories must include Performance when lighthouse failed');
+  assert.equal(result._partialAnalysis, true,
+    'TEST 12 FAIL: _partialAnalysis must be true when any category unavailable');
+  console.log('TEST 12 PASS: _unavailableCategories and _partialAnalysis set on failure');
+}
+
+// ── Test 13: _partialAnalysis false when all analyzers complete ───────────────
+{
+  const assessment = makeAssessment();
+  const scores   = makeScores();
+  const statuses = makeAnalyzerStatuses();
+
+  const result = filterAssessmentForDisplay(assessment, scores, statuses, []);
+
+  assert.deepEqual(result._unavailableCategories, [],
+    'TEST 13 FAIL: _unavailableCategories must be empty when all analyzers completed');
+  assert.equal(result._partialAnalysis, false,
+    'TEST 13 FAIL: _partialAnalysis must be false when all analyzers completed');
+  console.log('TEST 13 PASS: _partialAnalysis false when all analyzers complete');
+}
+
+// ── Test 14: Contradictory assessment — headline kept, partial flag set ───────
+// Assessment has a Performance headline but lighthouse failed.
+// The filter must NOT remove headline/summary (those are unfiltered narrative),
+// but MUST set _partialAnalysis: true so the display layer can warn the reader.
+{
+  const assessment = makeAssessment({
+    headline: 'Your page load time is excellent at under 1 s',  // Performance claim — not filtered
+    summary:  'Core Web Vitals are all in the good range.',     // Also not filtered
+    concerns: [
+      { area: 'Performance', finding: 'LCP over threshold', severity: 'high' },
+    ],
+  });
+  const scores   = makeScores({ performance: null });
+  const statuses = makeAnalyzerStatuses({ lighthouse: { status: 'failed' } });
+
+  const result = filterAssessmentForDisplay(assessment, scores, statuses, []);
+
+  // Headline and summary are NEVER filtered — conservative fallback; display layer warns instead
+  assert.equal(result.headline, assessment.headline,
+    'TEST 14 FAIL: headline must not be removed by filter (display layer handles stale claims)');
+  assert.equal(result.summary, assessment.summary,
+    'TEST 14 FAIL: summary must not be removed by filter');
+  // The Performance concern IS filtered
+  const perfConcerns = (result.concerns || []).filter(c => c.area === 'Performance');
+  assert.equal(perfConcerns.length, 0,
+    'TEST 14 FAIL: Performance concern must be stripped');
+  // The partial flag must be set so the display layer can warn
+  assert.equal(result._partialAnalysis, true,
+    'TEST 14 FAIL: _partialAnalysis must be true so display layer can warn about stale headline');
+  assert.ok(result._unavailableCategories.includes('Performance'),
+    'TEST 14 FAIL: Performance must appear in _unavailableCategories');
+  console.log('TEST 14 PASS: Contradictory assessment — headline kept, _partialAnalysis set for display warning');
+}
+
+// ── Test 15: applyDomain — variant fixture item URLs use correct domain ───────
+// We replicate the applyDomain logic inline to test the fixture behaviour
+// (the render script is CJS and uses @swc/register; we test the contract here).
+{
+  const CANONICAL = 'https://www.example-healthcare-portal.org';
+  const TARGET    = 'https://www.no-assessment-example.com';
+
+  // Simulate applyDomain
+  function applyDomainTest(issues, reportUrl) {
+    let targetOrigin;
+    try { targetOrigin = new URL(reportUrl).origin; } catch { return issues; }
+    if (targetOrigin === CANONICAL) return issues;
+    return issues.map(issue => {
+      if (!Array.isArray(issue.items)) return issue;
+      const rewrittenItems = issue.items.map(item => {
+        if (!item?.url) return item;
+        if (item.url.startsWith(CANONICAL)) {
+          return { ...item, url: item.url.replace(CANONICAL, targetOrigin) };
+        }
+        return item;
+      });
+      return { ...issue, items: rewrittenItems };
+    });
+  }
+
+  const baseIssues = [
+    {
+      fingerprintId: 'seo:canonical', severity: 'warning', area: 'SEO', source: 'seo',
+      message: 'Missing canonical tag',
+      items: [{ url: `${CANONICAL}/services/`, label: 'Canonical not set' }],
+    },
+    {
+      fingerprintId: 'seo:robots-txt', severity: 'info', area: 'SEO', source: 'seo',
+      message: 'robots.txt has no Sitemap directive',
+      items: [{ url: `${CANONICAL}/robots.txt`, label: 'No Sitemap: directive found' }],
+    },
+    {
+      fingerprintId: 'lh:preconnect', severity: 'info', area: 'Performance', source: 'lh',
+      message: 'Preconnect to required third-party origins',
+      // These are legitimate third-party URLs — should NOT be rewritten
+      items: [
+        { url: 'https://fonts.googleapis.com', label: 'First used at 480 ms' },
+        { url: 'https://cdn.segment.com', label: 'First used at 620 ms' },
+      ],
+    },
+  ];
+
+  const result = applyDomainTest(baseIssues, TARGET);
+
+  // seo:canonical item URL should use TARGET origin
+  const canonicalItem = result.find(i => i.fingerprintId === 'seo:canonical').items[0];
+  assert.ok(canonicalItem.url.startsWith(TARGET),
+    `TEST 15 FAIL: seo:canonical item URL should start with ${TARGET}, got ${canonicalItem.url}`);
+  assert.ok(!canonicalItem.url.includes('example-healthcare-portal'),
+    'TEST 15 FAIL: seo:canonical item URL must not contain the original domain');
+
+  // seo:robots-txt item URL should use TARGET origin
+  const robotsItem = result.find(i => i.fingerprintId === 'seo:robots-txt').items[0];
+  assert.ok(robotsItem.url.startsWith(TARGET),
+    `TEST 15 FAIL: seo:robots-txt item URL should start with ${TARGET}, got ${robotsItem.url}`);
+
+  // Third-party URLs must not be rewritten
+  const preconnectItems = result.find(i => i.fingerprintId === 'lh:preconnect').items;
+  assert.ok(preconnectItems[0].url === 'https://fonts.googleapis.com',
+    'TEST 15 FAIL: third-party URL fonts.googleapis.com must not be rewritten');
+  assert.ok(preconnectItems[1].url === 'https://cdn.segment.com',
+    'TEST 15 FAIL: third-party URL cdn.segment.com must not be rewritten');
+
+  console.log('TEST 15 PASS: applyDomain rewrites fixture-domain URLs and preserves third-party URLs');
+}
+
 console.log('\nAll pdf-phase3-fixes tests passed.');

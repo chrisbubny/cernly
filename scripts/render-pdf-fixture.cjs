@@ -233,24 +233,28 @@ const S2 = StyleSheet.create({
   nsStepBullet:      { fontSize: 8, color: C.teal, flexShrink: 0, marginTop: 1, fontFamily: 'Inter-SemiBold' },
   nsStepItemText:    { fontSize: 8.5, color: C.inkSub, lineHeight: 1.5, flex: 1 },
   // Methodology
-  methodBlock:       { marginBottom: 12 },
-  methodBlockLabel:  { fontSize: 7.5, fontFamily: 'Inter-SemiBold', color: C.summaryAccent, textTransform: 'uppercase', letterSpacing: 0.9, marginBottom: 6, paddingBottom: 4, borderBottomWidth: 1, borderBottomColor: C.border },
+  methodBlock:       { marginBottom: 8 },
+  methodBlockLabel:  { fontSize: 7.5, fontFamily: 'Inter-SemiBold', color: C.summaryAccent, textTransform: 'uppercase', letterSpacing: 0.9, marginBottom: 6, paddingBottom: 3, borderBottomWidth: 1, borderBottomColor: C.border },
   methodRow:         { flexDirection: 'row', marginBottom: 5, alignItems: 'flex-start' },
   methodLabel:       { fontSize: 8.5, fontFamily: 'Inter-SemiBold', color: C.ink, width: 90, flexShrink: 0 },
   methodValue:       { fontSize: 8.5, color: C.inkSub, flex: 1, lineHeight: 1.5 },
-  analyzerRow:       { flexDirection: 'row', alignItems: 'flex-start', paddingVertical: 4, borderBottomWidth: 0.75, borderBottomColor: C.border, gap: 8 },
+  analyzerRow:       { flexDirection: 'row', alignItems: 'flex-start', paddingVertical: 3, borderBottomWidth: 0.75, borderBottomColor: C.border, gap: 8 },
   analyzerName:      { fontSize: 8.5, fontFamily: 'Inter-SemiBold', color: C.ink, width: 82, flexShrink: 0 },
   analyzerStatus:    { flexDirection: 'row', alignItems: 'center', gap: 4, width: 76, flexShrink: 0 },
   analyzerStatusDot: { width: 5, height: 5, borderRadius: 3, flexShrink: 0 },
   analyzerStatusTxt: { fontSize: 7.5, fontFamily: 'Inter-Medium' },
   analyzerDuration:  { fontSize: 7.5, color: C.muted, width: 40, flexShrink: 0 },
   analyzerDesc:      { fontSize: 7.5, color: C.inkSub, flex: 1, lineHeight: 1.5 },
-  defRow:            { flexDirection: 'row', alignItems: 'flex-start', marginBottom: 6, gap: 10 },
+  defRow:            { flexDirection: 'row', alignItems: 'flex-start', marginBottom: 4, gap: 10 },
   defTerm:           { fontSize: 8.5, fontFamily: 'Inter-SemiBold', color: C.ink, width: 80, flexShrink: 0 },
   defDesc:           { fontSize: 8.5, color: C.inkSub, flex: 1, lineHeight: 1.55 },
-  limitationItem:    { flexDirection: 'row', alignItems: 'flex-start', marginBottom: 5, gap: 7 },
+  limitationItem:    { flexDirection: 'row', alignItems: 'flex-start', marginBottom: 3, gap: 7 },
   limitationBullet:  { fontSize: 8, color: C.muted, flexShrink: 0, marginTop: 1 },
   limitationText:    { fontSize: 8.5, color: C.inkSub, flex: 1, lineHeight: 1.55 },
+  // Partial analysis warning (cover page)
+  partialNote:       { backgroundColor: '#FFF8F0', borderWidth: 1, borderColor: '#FDD8A5', borderRadius: 5, paddingVertical: 7, paddingHorizontal: 10, marginBottom: 10 },
+  partialLabel:      { fontSize: 7.5, fontFamily: 'Inter-SemiBold', color: C.scoreWarn, textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 2 },
+  partialText:       { fontSize: 8.5, color: C.inkSub, lineHeight: 1.5 },
 });
 
 // ── Footer ────────────────────────────────────────────────────────────────────
@@ -299,13 +303,15 @@ function CoverPage({ report, size }) {
   // Filter assessment content to remove claims from failed/unavailable analyzers
   const assessment = filterAssessmentForDisplay(rawAssessment, scores, analyzerStatuses, recommendations);
 
-  const headline  = assessment?.headline ?? null;
-  const summary   = assessment?.summary  ?? null;
-  const topOpp    = assessment?.top_opportunity ?? null;
-  const strengths = (assessment?.strengths ?? []).slice(0, 4);
-  const concerns  = (assessment?.concerns  ?? []).slice(0, 4);
-  const summaryText = summary ?? aiSummary ?? null;
-  const hasSC = strengths.length > 0 || concerns.length > 0;
+  const headline          = assessment?.headline ?? null;
+  const summary           = assessment?.summary  ?? null;
+  const topOpp            = assessment?.top_opportunity ?? null;
+  const strengths         = (assessment?.strengths ?? []).slice(0, 4);
+  const concerns          = (assessment?.concerns  ?? []).slice(0, 4);
+  const summaryText       = summary ?? aiSummary ?? null;
+  const hasSC             = strengths.length > 0 || concerns.length > 0;
+  const unavailableCats   = assessment?._unavailableCategories ?? [];
+  const partialAnalysis   = assessment?._partialAnalysis ?? false;
 
   const SCORE_ENTRIES = [
     { key: 'performance',   label: 'Performance'   },
@@ -336,21 +342,28 @@ function CoverPage({ report, size }) {
         e(ScoreTile, { key, label, value: scores[key] ?? null })
       )
     ),
+    // Partial analysis warning — simple column layout avoids react-pdf flex height-collapse bug
+    partialAnalysis ? e(View, { style: S.partialNote },
+      e(Text, { style: S.partialLabel }, 'Partial Analysis'),
+      e(Text, { style: S.partialText },
+        `${unavailableCats.join(' and ')} data is unavailable — the ${unavailableCats.length > 1 ? 'corresponding analyzers' : `${unavailableCats[0]} analyzer`} did not complete. The executive summary reflects only analyzers that produced data. Run a new scan to obtain complete results.`
+      )
+    ) : null,
     // Executive summary
-    (headline || summaryText) && e(View, { style: S.summarySection },
+    (headline || summaryText) ? e(View, { style: S.summarySection },
       e(Text, { style: S.sectionLabel }, 'Executive Summary'),
-      headline && e(Text, { style: S.summaryHeadline }, headline),
-      summaryText && e(Text, { style: S.summaryText }, summaryText)
-    ),
+      headline ? e(Text, { style: S.summaryHeadline }, headline) : null,
+      summaryText ? e(Text, { style: S.summaryText }, summaryText) : null
+    ) : null,
     // Top opportunity
-    topOpp?.title && e(View, { style: S.oppBox },
+    topOpp?.title ? e(View, { style: S.oppBox },
       e(Text, { style: S.oppLabel }, 'Top Opportunity'),
       e(Text, { style: S.oppTitle }, topOpp.title),
-      topOpp.rationale && e(Text, { style: S.oppRationale }, topOpp.rationale)
-    ),
+      topOpp.rationale ? e(Text, { style: S.oppRationale }, topOpp.rationale) : null
+    ) : null,
     // Strengths & Concerns
-    hasSC && e(View, { style: S.scRow },
-      strengths.length > 0 && e(View, { style: S.strengthsCol },
+    hasSC ? e(View, { style: S.scRow },
+      strengths.length > 0 ? e(View, { style: S.strengthsCol },
         e(Text, { style: S.strengthLabel }, 'Key Strengths'),
         ...strengths.map((item, i) =>
           e(View, { key: i, style: S.bulletRow },
@@ -358,8 +371,8 @@ function CoverPage({ report, size }) {
             e(Text, { style: S.bulletText }, strengthText(item))
           )
         )
-      ),
-      concerns.length > 0 && e(View, { style: S.concernsCol },
+      ) : null,
+      concerns.length > 0 ? e(View, { style: S.concernsCol },
         e(Text, { style: S.concernLabel }, 'Areas of Concern'),
         ...concerns.map((item, i) =>
           e(View, { key: i, style: S.bulletRow },
@@ -367,8 +380,8 @@ function CoverPage({ report, size }) {
             e(Text, { style: S.bulletText }, concernText(item))
           )
         )
-      )
-    ),
+      ) : null
+    ) : null,
     e(Footer, { domain })
   );
 }
@@ -496,9 +509,7 @@ function FindingsRunningHeader({ domain, label }) {
 function EvidenceList_({ items }) {
   if (!Array.isArray(items) || items.length === 0) return null;
   return e(View, { style: { marginBottom: 4 } },
-    e(Text, { style: S2.evidenceHeader },
-      `${items.length} affected resource${items.length !== 1 ? 's' : ''}`
-    ),
+    e(Text, { style: S2.evidenceHeader }, 'Affected resources'),
     ...items.map((item, i) => {
       const url   = item?.url   || null;
       const label = item?.label || null;
@@ -778,8 +789,9 @@ function MethodologyPage({ report, size }) {
       e(Text, { style: S2.methodBlockLabel }, 'Analyzers'),
       ...ANALYZER_CFG.map(cfg => e(AnalyzerRow, { key: cfg.key, cfg }))
     ),
-    // Score definitions
-    e(View, { style: [S2.methodBlock], wrap: false },
+    // Score definitions — explicit page break before this block keeps Limitations on the
+    // same page as Score Defs/Severity rather than alone on a near-empty final page
+    e(View, { style: [S2.methodBlock], break: true },
       e(Text, { style: S2.methodBlockLabel }, 'What These Scores Represent'),
       ...SCORE_DEFS.map(def =>
         e(View, { key: def.name, style: S2.defRow },
@@ -800,7 +812,7 @@ function MethodologyPage({ report, size }) {
         e(Text, { style: S2.defDesc  }, 'The estimated business and user value of fixing this issue. Impact is independent of severity — an info-level finding may still have high business impact if it affects a key user journey.')
       )
     ),
-    // Limitations
+    // Limitations — allow natural flow; removing wrap:false avoids a near-empty last page
     e(View, { style: S2.methodBlock },
       e(Text, { style: S2.methodBlockLabel }, 'Important Limitations'),
       ...LIMITATIONS.map((text, i) =>
@@ -825,6 +837,33 @@ function ReportPDF({ report, size }) {
     e(NextStepsPage,   { report, size }),
     e(MethodologyPage, { report, size })
   );
+}
+
+// ── Domain-consistency helper ─────────────────────────────────────────────────
+/**
+ * Returns a copy of `issues` where any item URL whose origin matches the
+ * canonical fixture domain (example-healthcare-portal.org) is rewritten to
+ * use the origin of `reportUrl`. Label-only items (no `url`) are unchanged.
+ *
+ * This keeps the seo:canonical and seo:robots-txt absolute URLs accurate when
+ * those issues are carried over to variant fixtures with different domains.
+ */
+const CANONICAL_FIXTURE_ORIGIN = 'https://www.example-healthcare-portal.org';
+function applyDomain(issues, reportUrl) {
+  let targetOrigin;
+  try { targetOrigin = new URL(reportUrl).origin; } catch { return issues; }
+  if (targetOrigin === CANONICAL_FIXTURE_ORIGIN) return issues; // unchanged for primary fixture
+  return issues.map(issue => {
+    if (!Array.isArray(issue.items)) return issue;
+    const rewrittenItems = issue.items.map(item => {
+      if (!item?.url) return item;
+      if (item.url.startsWith(CANONICAL_FIXTURE_ORIGIN)) {
+        return { ...item, url: item.url.replace(CANONICAL_FIXTURE_ORIGIN, targetOrigin) };
+      }
+      return item;
+    });
+    return { ...issue, items: rewrittenItems };
+  });
 }
 
 // ── Fixture report ────────────────────────────────────────────────────────────
@@ -1118,6 +1157,7 @@ const fixtureReport = {
 const fixtureNoAssessment = {
   ...fixtureReport,
   url: 'https://www.no-assessment-example.com',
+  issues: applyDomain(fixtureReport.issues, 'https://www.no-assessment-example.com'),
   assessment: null,
   aiSummary: 'Automated summary: performance is below average with significant optimisation opportunities across image delivery, JavaScript loading, and font rendering.',
 };
@@ -1133,7 +1173,10 @@ const fixtureFailedLighthouse = {
     ssl:        { status: 'completed', duration: 890  },
     a11y:       { status: 'completed', duration: 4100 },
   },
-  issues: fixtureReport.issues.filter(i => i.source !== 'lh'),
+  issues: applyDomain(
+    fixtureReport.issues.filter(i => i.source !== 'lh'),
+    'https://www.failed-analyzer-example.com',
+  ),
   recommendations: fixtureReport.recommendations.filter(r => r.category !== 'Performance'),
   assessment: {
     headline: 'Performance data unavailable — accessibility and security issues detected',

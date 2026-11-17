@@ -17,6 +17,7 @@ import {
   COLORS,
   scoreColor,
   scoreInterpretation,
+  catAccent,
 } from './styles.js';
 import { filterAssessmentForDisplay } from '../../../../../../lib/assessment-filter.js';
 
@@ -113,11 +114,13 @@ export default function CoverPage({ report, pageSize }) {
   );
 
   // Structured assessment fields (null-safe)
-  const headline   = assessment?.headline ?? null;
-  const summary    = assessment?.summary  ?? null;
-  const topOpp     = assessment?.top_opportunity ?? null;
-  const strengths  = assessment?.strengths ?? [];
-  const concerns   = assessment?.concerns  ?? [];
+  const headline            = assessment?.headline ?? null;
+  const summary             = assessment?.summary  ?? null;
+  const topOpp              = assessment?.top_opportunity ?? null;
+  const strengths           = assessment?.strengths ?? [];
+  const concerns            = assessment?.concerns  ?? [];
+  const unavailableCategories = assessment?._unavailableCategories ?? [];
+  const partialAnalysis     = assessment?._partialAnalysis ?? false;
 
   // Fallback to flat aiSummary when no structured assessment
   const summaryText = summary ?? aiSummary ?? null;
@@ -154,6 +157,16 @@ export default function CoverPage({ report, pageSize }) {
           <ScoreTile key={key} label={label} value={scores[key] ?? null} />
         ))}
       </View>
+
+      {/* ── Partial analysis warning ── */}
+      {partialAnalysis ? (
+        <View style={S.partialAnalysisNote}>
+          <Text style={S.partialAnalysisLabel}>Partial Analysis</Text>
+          <Text style={S.partialAnalysisText}>
+            {`${unavailableCategories.join(' and ')} data is unavailable — the ${unavailableCategories.length > 1 ? 'corresponding analyzers' : `${unavailableCategories[0]} analyzer`} did not complete. The executive summary reflects only analyzers that produced data. Run a new scan to obtain complete results.`}
+          </Text>
+        </View>
+      ) : null}
 
       {/* ── Executive summary ── */}
       {(headline || summaryText) ? (

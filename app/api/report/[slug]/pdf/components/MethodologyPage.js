@@ -140,15 +140,6 @@ const SCORE_DEFS = [
   },
 ];
 
-/** Scoring scale */
-const SCORE_SCALE = [
-  { range: '90 – 100', label: 'Excellent',   color: COLORS.scoreGood },
-  { range: '80 – 89',  label: 'Good',         color: COLORS.scoreGood },
-  { range: '60 – 79',  label: 'Needs work',   color: COLORS.scoreWarn },
-  { range: '40 – 59',  label: 'Poor',         color: COLORS.scoreWarn },
-  { range: '0 – 39',   label: 'Critical',     color: COLORS.scoreBad  },
-];
-
 export default function MethodologyPage({ report, pageSize }) {
   const {
     url,
@@ -202,8 +193,9 @@ export default function MethodologyPage({ report, pageSize }) {
         ))}
       </View>
 
-      {/* ── Score definitions ── */}
-      <View style={S.methodBlock} wrap={false}>
+      {/* ── Score definitions — force page break so Limitations lands with these sections
+           rather than alone on a near-empty page ── */}
+      <View style={S.methodBlock} break>
         <Text style={S.methodBlockLabel}>What These Scores Represent</Text>
         {SCORE_DEFS.map(def => (
           <View key={def.name} style={S.defRow}>
@@ -211,20 +203,6 @@ export default function MethodologyPage({ report, pageSize }) {
             <Text style={S.defDesc}>{def.desc}</Text>
           </View>
         ))}
-      </View>
-
-      {/* ── Scoring scale ── */}
-      <View style={[S.methodBlock]} wrap={false}>
-        <Text style={S.methodBlockLabel}>Scoring Scale</Text>
-        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-          {SCORE_SCALE.map(s => (
-            <View key={s.range} style={{ flexDirection: 'row', alignItems: 'center', gap: 5, marginBottom: 2 }}>
-              <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: s.color }} />
-              <Text style={{ fontSize: 8, color: COLORS.ink, fontFamily: 'Inter-Medium' }}>{s.label}</Text>
-              <Text style={{ fontSize: 7.5, color: COLORS.muted }}>{s.range}</Text>
-            </View>
-          ))}
-        </View>
       </View>
 
       {/* ── Severity vs impact ── */}

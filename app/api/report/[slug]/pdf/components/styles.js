@@ -748,7 +748,7 @@ export const S = StyleSheet.create({
 
   // ── Methodology ───────────────────────────────────────────────────────────
   methodBlock: {
-    marginBottom: 12,
+    marginBottom: 8,
   },
   methodBlockLabel: {
     fontSize: 7.5,
@@ -757,7 +757,7 @@ export const S = StyleSheet.create({
     textTransform: 'uppercase',
     letterSpacing: 0.9,
     marginBottom: 6,
-    paddingBottom: 4,
+    paddingBottom: 3,
     borderBottomWidth: 1,
     borderBottomColor: COLORS.border,
   },
@@ -784,7 +784,7 @@ export const S = StyleSheet.create({
   analyzerRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    paddingVertical: 4,
+    paddingVertical: 3,
     borderBottomWidth: 0.75,
     borderBottomColor: COLORS.border,
     gap: 8,
@@ -830,7 +830,7 @@ export const S = StyleSheet.create({
   defRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    marginBottom: 6,
+    marginBottom: 4,
     gap: 10,
   },
   defTerm: {
@@ -851,8 +851,32 @@ export const S = StyleSheet.create({
   limitationItem: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    marginBottom: 5,
+    marginBottom: 3,
     gap: 7,
+  },
+
+  // ── Partial analysis warning (cover page) ─────────────────────────────────
+  partialAnalysisNote: {
+    backgroundColor: '#FFF8F0',
+    borderWidth: 1,
+    borderColor: '#FDD8A5',
+    borderRadius: 5,
+    paddingVertical: 7,
+    paddingHorizontal: 10,
+    marginBottom: 10,
+  },
+  partialAnalysisLabel: {
+    fontSize: 7.5,
+    fontFamily: 'Inter-SemiBold',
+    color: COLORS.scoreWarn,
+    textTransform: 'uppercase',
+    letterSpacing: 0.6,
+    marginBottom: 2,
+  },
+  partialAnalysisText: {
+    fontSize: 8.5,
+    color: COLORS.inkSub,
+    lineHeight: 1.5,
   },
   limitationBullet: {
     fontSize: 8,

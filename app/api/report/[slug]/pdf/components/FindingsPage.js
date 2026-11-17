@@ -85,9 +85,7 @@ function EvidenceList({ items }) {
 
   return (
     <View style={{ marginBottom: 4 }}>
-      <Text style={S.evidenceHeader}>
-        {items.length} affected resource{items.length !== 1 ? 's' : ''}
-      </Text>
+      <Text style={S.evidenceHeader}>Affected resources</Text>
       {items.map((item, i) => {
         const url   = item?.url   || null;
         const label = item?.label || null;
