@@ -539,4 +539,325 @@ export const S = StyleSheet.create({
     lineHeight: 1.55,
     flex: 1,
   },
+
+  // ── Findings: category section ────────────────────────────────────────────
+  catSection: {
+    marginTop: 16,
+  },
+  catHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'baseline',
+    marginBottom: 3,
+  },
+  catHeaderName: {
+    fontSize: 11,
+    fontFamily: 'Inter-Bold',
+    color: COLORS.ink,
+    textTransform: 'uppercase',
+    letterSpacing: 0.6,
+  },
+  catHeaderScore: {
+    fontSize: 9,
+    color: COLORS.muted,
+    fontFamily: 'Inter-Medium',
+  },
+  catHeaderMeta: {
+    fontSize: 8,
+    color: COLORS.muted,
+    marginBottom: 6,
+  },
+  catDivider: {
+    borderTopWidth: 1.5,
+    borderTopColor: COLORS.border,
+    marginBottom: 2,
+  },
+
+  // ── Findings: individual finding item ─────────────────────────────────────
+  findingItem: {
+    paddingTop: 8,
+    paddingBottom: 8,
+    borderBottomWidth: 0.75,
+    borderBottomColor: COLORS.border,
+  },
+  findingTopRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 7,
+    marginBottom: 2,
+  },
+  findingSevDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    marginTop: 3,
+    flexShrink: 0,
+  },
+  findingTitleBlock: {
+    flex: 1,
+  },
+  findingTitle: {
+    fontSize: 9.5,
+    fontFamily: 'Inter-SemiBold',
+    color: COLORS.ink,
+    lineHeight: 1.4,
+  },
+  findingMetaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    marginTop: 2,
+    flexWrap: 'wrap',
+  },
+  findingSevLabel: {
+    fontSize: 7.5,
+    fontFamily: 'Inter-Medium',
+  },
+  findingMetaDot: {
+    fontSize: 7.5,
+    color: COLORS.mutedLight,
+  },
+  findingRecRef: {
+    fontSize: 7.5,
+    color: COLORS.summaryAccent,
+    fontFamily: 'Inter-Medium',
+  },
+  findingBody: {
+    paddingLeft: 13,
+    marginTop: 4,
+  },
+  findingDesc: {
+    fontSize: 8.5,
+    color: COLORS.inkSub,
+    lineHeight: 1.6,
+    marginBottom: 5,
+  },
+  evidenceHeader: {
+    fontSize: 7.5,
+    fontFamily: 'Inter-SemiBold',
+    color: COLORS.muted,
+    textTransform: 'uppercase',
+    letterSpacing: 0.4,
+    marginBottom: 3,
+  },
+  evidenceItem: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    marginBottom: 2,
+    gap: 5,
+  },
+  evidenceBullet: {
+    fontSize: 8,
+    color: COLORS.teal,
+    flexShrink: 0,
+    marginTop: 1,
+    fontFamily: 'Inter-SemiBold',
+  },
+  evidenceUrl: {
+    fontSize: 8,
+    color: COLORS.inkSub,
+    flex: 1,
+    lineHeight: 1.4,
+  },
+  evidenceSize: {
+    fontSize: 7.5,
+    color: COLORS.muted,
+    flexShrink: 0,
+    marginLeft: 4,
+  },
+  evidenceMore: {
+    fontSize: 7.5,
+    color: COLORS.muted,
+    marginLeft: 13,
+    marginTop: 1,
+  },
+
+  // ── Next Steps ────────────────────────────────────────────────────────────
+  nsIntro: {
+    fontSize: 9.5,
+    color: COLORS.inkSub,
+    lineHeight: 1.65,
+    marginBottom: 16,
+  },
+  nsStep: {
+    flexDirection: 'row',
+    gap: 12,
+    marginBottom: 14,
+    paddingBottom: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.border,
+  },
+  nsStepNum: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: COLORS.tileBg,
+    borderWidth: 1,
+    borderColor: COLORS.borderStrong,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+    marginTop: 1,
+  },
+  nsStepNumText: {
+    fontSize: 8,
+    fontFamily: 'Inter-Bold',
+    color: COLORS.inkSub,
+  },
+  nsStepBody: {
+    flex: 1,
+  },
+  nsStepTitle: {
+    fontSize: 10.5,
+    fontFamily: 'Inter-SemiBold',
+    color: COLORS.ink,
+    marginBottom: 4,
+    lineHeight: 1.4,
+  },
+  nsStepRationale: {
+    fontSize: 8.5,
+    color: COLORS.inkSub,
+    lineHeight: 1.6,
+    marginBottom: 6,
+  },
+  nsStepItem: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 6,
+    marginBottom: 3,
+  },
+  nsStepBullet: {
+    fontSize: 8,
+    color: COLORS.teal,
+    flexShrink: 0,
+    marginTop: 1,
+    fontFamily: 'Inter-SemiBold',
+  },
+  nsStepItemText: {
+    fontSize: 8.5,
+    color: COLORS.inkSub,
+    lineHeight: 1.5,
+    flex: 1,
+  },
+
+  // ── Methodology ───────────────────────────────────────────────────────────
+  methodBlock: {
+    marginBottom: 16,
+  },
+  methodBlockLabel: {
+    fontSize: 7.5,
+    fontFamily: 'Inter-SemiBold',
+    color: COLORS.summaryAccent,
+    textTransform: 'uppercase',
+    letterSpacing: 0.9,
+    marginBottom: 6,
+    paddingBottom: 4,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.border,
+  },
+  methodRow: {
+    flexDirection: 'row',
+    marginBottom: 5,
+    alignItems: 'flex-start',
+  },
+  methodLabel: {
+    fontSize: 8.5,
+    fontFamily: 'Inter-SemiBold',
+    color: COLORS.ink,
+    width: 90,
+    flexShrink: 0,
+  },
+  methodValue: {
+    fontSize: 8.5,
+    color: COLORS.inkSub,
+    flex: 1,
+    lineHeight: 1.5,
+  },
+
+  // Analyzer status table
+  analyzerRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    paddingVertical: 5,
+    borderBottomWidth: 0.75,
+    borderBottomColor: COLORS.border,
+    gap: 8,
+  },
+  analyzerName: {
+    fontSize: 8.5,
+    fontFamily: 'Inter-SemiBold',
+    color: COLORS.ink,
+    width: 82,
+    flexShrink: 0,
+  },
+  analyzerStatusBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    width: 76,
+    flexShrink: 0,
+  },
+  analyzerStatusDot: {
+    width: 5,
+    height: 5,
+    borderRadius: 3,
+    flexShrink: 0,
+  },
+  analyzerStatusText: {
+    fontSize: 7.5,
+    fontFamily: 'Inter-Medium',
+  },
+  analyzerDuration: {
+    fontSize: 7.5,
+    color: COLORS.muted,
+    width: 40,
+    flexShrink: 0,
+  },
+  analyzerDesc: {
+    fontSize: 7.5,
+    color: COLORS.inkSub,
+    flex: 1,
+    lineHeight: 1.5,
+  },
+
+  // Score/definition rows
+  defRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    marginBottom: 6,
+    gap: 10,
+  },
+  defTerm: {
+    fontSize: 8.5,
+    fontFamily: 'Inter-SemiBold',
+    color: COLORS.ink,
+    width: 80,
+    flexShrink: 0,
+  },
+  defDesc: {
+    fontSize: 8.5,
+    color: COLORS.inkSub,
+    flex: 1,
+    lineHeight: 1.55,
+  },
+
+  // Limitations list
+  limitationItem: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    marginBottom: 5,
+    gap: 7,
+  },
+  limitationBullet: {
+    fontSize: 8,
+    color: COLORS.muted,
+    flexShrink: 0,
+    marginTop: 1,
+  },
+  limitationText: {
+    fontSize: 8.5,
+    color: COLORS.inkSub,
+    flex: 1,
+    lineHeight: 1.55,
+  },
 });

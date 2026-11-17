@@ -13,8 +13,11 @@
 import React from 'react';
 import path from 'node:path';
 import { Document, Font } from '@react-pdf/renderer';
-import CoverPage      from './components/CoverPage.js';
-import ActionPlanPage from './components/ActionPlanPage.js';
+import CoverPage       from './components/CoverPage.js';
+import ActionPlanPage  from './components/ActionPlanPage.js';
+import FindingsPage    from './components/FindingsPage.js';
+import NextStepsPage   from './components/NextStepsPage.js';
+import MethodologyPage from './components/MethodologyPage.js';
 export { resolvePageSize, PAGE_SIZES } from './page-size.js';
 
 // ── Font registration ─────────────────────────────────────────────────────────
@@ -64,8 +67,11 @@ export default function ReportPDF({ report, size = 'LETTER' }) {
       creator="Cernly"
       producer="Cernly / @react-pdf/renderer"
     >
-      <CoverPage     report={report} pageSize={size} />
-      <ActionPlanPage report={report} pageSize={size} />
+      <CoverPage       report={report} pageSize={size} />
+      <ActionPlanPage  report={report} pageSize={size} />
+      <FindingsPage    report={report} pageSize={size} />
+      <NextStepsPage   report={report} pageSize={size} />
+      <MethodologyPage report={report} pageSize={size} />
     </Document>
   );
 }
