@@ -13,10 +13,16 @@
  *   9. Failed-analyzer fixture — top_opportunity is null
  *  10. New security-tls-configuration rec has actions[]
  *  11. New accessibility-form-labels rec has actions[]
+ *  14. Stale free-form headline/summary withheld (legacy assessment, no coverage)
+ *  16–21. Free-form narrative vs. coverage record, strengths, status variants
+ *
+ * Statuses use the production shape: report.auditStatuses keyed by category
+ * (lib/store.js mapRow). Fixture data is imported from the real render script.
  */
 
 import assert from 'assert/strict';
 import { createRequire } from 'module';
+const require = createRequire(import.meta.url);
 import { fileURLToPath } from 'url';
 import path from 'path';
 
@@ -24,7 +30,8 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.join(__dirname, '..');
 
 // ── Import utilities under test ───────────────────────────────────────────────
-const { filterAssessmentForDisplay } = await import(path.join(ROOT, 'lib/assessment-filter.js'));
+const { filterAssessmentForDisplay, getUnavailableCategories } = await import(path.join(ROOT, 'lib/assessment-filter.js'));
+const fixtures = require(path.join(ROOT, 'scripts/render-pdf-fixture.cjs'));
 const { buildPriorityTasks } = await import(path.join(ROOT, 'lib/priority-tasks.js'));
 
 // ── Shared helpers ────────────────────────────────────────────────────────────
@@ -44,12 +51,12 @@ function makeScores(overrides = {}) {
   return { performance: 60, seo: 80, security: 75, accessibility: 70, ...overrides };
 }
 
-function makeAnalyzerStatuses(overrides = {}) {
+function makeAuditStatuses(overrides = {}) {
   return {
-    lighthouse: { status: 'completed', duration: 10000 },
-    seo:        { status: 'completed', duration: 3000  },
-    ssl:        { status: 'completed', duration: 900   },
-    a11y:       { status: 'completed', duration: 4000  },
+    performance:   { status: 'completed' },
+    seo:           { status: 'completed' },
+    security:      { status: 'completed' },
+    accessibility: { status: 'completed' },
     ...overrides,
   };
 }
@@ -63,7 +70,7 @@ function makeAnalyzerStatuses(overrides = {}) {
     ],
   });
   const scores   = makeScores({ performance: null });
-  const statuses = makeAnalyzerStatuses({ lighthouse: { status: 'failed' } });
+  const statuses = makeAuditStatuses({ performance: { status: 'failed' } });
 
   const result = filterAssessmentForDisplay(assessment, scores, statuses, []);
 
@@ -86,7 +93,7 @@ function makeAnalyzerStatuses(overrides = {}) {
     },
   });
   const scores   = makeScores({ performance: null });
-  const statuses = makeAnalyzerStatuses({ lighthouse: { status: 'failed' } });
+  const statuses = makeAuditStatuses({ performance: { status: 'failed' } });
 
   const result = filterAssessmentForDisplay(assessment, scores, statuses, recs);
 
@@ -104,7 +111,7 @@ function makeAnalyzerStatuses(overrides = {}) {
     ],
   });
   const scores   = makeScores();
-  const statuses = makeAnalyzerStatuses();
+  const statuses = makeAuditStatuses();
 
   const result = filterAssessmentForDisplay(assessment, scores, statuses, []);
 
@@ -125,7 +132,7 @@ function makeAnalyzerStatuses(overrides = {}) {
     },
   });
   const scores   = makeScores();
-  const statuses = makeAnalyzerStatuses();
+  const statuses = makeAuditStatuses();
 
   const result = filterAssessmentForDisplay(assessment, scores, statuses, recs);
 
@@ -183,39 +190,20 @@ function makeAnalyzerStatuses(overrides = {}) {
   console.log('TEST 7 PASS: Ungrouped critical issue becomes task with _rec:null, no actions');
 }
 
-// ── Test 8: Failed-analyzer fixture — no Performance concerns ─────────────────
-// We reconstruct the same logic as the render script fixture to avoid importing CJS
+// ── Test 8: Failed-analyzer fixture (real render-script data) ─────────────────
 {
-  const fixtureAssessment = {
-    headline: 'Performance data unavailable — accessibility and security issues detected',
-    summary: 'The Performance analyzer timed out.',
-    strengths: [
-      { area: 'SEO',      finding: 'Strong meta structure' },
-      { area: 'Security', finding: 'Valid SSL certificate' },
-    ],
-    concerns: [
-      { area: 'Accessibility', finding: 'Missing alt text', severity: 'high' },
-      { area: 'Security',      finding: 'Weak cipher suites', severity: 'high' },
-    ],
-    top_opportunity: null,
-    next_steps: null,
-  };
-
-  const scores   = { performance: null, seo: 88, security: 71, accessibility: 58 };
-  const statuses = {
-    lighthouse: { status: 'failed' },
-    seo:        { status: 'completed', duration: 3200 },
-    ssl:        { status: 'completed', duration: 890  },
-    a11y:       { status: 'completed', duration: 4100 },
-  };
-
-  const result = filterAssessmentForDisplay(fixtureAssessment, scores, statuses, []);
+  const fx = fixtures.fixtureFailedLighthouse;
+  const result = filterAssessmentForDisplay(fx.assessment, fx.scores, fx.auditStatuses, fx.recommendations);
 
   const performanceConcerns = (result.concerns || []).filter(c => c.area === 'Performance');
   assert.equal(performanceConcerns.length, 0,
     'TEST 8 FAIL: failed-analyzer fixture assessment must have no Performance concerns');
   assert.equal(result.top_opportunity, null,
     'TEST 8 FAIL: failed-analyzer fixture assessment must have top_opportunity null');
+  assert.equal(fx.auditStatuses.performance.status, 'failed',
+    'TEST 8 FAIL: fixture must use production auditStatuses shape');
+  assert.equal(fx.analyzerStatuses, undefined,
+    'TEST 8 FAIL: fixture must not use the non-production analyzerStatuses field');
   console.log('TEST 8 PASS: Failed-analyzer fixture assessment has no Performance data');
 }
 
@@ -276,7 +264,7 @@ function makeAnalyzerStatuses(overrides = {}) {
   });
   const originalStr = JSON.stringify(original);
   const scores   = makeScores({ performance: null });
-  const statuses = makeAnalyzerStatuses({ lighthouse: { status: 'failed' } });
+  const statuses = makeAuditStatuses({ performance: { status: 'failed' } });
 
   filterAssessmentForDisplay(original, scores, statuses, []);
 
@@ -291,7 +279,7 @@ function makeAnalyzerStatuses(overrides = {}) {
     concerns: [{ area: 'Performance', finding: 'Slow LCP', severity: 'high' }],
   });
   const scores   = makeScores({ performance: null });
-  const statuses = makeAnalyzerStatuses({ lighthouse: { status: 'failed' } });
+  const statuses = makeAuditStatuses({ performance: { status: 'failed' } });
 
   const result = filterAssessmentForDisplay(assessment, scores, statuses, []);
 
@@ -308,7 +296,7 @@ function makeAnalyzerStatuses(overrides = {}) {
 {
   const assessment = makeAssessment();
   const scores   = makeScores();
-  const statuses = makeAnalyzerStatuses();
+  const statuses = makeAuditStatuses();
 
   const result = filterAssessmentForDisplay(assessment, scores, statuses, []);
 
@@ -319,109 +307,126 @@ function makeAnalyzerStatuses(overrides = {}) {
   console.log('TEST 13 PASS: _partialAnalysis false when all analyzers complete');
 }
 
-// ── Test 14: Contradictory assessment — headline kept, partial flag set ───────
-// Assessment has a Performance headline but lighthouse failed.
-// The filter must NOT remove headline/summary (those are unfiltered narrative),
-// but MUST set _partialAnalysis: true so the display layer can warn the reader.
+// ── Test 14: Stale free-form narrative withheld ───────────────────────────────
+// Lighthouse failed, but the assessment has no deterministic coverage record
+// (legacy) and its free-form headline and summary make Performance claims.
+// Neither can be verified, so both are withheld; the stored report is untouched.
 {
   const assessment = makeAssessment({
-    headline: 'Your page load time is excellent at under 1 s',  // Performance claim — not filtered
-    summary:  'Core Web Vitals are all in the good range.',     // Also not filtered
+    headline: 'Your page load time is excellent at under 1 s',
+    summary:  'Core Web Vitals are all in the good range.',
     concerns: [
       { area: 'Performance', finding: 'LCP over threshold', severity: 'high' },
     ],
   });
   const scores   = makeScores({ performance: null });
-  const statuses = makeAnalyzerStatuses({ lighthouse: { status: 'failed' } });
+  const statuses = makeAuditStatuses({ performance: { status: 'failed' } });
 
   const result = filterAssessmentForDisplay(assessment, scores, statuses, []);
 
-  // Headline and summary are NEVER filtered — conservative fallback; display layer warns instead
-  assert.equal(result.headline, assessment.headline,
-    'TEST 14 FAIL: headline must not be removed by filter (display layer handles stale claims)');
-  assert.equal(result.summary, assessment.summary,
-    'TEST 14 FAIL: summary must not be removed by filter');
-  // The Performance concern IS filtered
+  assert.equal(result.headline, null,
+    'TEST 14 FAIL: unverifiable free-form headline must be withheld');
+  assert.equal(result.summary, null,
+    'TEST 14 FAIL: unverifiable free-form summary must be withheld');
+  assert.equal(result._narrativeWithheld, true,
+    'TEST 14 FAIL: _narrativeWithheld must be set so the cover can disclose it');
+  assert.equal(assessment.headline, 'Your page load time is excellent at under 1 s',
+    'TEST 14 FAIL: stored assessment must not be mutated');
   const perfConcerns = (result.concerns || []).filter(c => c.area === 'Performance');
   assert.equal(perfConcerns.length, 0,
     'TEST 14 FAIL: Performance concern must be stripped');
-  // The partial flag must be set so the display layer can warn
   assert.equal(result._partialAnalysis, true,
-    'TEST 14 FAIL: _partialAnalysis must be true so display layer can warn about stale headline');
-  assert.ok(result._unavailableCategories.includes('Performance'),
-    'TEST 14 FAIL: Performance must appear in _unavailableCategories');
-  console.log('TEST 14 PASS: Contradictory assessment — headline kept, _partialAnalysis set for display warning');
+    'TEST 14 FAIL: _partialAnalysis must be true');
+  console.log('TEST 14 PASS: Stale free-form headline and summary withheld on partial scan');
 }
 
-// ── Test 15: applyDomain — variant fixture item URLs use correct domain ───────
-// We replicate the applyDomain logic inline to test the fixture behaviour
-// (the render script is CJS and uses @swc/register; we test the contract here).
+// ── Test 15: applyDomain (real render-script function and variant fixtures) ────
 {
-  const CANONICAL = 'https://www.example-healthcare-portal.org';
-  const TARGET    = 'https://www.no-assessment-example.com';
-
-  // Simulate applyDomain
-  function applyDomainTest(issues, reportUrl) {
-    let targetOrigin;
-    try { targetOrigin = new URL(reportUrl).origin; } catch { return issues; }
-    if (targetOrigin === CANONICAL) return issues;
-    return issues.map(issue => {
-      if (!Array.isArray(issue.items)) return issue;
-      const rewrittenItems = issue.items.map(item => {
-        if (!item?.url) return item;
-        if (item.url.startsWith(CANONICAL)) {
-          return { ...item, url: item.url.replace(CANONICAL, targetOrigin) };
-        }
-        return item;
-      });
-      return { ...issue, items: rewrittenItems };
-    });
-  }
-
-  const baseIssues = [
-    {
-      fingerprintId: 'seo:canonical', severity: 'warning', area: 'SEO', source: 'seo',
-      message: 'Missing canonical tag',
-      items: [{ url: `${CANONICAL}/services/`, label: 'Canonical not set' }],
-    },
-    {
-      fingerprintId: 'seo:robots-txt', severity: 'info', area: 'SEO', source: 'seo',
-      message: 'robots.txt has no Sitemap directive',
-      items: [{ url: `${CANONICAL}/robots.txt`, label: 'No Sitemap: directive found' }],
-    },
-    {
-      fingerprintId: 'lh:preconnect', severity: 'info', area: 'Performance', source: 'lh',
-      message: 'Preconnect to required third-party origins',
-      // These are legitimate third-party URLs — should NOT be rewritten
-      items: [
-        { url: 'https://fonts.googleapis.com', label: 'First used at 480 ms' },
-        { url: 'https://cdn.segment.com', label: 'First used at 620 ms' },
-      ],
-    },
+  const { applyDomain, CANONICAL_FIXTURE_ORIGIN } = fixtures;
+  const TARGET = 'https://www.no-assessment-example.com';
+  const base = [
+    { fingerprintId: 'seo:canonical', items: [{ url: `${CANONICAL_FIXTURE_ORIGIN}/services/` }] },
+    { fingerprintId: 'lh:preconnect', items: [{ url: 'https://fonts.googleapis.com' }] },
   ];
+  const out = applyDomain(base, TARGET);
+  assert.equal(out[0].items[0].url, `${TARGET}/services/`, 'TEST 15 FAIL: fixture-domain URL must be rewritten');
+  assert.equal(out[1].items[0].url, 'https://fonts.googleapis.com', 'TEST 15 FAIL: third-party URL must not be rewritten');
 
-  const result = applyDomainTest(baseIssues, TARGET);
+  for (const name of ['fixtureNoAssessment', 'fixtureFailedLighthouse', 'fixtureStaleAssessment']) {
+    const fx = fixtures[name];
+    const leaked = fx.issues.flatMap(i => i.items || []).filter(it => it?.url?.includes('example-healthcare-portal'));
+    assert.equal(leaked.length, 0, `TEST 15 FAIL: ${name} must not contain the primary fixture domain`);
+  }
+  console.log('TEST 15 PASS: applyDomain rewrites fixture-domain URLs; variant fixtures are domain-consistent');
+}
 
-  // seo:canonical item URL should use TARGET origin
-  const canonicalItem = result.find(i => i.fingerprintId === 'seo:canonical').items[0];
-  assert.ok(canonicalItem.url.startsWith(TARGET),
-    `TEST 15 FAIL: seo:canonical item URL should start with ${TARGET}, got ${canonicalItem.url}`);
-  assert.ok(!canonicalItem.url.includes('example-healthcare-portal'),
-    'TEST 15 FAIL: seo:canonical item URL must not contain the original domain');
+// ── Test 16: Narrative kept when coverage record shows the failure was known ──
+{
+  const fx = fixtures.fixtureFailedLighthouse;
+  const result = filterAssessmentForDisplay(fx.assessment, fx.scores, fx.auditStatuses, fx.recommendations);
+  assert.equal(result.headline, fx.assessment.headline, 'TEST 16 FAIL: verified headline must be kept');
+  assert.equal(result.summary, fx.assessment.summary, 'TEST 16 FAIL: verified summary must be kept');
+  assert.equal(result._narrativeWithheld, false, 'TEST 16 FAIL: _narrativeWithheld must be false');
+  console.log('TEST 16 PASS: Headline/summary kept when coverage records Performance as failed');
+}
 
-  // seo:robots-txt item URL should use TARGET origin
-  const robotsItem = result.find(i => i.fingerprintId === 'seo:robots-txt').items[0];
-  assert.ok(robotsItem.url.startsWith(TARGET),
-    `TEST 15 FAIL: seo:robots-txt item URL should start with ${TARGET}, got ${robotsItem.url}`);
+// ── Test 17: Coverage says Performance ran, but it is now unavailable → stale ─
+{
+  const assessment = makeAssessment({
+    headline: 'Fast pages and strong SEO',
+    summary:  'Pages load quickly; LCP is 1.2 s.',
+    coverage: { audits_ran: ['performance', 'seo', 'security', 'accessibility'], audits_failed: [] },
+  });
+  const result = filterAssessmentForDisplay(assessment, makeScores({ performance: null }),
+    makeAuditStatuses({ performance: { status: 'failed' } }), []);
+  assert.equal(result.headline, null, 'TEST 17 FAIL: headline from mismatched coverage must be withheld');
+  assert.equal(result.summary, null, 'TEST 17 FAIL: summary from mismatched coverage must be withheld');
+  console.log('TEST 17 PASS: Narrative withheld when its coverage record contradicts current availability');
+}
 
-  // Third-party URLs must not be rewritten
-  const preconnectItems = result.find(i => i.fingerprintId === 'lh:preconnect').items;
-  assert.ok(preconnectItems[0].url === 'https://fonts.googleapis.com',
-    'TEST 15 FAIL: third-party URL fonts.googleapis.com must not be rewritten');
-  assert.ok(preconnectItems[1].url === 'https://cdn.segment.com',
-    'TEST 15 FAIL: third-party URL cdn.segment.com must not be rewritten');
+// ── Test 18: Strengths from an unavailable category are removed ───────────────
+{
+  const assessment = makeAssessment({
+    strengths: [
+      { area: 'Performance', finding: 'Fast first contentful paint' },
+      { area: 'SEO',         finding: 'Unique titles' },
+      { finding: 'No area given' },
+    ],
+  });
+  const result = filterAssessmentForDisplay(assessment, makeScores({ performance: null }),
+    makeAuditStatuses({ performance: { status: 'failed' } }), []);
+  assert.deepEqual(result.strengths.map(s => s.finding), ['Unique titles', 'No area given'],
+    'TEST 18 FAIL: Performance strength must be removed; others kept');
+  console.log('TEST 18 PASS: Strengths from unavailable categories removed');
+}
 
-  console.log('TEST 15 PASS: applyDomain rewrites fixture-domain URLs and preserves third-party URLs');
+// ── Test 19: Full scan, legacy assessment without coverage → narrative kept ───
+{
+  const assessment = makeAssessment({ headline: 'H', summary: 'S' });
+  const result = filterAssessmentForDisplay(assessment, makeScores(), makeAuditStatuses(), []);
+  assert.equal(result.headline, 'H', 'TEST 19 FAIL: nothing unavailable — headline must be kept');
+  assert.equal(result.summary, 'S', 'TEST 19 FAIL: nothing unavailable — summary must be kept');
+  assert.equal(result._narrativeWithheld, false);
+  console.log('TEST 19 PASS: Legacy narrative kept when every analyzer completed');
+}
+
+// ── Test 20: blocked / unavailable statuses count as unavailable ─────────────
+{
+  for (const status of ['blocked', 'unavailable', 'failed']) {
+    const cats = getUnavailableCategories(makeScores(), makeAuditStatuses({ accessibility: { status } }));
+    assert.deepEqual(cats, ['Accessibility'], `TEST 20 FAIL: status '${status}' must mark Accessibility unavailable`);
+  }
+  assert.deepEqual(getUnavailableCategories(makeScores(), makeAuditStatuses()), [],
+    'TEST 20 FAIL: all completed → none unavailable');
+  console.log('TEST 20 PASS: blocked/unavailable/failed statuses all count as unavailable');
+}
+
+// ── Test 21: Unavailability is known without any assessment ──────────────────
+{
+  const cats = getUnavailableCategories({ performance: null, seo: 80, security: 70, accessibility: 60 }, {});
+  assert.deepEqual(cats, ['Performance'], 'TEST 21 FAIL: null score alone marks the category unavailable');
+  assert.equal(filterAssessmentForDisplay(null, {}, {}, []), null);
+  console.log('TEST 21 PASS: Unavailable categories derived without an assessment');
 }
 
 console.log('\nAll pdf-phase3-fixes tests passed.');

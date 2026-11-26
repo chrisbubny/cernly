@@ -863,7 +863,7 @@ export const S = StyleSheet.create({
     borderRadius: 5,
     paddingVertical: 7,
     paddingHorizontal: 10,
-    marginBottom: 10,
+    marginBottom: 18,
   },
   partialAnalysisLabel: {
     fontSize: 7.5,

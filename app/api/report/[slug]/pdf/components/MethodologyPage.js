@@ -7,16 +7,16 @@
  * Content rules:
  *   - Only factual claims about what the tool does/measures
  *   - Does NOT claim comprehensive security audit or WCAG compliance certification
- *   - analyzer status comes from report.analyzerStatuses (if present) or falls back
- *     to inferring from scores (null score = likely failed)
- *   - No data is fabricated
+ *   - analyzer status comes from report.auditStatuses (if present) or falls back
+ *     to inferring from scores (null score = status unknown)
+ *   - No data is fabricated; the Time column appears only when durations exist
  *
- * Analyzer status shape (optional in report):
- *   report.analyzerStatuses = {
- *     lighthouse: { status: 'completed' | 'failed' | 'skipped', duration: <ms> },
- *     seo:        { ... },
- *     ssl:        { ... },
- *     a11y:       { ... },
+ * Status shape (from /api/analyze via lib/store.js mapRow), keyed by category:
+ *   report.auditStatuses = {
+ *     performance:   { status: 'completed' | 'failed' | 'blocked' | 'unavailable', ... },
+ *     seo:           { ... },
+ *     security:      { ... },
+ *     accessibility: { ... },
  *   }
  */
 import React from 'react';
@@ -84,7 +84,7 @@ function formatDuration(ms) {
   return `${ms} ms`;
 }
 
-function AnalyzerRow({ config, statusInfo, scores }) {
+function AnalyzerRow({ config, statusInfo, scores, showTime }) {
   // Determine status: explicit > infer from score
   let status   = statusInfo?.status ?? null;
   const duration = statusInfo?.duration ? formatDuration(statusInfo.duration) : null;
@@ -95,7 +95,7 @@ function AnalyzerRow({ config, statusInfo, scores }) {
   }
 
   const isCompleted = status === 'completed';
-  const isFailed    = status === 'failed' || status === 'error';
+  const isFailed    = status === 'failed' || status === 'error' || status === 'blocked';
   const statusColor = isCompleted ? COLORS.scoreGood : isFailed ? COLORS.scoreBad : COLORS.muted;
   const statusText  = isCompleted ? 'Completed' : isFailed ? 'Failed' : status.charAt(0).toUpperCase() + status.slice(1);
 
@@ -106,11 +106,9 @@ function AnalyzerRow({ config, statusInfo, scores }) {
         <View style={[S.analyzerStatusDot, { backgroundColor: statusColor }]} />
         <Text style={[S.analyzerStatusText, { color: statusColor }]}>{statusText}</Text>
       </View>
-      {duration ? (
-        <Text style={S.analyzerDuration}>{duration}</Text>
-      ) : (
-        <Text style={S.analyzerDuration} />
-      )}
+      {showTime ? (
+        <Text style={S.analyzerDuration}>{duration || ''}</Text>
+      ) : null}
       <Text style={S.analyzerDesc}>{config.desc}</Text>
     </View>
   );
@@ -145,9 +143,11 @@ export default function MethodologyPage({ report, pageSize }) {
     url,
     createdAt,
     id,
-    analyzerStatuses = {},
+    auditStatuses = {},
     scores = {},
   } = report;
+
+  const showTime = ANALYZER_CONFIG.some(c => auditStatuses[c.scoreKey]?.duration);
 
   const domain  = getDomain(url);
   const dateStr = createdAt
@@ -180,15 +180,18 @@ export default function MethodologyPage({ report, pageSize }) {
         <View style={[S.analyzerRow, { borderBottomWidth: 1, borderBottomColor: COLORS.borderStrong }]}>
           <Text style={[S.analyzerName,       { color: COLORS.muted, fontFamily: 'Inter' }]}>Analyzer</Text>
           <Text style={[S.analyzerStatusBadge,{ color: COLORS.muted, fontFamily: 'Inter', flexDirection: 'row' }]}><Text style={S.analyzerDesc}>Status</Text></Text>
-          <Text style={[S.analyzerDuration,   { color: COLORS.muted, fontFamily: 'Inter' }]}>Time</Text>
+          {showTime ? (
+            <Text style={[S.analyzerDuration,   { color: COLORS.muted, fontFamily: 'Inter' }]}>Time</Text>
+          ) : null}
           <Text style={[S.analyzerDesc,       { color: COLORS.muted, fontFamily: 'Inter' }]}>Coverage</Text>
         </View>
         {ANALYZER_CONFIG.map(config => (
           <AnalyzerRow
             key={config.key}
             config={config}
-            statusInfo={analyzerStatuses[config.key] ?? null}
+            statusInfo={auditStatuses[config.scoreKey] ?? null}
             scores={scores}
+            showTime={showTime}
           />
         ))}
       </View>

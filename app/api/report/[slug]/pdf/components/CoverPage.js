@@ -19,7 +19,7 @@ import {
   scoreInterpretation,
   catAccent,
 } from './styles.js';
-import { filterAssessmentForDisplay } from '../../../../../../lib/assessment-filter.js';
+import { filterAssessmentForDisplay, getUnavailableCategories } from '../../../../../../lib/assessment-filter.js';
 
 /** Four canonical score categories — matches CLAUDE.md specification */
 const SCORE_ENTRIES = [
@@ -94,7 +94,7 @@ export default function CoverPage({ report, pageSize }) {
     scores = {},
     aiSummary,
     assessment: rawAssessment,
-    analyzerStatuses = {},
+    auditStatuses    = {},
     recommendations  = [],
     createdAt,
   } = report;
@@ -110,8 +110,13 @@ export default function CoverPage({ report, pageSize }) {
   // Filter assessment content to remove claims from failed/unavailable analyzers
   // before surfacing them on the cover page. Never modifies the stored report.
   const assessment = filterAssessmentForDisplay(
-    rawAssessment, scores, analyzerStatuses, recommendations,
+    rawAssessment, scores, auditStatuses, recommendations,
   );
+
+  // Computed independently of the assessment so the warning also appears
+  // when no structured assessment exists.
+  const unavailableCategories = getUnavailableCategories(scores, auditStatuses);
+  const partialAnalysis       = unavailableCategories.length > 0;
 
   // Structured assessment fields (null-safe)
   const headline            = assessment?.headline ?? null;
@@ -119,11 +124,13 @@ export default function CoverPage({ report, pageSize }) {
   const topOpp              = assessment?.top_opportunity ?? null;
   const strengths           = assessment?.strengths ?? [];
   const concerns            = assessment?.concerns  ?? [];
-  const unavailableCategories = assessment?._unavailableCategories ?? [];
-  const partialAnalysis     = assessment?._partialAnalysis ?? false;
 
-  // Fallback to flat aiSummary when no structured assessment
-  const summaryText = summary ?? aiSummary ?? null;
+  // Fallback to flat aiSummary when no structured assessment. On a partial
+  // scan the flat summary has no coverage record to verify it against, so it
+  // is withheld along with any unverifiable assessment narrative.
+  const summaryText = summary ?? (partialAnalysis ? null : (aiSummary ?? null));
+  const narrativeWithheld = partialAnalysis && !headline && !summaryText &&
+    !!(rawAssessment?.headline || rawAssessment?.summary || aiSummary);
 
   const hasStrengthsConcerns = strengths.length > 0 || concerns.length > 0;
 
@@ -163,7 +170,9 @@ export default function CoverPage({ report, pageSize }) {
         <View style={S.partialAnalysisNote}>
           <Text style={S.partialAnalysisLabel}>Partial Analysis</Text>
           <Text style={S.partialAnalysisText}>
-            {`${unavailableCategories.join(' and ')} data is unavailable — the ${unavailableCategories.length > 1 ? 'corresponding analyzers' : `${unavailableCategories[0]} analyzer`} did not complete. The executive summary reflects only analyzers that produced data. Run a new scan to obtain complete results.`}
+            {`${unavailableCategories.join(' and ')} data is unavailable — the ${unavailableCategories.length > 1 ? 'corresponding analyzers' : `${unavailableCategories[0]} analyzer`} did not complete. ${narrativeWithheld
+              ? 'The automated summary is not shown because it could not be verified against the analyzers that completed.'
+              : 'The executive summary reflects only analyzers that produced data.'} Run a new scan to obtain complete results.`}
           </Text>
         </View>
       ) : null}

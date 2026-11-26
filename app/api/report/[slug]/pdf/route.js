@@ -13,7 +13,7 @@ import { NextResponse } from 'next/server';
 import { auth } from '@clerk/nextjs/server';
 import { renderToBuffer } from '@react-pdf/renderer';
 import React from 'react';
-import { getReport, getReportBySlug, getUserSubscription } from '@/lib/store';
+import { getReport, getReportBySlug, getUserSubscription, getRecommendationsByReport } from '@/lib/store';
 import { isValidPaidStripeSession } from '@/lib/stripe-session';
 import ReportPDF, { resolvePageSize } from './ReportPDF.js';
 
@@ -81,10 +81,21 @@ export async function GET(request, { params }) {
   }
 
   // ── Render ────────────────────────────────────────────────────────────────────
+  // Recommendations live in their own table and are not part of the report
+  // row (same as GET /api/report). Without them the Action Plan has no
+  // grouped guidance. A lookup failure is logged and the PDF still renders;
+  // ungrouped tasks carry their own "no grouped guidance" disclosure.
+  let recommendations = [];
+  try {
+    recommendations = await getRecommendationsByReport(report.id);
+  } catch (e) {
+    console.error('[PDF] Recommendations lookup failed:', e.message);
+  }
+
   try {
     const pageSize  = resolvePageSize(sizeParam);
     const pdfBuffer = await renderToBuffer(
-      React.createElement(ReportPDF, { report, size: pageSize })
+      React.createElement(ReportPDF, { report: { ...report, recommendations }, size: pageSize })
     );
 
     const domain   = (() => { try { return new URL(report.url).hostname.replace('www.', ''); } catch { return 'report'; } })();

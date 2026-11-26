@@ -29,6 +29,7 @@ import {
   catAccent,
 } from './styles.js';
 import { buildPriorityTasks } from '../../../../../../lib/priority-tasks.js';
+import { buildEvidence } from '../evidence.js';
 
 // Canonical category display order and normalization
 const CATEGORIES = ['Performance', 'SEO', 'Security', 'Accessibility'];
@@ -54,17 +55,6 @@ function getDomain(url) {
   try { return new URL(url).hostname; } catch { return url || ''; }
 }
 
-function truncateUrl(url, maxLen = 70) {
-  if (!url || url.length <= maxLen) return url;
-  return url.slice(0, 32) + '…' + url.slice(-(maxLen - 33));
-}
-
-function formatBytes(bytes) {
-  if (bytes == null) return null;
-  if (bytes >= 1_000_000) return `${(bytes / 1_000_000).toFixed(1)} MB`;
-  if (bytes >= 1_000)     return `${Math.round(bytes / 1_000)} KB`;
-  return `${bytes} B`;
-}
 
 /** Fixed running header */
 function RunningHeader({ domain, label }) {
@@ -79,27 +69,22 @@ function RunningHeader({ domain, label }) {
   );
 }
 
-/** Evidence list — all items, no cap; paginates naturally */
-function EvidenceList({ items }) {
-  if (!Array.isArray(items) || items.length === 0) return null;
+/** Evidence list — all stored items, no cap; paginates naturally */
+function EvidenceList({ finding }) {
+  const { rows, note } = buildEvidence(finding);
+  if (rows.length === 0 && !note) return null;
 
   return (
     <View style={{ marginBottom: 4 }}>
       <Text style={S.evidenceHeader}>Affected resources</Text>
-      {items.map((item, i) => {
-        const url   = item?.url   || null;
-        const label = item?.label || null;
-        const bytes = item?.bytes != null ? formatBytes(item.bytes) : null;
-        const display = url ? truncateUrl(url) : (label || null);
-        if (!display) return null;
-        return (
-          <View key={i} style={S.evidenceItem}>
-            <Text style={S.evidenceBullet}>›</Text>
-            <Text style={S.evidenceUrl}>{display}</Text>
-            {bytes ? <Text style={S.evidenceSize}>({bytes})</Text> : null}
-          </View>
-        );
-      })}
+      {rows.map((row, i) => (
+        <View key={i} style={S.evidenceItem}>
+          <Text style={S.evidenceBullet}>›</Text>
+          <Text style={S.evidenceUrl}>{row.text}</Text>
+          {row.size ? <Text style={S.evidenceSize}>({row.size})</Text> : null}
+        </View>
+      ))}
+      {note ? <Text style={S.evidenceMore}>{note}</Text> : null}
     </View>
   );
 }
@@ -109,7 +94,8 @@ function FindingItem({ finding, apRef }) {
   const sevClr  = sevColor(finding.severity);
   const sevLbl  = sevLabel(finding.severity);
   const hasDesc = !!finding.description;
-  const hasItems = Array.isArray(finding.items) && finding.items.length > 0;
+  const hasItems = (Array.isArray(finding.items) && finding.items.length > 0) ||
+    (Number.isFinite(finding.totalDetected) && finding.totalDetected > 0);
 
   return (
     <View style={S.findingItem}>
@@ -140,7 +126,7 @@ function FindingItem({ finding, apRef }) {
       {/* Evidence items — free to paginate across pages */}
       {hasItems ? (
         <View style={S.findingBody}>
-          <EvidenceList items={finding.items} />
+          <EvidenceList finding={finding} />
         </View>
       ) : null}
     </View>

@@ -383,6 +383,8 @@ Shadows: `shadow-glow-teal`, `shadow-glow-purple`, `shadow-card`
 
 **Unit test framework:** Node.js built-in `assert/strict`. No Jest, Mocha, or other test runners.
 
+**PDF report suite:** `npm run test:pdf`. Fixture PDFs for visual review: `node scripts/render-pdf-fixture.cjs` (renders through the production `ReportPDF.js`).
+
 **Run a unit test file:**
 ```bash
 node __tests__/<filename>.mjs
@@ -403,6 +405,9 @@ node __tests__/<filename>.mjs
 | `a11y-element-evidence.mjs` | Accessibility element evidence collection |
 | `items-persistence.mjs` | Work item persistence |
 | `alias-hooks.mjs` / `alias-loader.mjs` | Module alias resolution |
+| `pdf-phase1.mjs` / `pdf-phase3-fixes.mjs` | PDF priority tasks, page size, assessment display filter (failed analyzers, stale free-form narrative) |
+| `pdf-render-parity.mjs` | Fixture generator and `/api/report/[slug]/pdf` share `ReportPDF.js`; renders fixtures and checks extracted text (needs `pdftotext`) |
+| `pdf-route-evidence.test.mjs` | Real PDF route handler (recommendations passed to render, access gate) and real a11y analyzer → PDF evidence disclosure |
 | `ask-quota-integration.mjs` | **Real PostgreSQL** integration test for `reserveAskSlot()` — 120 concurrent reservations, quota 100; requires `DATABASE_URL`; not in CI |
 
 ### Browser-level testing
