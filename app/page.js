@@ -243,7 +243,6 @@ export default function Home() {
             <div className="orb c" aria-hidden="true" />
 
             <div className="hero-copy">
-              <div className="hero-badge"><b>NEW</b> Ask Cernly — chat with your website report</div>
               <h1 className="h">See what&apos;s holding<br />your website back.</h1>
               <p className="hero-sub">Cernly scans your site, explains what&apos;s slowing it down, hurting visibility, or frustrating visitors — then hands you a prioritized plan to fix it.</p>
               <form className="urlform" id="hero-form" onSubmit={handleFormSubmit}>
