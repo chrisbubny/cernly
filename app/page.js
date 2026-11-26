@@ -3,668 +3,7 @@
 import { useRouter } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
 import NavAuthButton from './components/NavAuthButton';
-
-const CSS = `
-:root {
-  --ink: #11131d;
-  --muted: #6f7280;
-  --line: #e9eaf0;
-  --violet: #7548f8;
-  --blue: #3389ff;
-  --cyan: #41c9eb;
-  --green: #1cb985;
-  --paper: #fff;
-  --soft: #f7f8fc;
-  --radius: 22px
-}
-* { box-sizing: border-box }
-html { scroll-behavior: smooth }
-body {
-  margin: 0;
-  background: var(--paper);
-  color: var(--ink);
-  font-family: 'DM Sans', sans-serif;
-  -webkit-font-smoothing: antialiased
-}
-button, input { font: inherit }
-a { text-decoration: none; color: inherit }
-button { cursor: pointer }
-.wrap { width: min(1180px, calc(100% - 64px)); margin: auto }
-.eyebrow {
-  display: inline-flex;
-  align-items: center;
-  gap: 9px;
-  color: #6253d6;
-  font-weight: 800;
-  font-size: 11px;
-  letter-spacing: .16em;
-  text-transform: uppercase;
-  margin-bottom: 20px
-}
-.eyebrow:before {
-  content: '';
-  width: 7px;
-  height: 7px;
-  background: linear-gradient(135deg, var(--violet), var(--cyan));
-  transform: rotate(45deg)
-}
-h1, h2, h3, p { margin-top: 0 }
-h1, h2, h3 {
-  font-family: Manrope, sans-serif;
-  letter-spacing: -.025em
-}
-h1 {
-  font-size: clamp(48px, 5.5vw, 78px);
-  line-height: 1.08;
-  font-weight: 800;
-  margin: 22px 0
-}
-h2 {
-  font-size: clamp(36px, 4vw, 56px);
-  line-height: 1.13;
-  font-weight: 800;
-  margin: 16px 0
-}
-h3 { font-size: 21px; line-height: 1.25 }
-p { line-height: 1.7 }
-.gradient-text {
-  background: linear-gradient(100deg, #7548f8 10%, #3b82f6 75%, #21bcd6);
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent
-}
-.btn {
-  display: inline-flex;
-  justify-content: center;
-  align-items: center;
-  gap: 9px;
-  padding: 14px 22px;
-  border-radius: 6px;
-  border: 0;
-  font-size: 13px;
-  font-weight: 800;
-  transition: transform .2s, box-shadow .2s
-}
-.btn:hover { transform: translateY(-2px) }
-.btn-dark { background: #11131d; color: white }
-.btn-gradient {
-  background: linear-gradient(110deg, #8a46f8, #446af6 60%, #258de9);
-  color: white;
-  box-shadow: 0 8px 22px #6a58ec36
-}
-.btn-light {
-  background: white;
-  border: 1px solid #e5e6ef;
-  color: var(--ink)
-}
-.icon {
-  width: 20px;
-  height: 20px;
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 1.8;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-  flex: none
-}
-.icon.sm { width: 15px; height: 15px }
-.icon.lg { width: 27px; height: 27px }
-.topbar {
-  position: sticky;
-  top: 0;
-  z-index: 50;
-  background: #ffffffed;
-  backdrop-filter: blur(18px);
-  border-bottom: 1px solid #f0f0f4
-}
-.nav {
-  height: 76px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  position: relative
-}
-.brand {
-  display: inline-flex;
-  align-items: center;
-  gap: 10px;
-  font: 800 22px Manrope, sans-serif;
-  letter-spacing: -.07em;
-  flex-shrink: 0
-}
-.brand svg { width: 25px; height: 25px }
-.brand span { font-weight: 600 }
-.navlinks {
-  position: absolute;
-  left: 50%;
-  transform: translateX(-50%);
-  display: flex;
-  gap: 32px;
-  font-size: 13px;
-  font-weight: 700;
-  color: #5e6270
-}
-.navlinks a:hover { color: var(--violet) }
-.navright {
-  display: flex;
-  align-items: center;
-  gap: 20px;
-  font-size: 13px;
-  font-weight: 700;
-  flex-shrink: 0
-}
-.hero {
-  position: relative;
-  overflow: hidden;
-  padding: 70px 0 105px
-}
-.hero:before {
-  content: '';
-  position: absolute;
-  pointer-events: none;
-  right: -200px;
-  top: -130px;
-  width: 800px;
-  height: 720px;
-  background: radial-gradient(ellipse at 40% 45%, #e7dfff 0, transparent 55%), radial-gradient(ellipse at 70% 50%, #e3f3ff 0, transparent 60%);
-  opacity: .72
-}
-.hero-grid {
-  display: grid;
-  grid-template-columns: 1fr 1.07fr;
-  align-items: center;
-  gap: 74px;
-  position: relative
-}
-.hero-copy > p { max-width: 520px; color: #666b7b; font-size: 17px }
-.urlform {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  border: 1px solid #e5e6ed;
-  background: #fff;
-  border-radius: 14px;
-  padding: 7px;
-  box-shadow: 0 10px 40px #181a2b0d;
-  margin-top: 30px;
-  max-width: 520px
-}
-.urlform .icon { margin-left: 12px; color: #8c91a0 }
-.urlform input {
-  border: 0;
-  outline: 0;
-  min-width: 0;
-  flex: 1;
-  padding: 12px 2px;
-  font-size: 14px
-}
-.urlform button { white-space: nowrap }
-.hero-visual { position: relative }
-.glow {
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(120deg, #9e71fa, #60c5fb);
-  filter: blur(72px);
-  opacity: .18;
-  transform: scale(.92)
-}
-.window {
-  position: relative;
-  background: #fff;
-  border: 1px solid #e9e9f0;
-  border-radius: 19px;
-  box-shadow: 0 30px 90px #26233b1d, 0 3px 15px #27233b0c;
-  overflow: hidden
-}
-.windowbar {
-  height: 51px;
-  background: #fcfcff;
-  border-bottom: 1px solid #ececf1;
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  padding: 0 20px
-}
-.dot { width: 8px; height: 8px; border-radius: 50%; background: #ff6d75 }
-.dot:nth-child(2) { background: #ffcb65 }
-.dot:nth-child(3) { background: #50cf9b }
-.windowurl { margin: auto; color: #a2a4b0; font-size: 10px }
-.dashboard { padding: 23px }
-.dash-head {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 10px;
-  margin-bottom: 20px
-}
-.dash-head strong { font: 800 16px Manrope, sans-serif }
-.dash-head small { color: #9295a3; font-size: 10px }
-.pill {
-  font-size: 10px;
-  padding: 6px 10px;
-  background: #f1edff;
-  color: #7250dd;
-  border-radius: 20px;
-  font-weight: 800
-}
-.scores {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 10px
-}
-.score {
-  padding: 15px 4px;
-  text-align: center;
-  background: #fafaff;
-  border: 1px solid #f0f0f7;
-  border-radius: 12px
-}
-.ring {
-  width: 61px;
-  height: 61px;
-  margin: 0 auto 10px;
-  border-radius: 50%;
-  display: grid;
-  place-items: center;
-  background: conic-gradient(var(--c) calc(var(--n)*1%), #eceef5 0)
-}
-.ring:before {
-  content: '';
-  grid-area: 1/1;
-  width: 48px;
-  height: 48px;
-  background: #fafaff;
-  border-radius: 50%
-}
-.ring b { grid-area: 1/1; z-index: 1; font: 800 18px Manrope; color: var(--c) }
-.score small { font-size: 10px; color: #777b8a; font-weight: 700 }
-.summary {
-  background: linear-gradient(110deg, #f7f3ff, #f0f7ff);
-  border: 1px solid #eae5ff;
-  border-radius: 12px;
-  padding: 17px;
-  margin-top: 17px
-}
-.summary strong { display: flex; align-items: center; gap: 7px; font-size: 12px }
-.summary strong .icon { color: var(--violet) }
-.summary p { font-size: 12px; line-height: 1.6; color: #656b7d; margin: 8px 0 0 }
-.issue-title {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  font-size: 12px;
-  margin: 18px 0 9px
-}
-.issue-title span { color: #858b9a; font-size: 10px }
-.issue {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  border-top: 1px solid #eff0f4;
-  padding: 11px 0;
-  font-size: 11px
-}
-.issue .num {
-  display: grid;
-  place-items: center;
-  width: 21px;
-  height: 21px;
-  border-radius: 7px;
-  background: #edeaff;
-  color: #6948dc;
-  font-weight: 800;
-  font-size: 10px
-}
-.issue .label { flex: 1 }
-.severity {
-  padding: 4px 7px;
-  border-radius: 6px;
-  background: #fff0e7;
-  color: #c87535;
-  font-size: 9px;
-  font-weight: 800
-}
-.severity.low { background: #eaf8f2; color: #19946a }
-.section { padding: 110px 0 }
-.intro { max-width: 650px }
-.intro p { color: var(--muted); font-size: 16px }
-.dark-band { background: #10121b; color: white; padding: 80px 0; overflow: hidden }
-.value-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 100px;
-  align-items: center
-}
-.value-grid p { color: #a5a9ba; max-width: 480px }
-.value-items { display: grid; grid-template-columns: 1fr 1fr; gap: 17px }
-.value-item {
-  border: 1px solid #303342;
-  border-radius: 16px;
-  padding: 23px;
-  background: #ffffff05
-}
-.value-item .icon { color: #a991ff; margin-bottom: 13px }
-.value-item strong { display: block; font: 800 15px Manrope }
-.value-item small { display: block; color: #a4a7b5; font-size: 12px; line-height: 1.6; margin-top: 7px }
-.features { background: #fff }
-.feature-layout {
-  display: grid;
-  grid-template-columns: 270px 1fr;
-  gap: 70px;
-  margin-top: 60px;
-  align-items: start
-}
-.feature-nav {
-  position: sticky;
-  top: 115px;
-  display: flex;
-  flex-direction: column;
-  gap: 0
-}
-.feature-tab {
-  border: 0;
-  background: transparent;
-  text-align: left;
-  padding: 16px 18px;
-  display: flex;
-  align-items: center;
-  gap: 13px;
-  color: #858999;
-  border-left: 2px solid #e7e7ee;
-  border-radius: 0 10px 10px 0;
-  font-size: 14px;
-  font-weight: 700;
-  transition: background-color .18s ease, color .18s ease, border-color .18s ease
-}
-.feature-tab.active { border-color: var(--violet); color: #6845db }
-.feature-tab:hover { color: #6845db; background: #f6f3ff }
-.feature-stack { display: flex; flex-direction: column; gap: 100px }
-.feature-panel { scroll-margin-top: 120px; min-height: 480px }
-.feature-panel h3 { font-size: 31px; margin-bottom: 12px }
-.feature-panel > p { color: var(--muted); max-width: 570px; font-size: 15px }
-.feature-art {
-  border: 1px solid #e9eaf3;
-  border-radius: 20px;
-  background: linear-gradient(145deg, #fafaff, #f4f7ff);
-  padding: 28px;
-  margin-top: 27px;
-  box-shadow: 0 16px 40px #27254a08;
-  min-height: 300px
-}
-.art-window {
-  background: white;
-  border: 1px solid #ececf4;
-  border-radius: 13px;
-  padding: 22px;
-  box-shadow: 0 12px 26px #20233b0a
-}
-.art-heading {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 10px;
-  font-size: 12px;
-  font-weight: 800;
-  margin-bottom: 20px
-}
-.art-heading span { color: #858998; font-size: 11px; font-weight: 500 }
-.chart { width: 100%; height: 155px }
-.art-foot {
-  display: flex;
-  gap: 15px;
-  flex-wrap: wrap;
-  margin-top: 14px;
-  font-size: 11px;
-  color: #777c89
-}
-.art-foot b { color: #252a3b }
-.audit-row {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 12px 0;
-  border-bottom: 1px solid #f0f0f5;
-  font-size: 12px
-}
-.audit-row:last-child { border-bottom: 0 }
-.audit-row .icon { width: 16px; height: 16px; color: var(--green) }
-.audit-row.warn .icon { color: #e8a147 }
-.audit-row.bad .icon { color: #ee6b76 }
-.audit-row span { flex: 1 }
-.audit-row small { font-size: 10px; color: #999dac }
-.priority {
-  display: grid;
-  grid-template-columns: 28px 1fr auto;
-  align-items: start;
-  gap: 12px;
-  padding: 14px 0;
-  border-bottom: 1px solid #f0f0f5
-}
-.priority:last-child { border: 0 }
-.priority .n {
-  display: grid;
-  place-items: center;
-  width: 26px;
-  height: 26px;
-  background: #f0ebff;
-  color: #704bdc;
-  border-radius: 8px;
-  font-size: 12px;
-  font-weight: 800
-}
-.priority b { font-size: 12px }
-.priority p { font-size: 11px; color: #8b8e9c; margin: 4px 0 0 }
-.priority em {
-  font-style: normal;
-  font-size: 10px;
-  color: #7855df;
-  background: #f2eeff;
-  padding: 5px 8px;
-  border-radius: 6px
-}
-.pathways { background: #f8f9fc }
-.pathway-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr 1fr;
-  gap: 20px;
-  align-items: stretch
-}
-.pathway-intro { padding-right: 30px }
-.pathway-intro h2 { font-size: clamp(36px, 4vw, 50px) }
-.pathway-intro p { color: var(--muted); font-size: 15px }
-.path-card {
-  background: #fff;
-  border: 1px solid #e8eaf1;
-  border-radius: 20px;
-  padding: 29px;
-  box-shadow: 0 15px 40px #1b1d3208;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start
-}
-.icon-tile {
-  width: 58px;
-  height: 58px;
-  display: grid;
-  place-items: center;
-  border-radius: 17px;
-  background: linear-gradient(130deg, #824cf8, #3b89fb);
-  color: white;
-  margin-bottom: 25px;
-  box-shadow: 0 9px 23px #6755e92b
-}
-.icon-tile.wp { background: white; color: #21759b; box-shadow: 0 2px 10px #21759b18; border: 1px solid #e3eff7 }
-.path-card h3 { margin: 0 0 9px }
-.path-card p { color: var(--muted); font-size: 13px; margin-bottom: 22px }
-.path-card .btn { margin-top: auto; width: 100% }
-.ticks {
-  padding: 0;
-  list-style: none;
-  margin: 18px 0 26px;
-  display: grid;
-  gap: 10px;
-  color: #777c89;
-  font-size: 12px
-}
-.ticks li { display: flex; align-items: center; gap: 8px }
-.ticks .icon { width: 15px; height: 15px; color: #20b586 }
-.how-grid {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 18px;
-  margin-top: 45px
-}
-.how-card { padding: 28px; border: 1px solid var(--line); border-radius: 16px }
-.how-card .number { font: 800 13px Manrope; color: #8c6af1 }
-.how-card h3 { margin: 20px 0 8px; font-size: 19px }
-.how-card p { font-size: 13px; color: var(--muted); margin: 0 }
-.pricing { background: #fafaff }
-.price-grid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 18px;
-  margin-top: 42px
-}
-.plan {
-  border: 1px solid #e8e8ef;
-  background: white;
-  border-radius: 20px;
-  padding: 30px;
-  display: flex;
-  flex-direction: column
-}
-.plan.featured { background: #141622; color: white; border-color: #141622; box-shadow: 0 18px 40px #191c2a1c }
-.plan .tag { font-size: 10px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: #7d60e8 }
-.plan.featured .tag { color: #b8a4ff }
-.price { font: 800 43px Manrope; letter-spacing: -.07em; margin: 12px 0 0 }
-.price small { font-size: 13px; letter-spacing: 0; font-weight: 500; color: #999dab }
-.plan > p { color: #868a99; font-size: 13px; min-height: 44px }
-.plan ul {
-  padding: 20px 0 24px;
-  margin: 10px 0 0;
-  list-style: none;
-  border-top: 1px solid #ececf1;
-  display: grid;
-  gap: 13px;
-  font-size: 12px;
-  color: #626775;
-  flex: 1
-}
-.plan.featured ul { border-color: #303340; color: #d1d3de }
-.plan li { display: flex; align-items: center; gap: 10px }
-.plan li .icon { color: #27b98c; width: 15px; height: 15px }
-.plan .btn { width: 100% }
-.closing {
-  background: #10121b;
-  color: white;
-  text-align: center;
-  padding: 90px 0;
-  position: relative;
-  overflow: hidden
-}
-.closing:before, .closing:after {
-  content: '';
-  position: absolute;
-  width: 340px;
-  height: 340px;
-  border-radius: 50%;
-  filter: blur(95px);
-  opacity: .35;
-  pointer-events: none
-}
-.closing:before { left: -130px; bottom: -200px; background: #8053ff }
-.closing:after { right: -150px; top: -190px; background: #34b6ff }
-.closing h2 { max-width: 700px; margin: 18px auto }
-.closing p { color: #a9acb8; margin-bottom: 30px }
-.closing .wrap { position: relative; z-index: 1 }
-footer { padding: 32px 0; border-top: 1px solid #eee }
-.footer-inner { display: flex; justify-content: space-between; align-items: center; gap: 25px }
-.footer-inner small { color: #a0a3ae }
-.footerlinks { display: flex; gap: 22px; color: #8c909d; font-size: 12px }
-.toast {
-  position: fixed;
-  bottom: 22px;
-  left: 50%;
-  transform: translateX(-50%);
-  z-index: 90;
-  padding: 12px 20px;
-  border-radius: 12px;
-  background: #151727;
-  color: white;
-  font-size: 13px;
-  box-shadow: 0 10px 30px #0003;
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity .25s;
-  max-width: calc(100% - 30px);
-  text-align: center
-}
-.toast.show { opacity: 1; pointer-events: auto }
-@media(max-width:1000px) {
-  .hero-grid { gap: 35px }
-  .feature-layout { grid-template-columns: 200px 1fr; gap: 35px }
-  .pathway-grid { grid-template-columns: 1fr 1fr }
-  .pathway-intro { grid-column: 1/-1 }
-  .value-grid { gap: 45px }
-}
-@media(max-width:760px) {
-  .wrap { width: min(100% - 36px, 1180px) }
-  .nav { height: 66px; gap: 20px }
-  .navlinks { display: none }
-  .navright { gap: 10px }
-  .navright > a:first-child { display: none }
-  .hero { padding: 65px 0 }
-  .hero-grid, .value-grid, .feature-layout { grid-template-columns: 1fr }
-  .hero-visual { max-width: 560px; margin: 20px auto 0; width: 100% }
-  .hero-copy > p { font-size: 16px }
-  .section { padding: 75px 0 }
-  .dark-band { padding: 65px 0 }
-  .value-items { grid-template-columns: 1fr 1fr }
-  .feature-nav {
-    position: sticky;
-    top: 66px;
-    z-index: 5;
-    background: #fffffff5;
-    flex-direction: row;
-    overflow: auto;
-    gap: 0;
-    border-bottom: 1px solid var(--line);
-    padding: 8px 0
-  }
-  .feature-tab {
-    white-space: nowrap;
-    border-left: 0;
-    border-bottom: 2px solid transparent;
-    padding: 12px;
-    font-size: 12px
-  }
-  .feature-tab.active { border-color: var(--violet); border-radius: 0 }
-  .feature-stack { gap: 75px }
-  .feature-panel { min-height: 0; scroll-margin-top: 155px }
-  .pathway-grid, .price-grid { grid-template-columns: 1fr }
-  .pathway-intro { grid-column: auto }
-  .how-grid { grid-template-columns: 1fr }
-  .footer-inner { flex-wrap: wrap }
-}
-@media(max-width:450px) {
-  h1 { font-size: 45px }
-  .scores { gap: 5px }
-  .dashboard { padding: 14px }
-  .score { padding: 12px 2px }
-  .ring { width: 51px; height: 51px }
-  .ring:before { width: 40px; height: 40px }
-  .ring b { font-size: 15px }
-  .urlform { flex-wrap: wrap }
-  .urlform input { min-width: 140px }
-  .urlform button { width: 100% }
-  .value-items { grid-template-columns: 1fr }
-  .navright .btn { padding: 11px 13px }
-  .brand { font-size: 19px }
-}
-.brand .cernly-mark { width: 25px; height: 25px; flex: none; display: block; }
-@media (max-width: 1000px) and (min-width: 761px) { .how-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-@media (max-width: 760px) { .how-grid { grid-template-columns: 1fr; } }
-`;
+import CSS from './home.css.js';
 
 const CernlyMark = () => (
   <svg aria-hidden="true" className="cernly-mark" focusable="false" viewBox="195 175 895 875" xmlns="http://www.w3.org/2000/svg">
@@ -675,14 +14,123 @@ const CernlyMark = () => (
   </svg>
 );
 
+
+/* ---------- helpers ---------- */
+
+// Shared 1.1s ticker that drives the looping demo animations.
+// Frozen at a "finished" frame for visitors who prefer reduced motion.
+function useTick(ms = 1100) {
+  const [t, setT] = useState(0);
+  useEffect(() => {
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) { setT(6); return; }
+    const id = setInterval(() => setT(n => n + 1), ms);
+    return () => clearInterval(id);
+  }, [ms]);
+  return t;
+}
+
+const Arrow = () => <span aria-hidden="true">→</span>;
+const Spark = ({ size = 20 }) => (
+  <span className="spark-tile" style={{ width: size, height: size }} aria-hidden="true">✦</span>
+);
+
+function Ring({ score, size = 60, r = 26, stroke = 6, delay = 0, fontSize = 18 }) {
+  const c = 2 * Math.PI * r;
+  const good = score >= 80;
+  const color = good ? '#10b981' : '#f59e0b';
+  const ink = good ? '#047857' : '#b45309';
+  return (
+    <div className="ring-box" style={{ width: size, height: size }}>
+      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} aria-hidden="true">
+        <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="#f3f1f8" strokeWidth={stroke} />
+        <circle className="ring" cx={size / 2} cy={size / 2} r={r} fill="none" stroke={color} strokeWidth={stroke} strokeLinecap="round"
+          style={{ strokeDasharray: c, strokeDashoffset: c, '--o': c * (1 - score / 100), animationDelay: `${delay}s` }} />
+      </svg>
+      <div className="num h" style={{ fontSize, color: ink }}>{score}</div>
+    </div>
+  );
+}
+
+function BrowserBar({ url, scan }) {
+  return (
+    <div className="browserbar">
+      <div className="lights" aria-hidden="true"><i /><i /><i /></div>
+      {url && <div className="urlbar">{url}</div>}
+      {scan && <div className="scanline" aria-hidden="true"><i /></div>}
+    </div>
+  );
+}
+
+/* ---------- demo content (illustrative example site) ---------- */
+
+const HERO_SCORES = [
+  { label: 'Performance', score: 63, note: '2 critical', bad: true },
+  { label: 'SEO', score: 78, note: '1 critical', bad: true },
+  { label: 'Security', score: 100, note: 'Excellent' },
+  { label: 'Accessibility', score: 82, note: '1 critical', bad: true },
+];
+
+const SCAN_ROWS = [['Performance', '12 checks'], ['Search visibility', '14 checks'], ['Accessibility', '13 checks'], ['Security', '8 checks']];
+
+const FIX_ROWS = [
+  ['Optimize the hero image', 'Est. savings 1,545 KiB', 'HIGH', 'high'],
+  ['Add alt text to 4 images', 'Accessibility · 10 min', 'HIGH', 'high'],
+  ['Write a meta description', 'SEO · 5 min', 'MEDIUM', 'med'],
+  ['Defer non-critical CSS', 'Performance · 30 min', 'MEDIUM', 'med'],
+];
+
+const SITES = [
+  { i: 'N', domain: 'northwindbikes.com', date: 'Nov 14', score: 81, status: 'Looking healthy', bars: [[63, '#f59e0b'], [78, '#f59e0b'], [100, '#10b981'], [82, '#10b981']] },
+  { i: 'S', domain: 'stillwater-studio.com', date: 'Oct 30', score: 69, status: 'Needs attention', bars: [[58, '#f59e0b'], [52, '#f59e0b'], [100, '#10b981'], [90, '#10b981']] },
+  { i: 'H', domain: 'harborlaw.co', date: 'Oct 28', score: 77, status: 'Needs attention', bars: [[34, '#ef4444'], [70, '#f59e0b'], [100, '#10b981'], [95, '#10b981']] },
+  { i: 'F', domain: 'fieldnotes.blog', date: 'Oct 27', score: 83, status: 'Looking healthy', bars: [[64, '#f59e0b'], [72, '#f59e0b'], [100, '#10b981'], [96, '#10b981']] },
+];
+
+const PLAN_ROWS = [
+  ['Fix accessibility barriers', 'Accessibility', '#ef4444', 'HIGH IMPACT', 'high'],
+  ['Reduce critical request chain depth', 'Performance', '#ef4444', 'HIGH IMPACT', 'high'],
+  ['Fix missing or weak SEO metadata', 'SEO', '#f59e0b', 'MEDIUM IMPACT', 'med'],
+  ['Improve Time to Interactive', 'Performance', '#f59e0b', 'MEDIUM IMPACT', 'med'],
+  ['Improve First Contentful Paint', 'Performance', '#f59e0b', 'LOW IMPACT', 'low'],
+];
+
+const CHECK_TABS = [
+  { id: 'chk-performance', label: 'Performance' },
+  { id: 'chk-seo', label: 'SEO' },
+  { id: 'chk-accessibility', label: 'Accessibility' },
+  { id: 'chk-security', label: 'Security' },
+  { id: 'chk-action', label: 'AI action plan' },
+];
+
+const SEC_ROWS = ['HTTPS connection', 'Strict-Transport-Security', 'Content-Security-Policy', 'HTTP → HTTPS redirect'];
+
+const AI_PLAN = [
+  ['Optimize the largest homepage image', 'Biggest single cause of the 8.7s load — compress and resize featured_Bike.jpg.', 'Start here'],
+  ['Label the newsletter form fields', 'Helps assistive technology identify what each field is asking for.', '≈ 10 min'],
+  ['Write a page description', "Make the page's purpose clear in search previews.", '≈ 5 min'],
+];
+
+const FAQS = [
+  ['Do I need to install anything?', 'No. Paste any public URL and Cernly scans it from the outside — no code or plugin required. You just need a free account, which includes 3 scans a month. The WordPress plugin is optional, for people who want findings inside their dashboard.'],
+  ['How is this different from PageSpeed Insights or Lighthouse?', 'Those tools give you scores and raw diagnostics. Cernly runs similar checks, then connects related findings, explains what is actually causing the problem in plain English, and gives you a prioritized plan — then checks your fixes on the next scan.'],
+  ['What does Cernly check?', '47 checks across performance, search visibility, accessibility and security — from Core Web Vitals and image weight to metadata, alt text, contrast and security headers.'],
+  ['Is the $4.99 report a subscription?', 'No. The full report is a one-time purchase covering a deep audit of up to 50 pages, with an AI-prioritized fix plan you can share.'],
+  ['Who is Cernly for?', 'Site owners, marketers and small teams who want to know what to fix without becoming performance or accessibility experts — and agencies who want a clear, shareable starting point for clients.'],
+];
+
+/* ---------- page ---------- */
+
 export default function Home() {
   const router = useRouter();
+  const t = useTick();
   const [urlInput, setUrlInput] = useState('');
   const [toast, setToast] = useState('');
   const [toastVisible, setToastVisible] = useState(false);
-  const [activeFeature, setActiveFeature] = useState('performance');
+  const [tab, setTab] = useState('overview');
+  const [activeCheck, setActiveCheck] = useState(CHECK_TABS[0].id);
+  const [openFaq, setOpenFaq] = useState(0);
   const toastTimerRef = useRef(null);
-  const featureSectionRef = useRef(null);
+  const checksRef = useRef(null);
   const scrollFrameRef = useRef(null);
 
   function notice(msg) {
@@ -694,7 +142,10 @@ export default function Home() {
 
   function handleFormSubmit(e) {
     e.preventDefault();
-    if (!urlInput) return;
+    if (!urlInput) {
+      document.getElementById('hero-url')?.focus();
+      return;
+    }
     try {
       const u = urlInput.startsWith('http') ? urlInput : 'https://' + urlInput;
       new URL(u);
@@ -704,9 +155,17 @@ export default function Home() {
     }
   }
 
+  function focusHero(e) {
+    e?.preventDefault();
+    const form = document.getElementById('hero-form');
+    form?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    form?.querySelector('input')?.focus({ preventScroll: true });
+  }
+
+  // Sticky "What Cernly checks" nav: highlight the panel crossing ~36% of the viewport.
   useEffect(() => {
-    const panels = document.querySelectorAll('.feature-panel');
-    const section = featureSectionRef.current;
+    const section = checksRef.current;
+    const panels = section ? section.querySelectorAll('.check-panel') : [];
     if (!section || panels.length === 0) return;
 
     function updateActive() {
@@ -719,14 +178,11 @@ export default function Home() {
         if (panel.getBoundingClientRect().top <= referenceY) current = panel.id;
         else break;
       }
-      setActiveFeature(current);
+      setActiveCheck(current);
     }
-
     function schedule() {
-      if (scrollFrameRef.current === null)
-        scrollFrameRef.current = requestAnimationFrame(updateActive);
+      if (scrollFrameRef.current === null) scrollFrameRef.current = requestAnimationFrame(updateActive);
     }
-
     window.addEventListener('scroll', schedule, { passive: true });
     window.addEventListener('resize', schedule, { passive: true });
     schedule();
@@ -737,40 +193,27 @@ export default function Home() {
     };
   }, []);
 
-  function scrollToFeature(id) {
-    setActiveFeature(id);
-    const el = document.getElementById(id);
-    if (el) el.scrollIntoView({
+  function scrollToCheck(id) {
+    setActiveCheck(id);
+    document.getElementById(id)?.scrollIntoView({
       behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth',
-      block: 'start'
+      block: 'start',
     });
   }
 
-  const featureTabs = [
-    { id: 'performance', label: 'Performance' },
-    { id: 'seo', label: 'SEO' },
-    { id: 'accessibility', label: 'Accessibility' },
-    { id: 'security', label: 'Security' },
-    { id: 'action', label: 'AI action plan' },
-  ];
+  // Animation phases derived from the shared ticker.
+  const scanStep = t % 7;
+  const fixStep = t % 7;
+  const fixedCount = FIX_ROWS.filter((_, i) => fixStep > i + 1).length;
+  const chatStep = t % 11;
+  const hotPlan = t % 3;
+  const checkIndex = Math.max(0, CHECK_TABS.findIndex(c => c.id === activeCheck));
 
   return (
-    <>
+    <div className="home">
       <style>{CSS}</style>
 
-      <svg aria-hidden="true" style={{position:'absolute',width:0,height:0,overflow:'hidden'}} xmlns="http://www.w3.org/2000/svg">
-        <symbol id="i-spark" viewBox="0 0 24 24"><path d="M12 2.5c1.4 5.1 4.4 8.1 9.5 9.5-5.1 1.4-8.1 4.4-9.5 9.5-1.4-5.1-4.4-8.1-9.5-9.5 5.1-1.4 8.1-4.4 9.5-9.5Z"/></symbol>
-        <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12 4.5 4.5L19 7"/></symbol>
-        <symbol id="i-link" viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7 .3l3-3a5 5 0 0 0-7-7l-1.7 1.7M14 11a5 5 0 0 0-7-.3l-3 3a5 5 0 0 0 7 7l1.7-1.7"/></symbol>
-        <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M4 12h16m-7-7 7 7-7 7"/></symbol>
-        <symbol id="i-gauge" viewBox="0 0 24 24"><path d="M5 18a9 9 0 1 1 14 0H5Z"/><path d="m12 13 4-5M12 18h.01"/></symbol>
-        <symbol id="i-search" viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 5 5"/></symbol>
-        <symbol id="i-list" viewBox="0 0 24 24"><path d="M9 6h12M9 12h12M9 18h12M3 6h.01M3 12h.01M3 18h.01"/></symbol>
-        <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></symbol>
-        <symbol id="i-wordpress" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" fill="#21759b"/><path fill="white" d="M3.9 12a8.1 8.1 0 0 0 4.8 7.4L4.8 8.5A8.1 8.1 0 0 0 3.9 12zm13.8-.4c0-1-.3-1.7-.7-2.3-.4-.6-.8-1.2-.8-1.9 0-.7.6-1.4 1.4-1.4h.1a8.1 8.1 0 0 0-12.3 1h.5c.8 0 2-.1 2-.1-.4 0-.4.6 0 .6h.9l1.2 3.5-1.7 5-2.8-8.5H8l-.5.1A8.1 8.1 0 0 0 12 20.1a8.1 8.1 0 0 0 5.7-7.3zm-4.9.9 1.4 4a8.1 8.1 0 0 1-5 .2l1.4-4 2.2-.2zm3.5-6a8.1 8.1 0 0 1 1 4 8.1 8.1 0 0 1-1.1 4l-1.6-4.6 1.7-3.4z" stroke="none"/></symbol>
-        <symbol id="i-alert" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v6m0 4h.01"/></symbol>
-      </svg>
-
+      {/* NAV */}
       <header className="topbar">
         <div className="wrap nav">
           <a aria-label="Cernly home" className="brand" href="#top">
@@ -778,322 +221,634 @@ export default function Home() {
             cernly<span>.ai</span>
           </a>
           <nav aria-label="Main navigation" className="navlinks">
-            <a href="#features">Features</a>
+            <a href="#product">Product</a>
             <a href="#how">How it works</a>
+            <a href="#checks">What we check</a>
             <a href="#pricing">Pricing</a>
+            <a href="#faq">FAQ</a>
           </nav>
           <div className="navright">
             <NavAuthButton />
-            <a className="btn btn-dark" href="#hero-form" onClick={e => { e.preventDefault(); document.getElementById('hero-form')?.querySelector('input')?.focus(); document.getElementById('hero-form')?.scrollIntoView({behavior:'smooth',block:'center'}); }}>Try it free <svg className="icon sm"><use href="#i-arrow"/></svg></a>
+            <a className="btn btn-dark" href="#hero-form" onClick={focusHero}>Try it free <Arrow /></a>
           </div>
         </div>
       </header>
 
       <main id="top">
-        <section className="hero">
-          <div className="wrap hero-grid">
+        {/* HERO */}
+        <section className="hero-outer">
+          <div className="band hero">
+            <div className="orb a" aria-hidden="true" />
+            <div className="orb b" aria-hidden="true" />
+            <div className="orb c" aria-hidden="true" />
+
             <div className="hero-copy">
-              <span className="eyebrow">Your AI website advisor</span>
-              <h1>See what&apos;s holding your website <span className="gradient-text">back.</span></h1>
-              <p>Cernly finds what&apos;s slowing your site down, hurting your visibility, or frustrating visitors—then shows you what to fix first.</p>
+              <div className="hero-badge"><b>NEW</b> Ask Cernly — chat with your website report</div>
+              <h1 className="h">See what&apos;s holding<br />your website back.</h1>
+              <p className="hero-sub">Cernly scans your site, explains what&apos;s slowing it down, hurting visibility, or frustrating visitors — then hands you a prioritized plan to fix it.</p>
               <form className="urlform" id="hero-form" onSubmit={handleFormSubmit}>
-                <svg className="icon"><use href="#i-link"/></svg>
-                <input
-                  aria-label="Website URL"
-                  placeholder="yourwebsite.com"
-                  required
-                  type="text"
-                  value={urlInput}
-                  onChange={e => setUrlInput(e.target.value)}
-                />
-                <button className="btn btn-gradient" type="submit">
-                  Analyze my site <svg className="icon sm"><use href="#i-arrow"/></svg>
-                </button>
+                <label htmlFor="hero-url" className="sr-only">Website address</label>
+                <div className="field">
+                  <svg className="icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9" /><path d="M3 12h18M12 3c3 3.5 3 14.5 0 18M12 3c-3 3.5-3 14.5 0 18" /></svg>
+                  <input id="hero-url" type="text" inputMode="url" autoComplete="url" placeholder="yourwebsite.com" value={urlInput} onChange={e => setUrlInput(e.target.value)} />
+                </div>
+                <button type="submit" className="btn btn-grad">Analyze my site <Arrow /></button>
               </form>
-            </div>
-            <div className="hero-visual">
-              <div className="glow"/>
-              <div className="window">
-                <div className="windowbar">
-                  <span className="dot"/><span className="dot"/><span className="dot"/>
-                  <span className="windowurl">cernly.ai / example audit</span>
-                </div>
-                <div className="dashboard">
-                  <div className="dash-head">
-                    <div><strong>example.com</strong><br/><small>Website health overview · Demo data</small></div>
-                    <span className="pill">AI analysis</span>
-                  </div>
-                  <div className="scores">
-                    <div className="score"><div className="ring" style={{"--n":88,"--c":"#24bc8b"}}><b>88</b></div><small>Performance</small></div>
-                    <div className="score"><div className="ring" style={{"--n":76,"--c":"#4d83f9"}}><b>76</b></div><small>SEO</small></div>
-                    <div className="score"><div className="ring" style={{"--n":92,"--c":"#23bc8c"}}><b>92</b></div><small>Security</small></div>
-                    <div className="score"><div className="ring" style={{"--n":68,"--c":"#ee7a84"}}><b>68</b></div><small>Accessibility</small></div>
-                  </div>
-                  <div className="summary">
-                    <strong><svg className="icon sm"><use href="#i-spark"/></svg> Cernly&apos;s take</strong>
-                    <p>Your site&apos;s foundation looks good. A few improvements to mobile loading and accessibility could make a meaningful difference. Start with these three fixes.</p>
-                  </div>
-                  <div className="issue-title"><b>Your top priorities</b><span>Ranked by potential impact</span></div>
-                  <div className="issue"><span className="num">01</span><span className="label">Improve image loading on mobile</span><span className="severity">High</span></div>
-                  <div className="issue"><span className="num">02</span><span className="label">Add missing accessible labels</span><span className="severity">High</span></div>
-                  <div className="issue"><span className="num">03</span><span className="label">Review page title structure</span><span className="severity low">Medium</span></div>
-                </div>
+              <div className="hero-ticks">
+                <span>✓ Free account · 3 scans a month</span><span>✓ 47 checks</span><span>✓ Nothing to install</span>
               </div>
             </div>
-          </div>
-        </section>
 
-        <section className="dark-band">
-          <div className="wrap value-grid">
-            <div>
-              <span className="eyebrow">Clarity over complexity</span>
-              <h2>Less noise.<br/>More <span style={{color:"#a992ff"}}>clarity.</span></h2>
-              <p>Website audits shouldn&apos;t leave you with more questions than answers. Cernly cuts through the technical noise to show you what matters, why it matters, and what to do next.</p>
-            </div>
-            <div className="value-items">
-              <div className="value-item"><svg className="icon lg"><use href="#i-gauge"/></svg><strong>See the full picture</strong><small>Performance, SEO, security, accessibility, and UX—all in one place.</small></div>
-              <div className="value-item"><svg className="icon lg"><use href="#i-spark"/></svg><strong>Get answers, not just scores</strong><small>AI connects the findings and explains what they mean for your website.</small></div>
-              <div className="value-item"><svg className="icon lg"><use href="#i-list"/></svg><strong>Know what to fix first</strong><small>A prioritized action plan helps you focus on the changes that matter.</small></div>
-              <div className="value-item"><svg className="icon lg"><use href="#i-clock"/></svg><strong>See what&apos;s improving</strong><small>Compare scans and track your progress over time with Pro.</small></div>
-            </div>
-          </div>
-        </section>
+            <div className="mock-wrap">
+              <div className="float-chip left hide-sm" aria-hidden="true">
+                <div className="trend-tile"><svg className="icon" viewBox="0 0 24 24"><path d="M3 17l6-6 4 4 8-8" /><path d="M15 7h6v6" /></svg></div>
+                <div>
+                  <div style={{ fontSize: 12, color: 'var(--muted)' }}>Largest Contentful Paint</div>
+                  <div className="h" style={{ fontSize: 17 }}>8.7s <span style={{ color: 'var(--muted)' }}>→</span> <span style={{ color: 'var(--green-ink)' }}>2.1s</span></div>
+                </div>
+              </div>
+              <div className="float-chip right hide-sm" aria-hidden="true">
+                <div className="take-label" style={{ color: 'var(--violet-200)', fontSize: 12 }}><Spark size={22} /> ASK CERNLY</div>
+                <div style={{ marginTop: 10, fontSize: 13, lineHeight: 1.5, color: '#e4e2f0' }}>“Start with the hero image. Compressing <b style={{ color: '#fff' }}>featured_Bike.jpg</b> alone saves ~480 KB on every visit.”</div>
+              </div>
 
-        <section className="section features" id="features" ref={featureSectionRef}>
-          <div className="wrap">
-            <div className="intro">
-              <span className="eyebrow">What Cernly checks</span>
-              <h2>Everything that matters.<br/><span style={{color:"#999eaa"}}>Nothing you don&apos;t need.</span></h2>
-              <p>Explore the signals behind a healthier website. Each finding comes with context—not just another red warning.</p>
-            </div>
-            <div className="feature-layout">
-              <nav aria-label="Audit feature navigation" className="feature-nav">
-                {featureTabs.map(tab => (
-                  <button
-                    key={tab.id}
-                    className={`feature-tab${activeFeature === tab.id ? ' active' : ''}`}
-                    aria-current={activeFeature === tab.id ? 'true' : 'false'}
-                    onClick={() => scrollToFeature(tab.id)}
-                  >{tab.label}</button>
-                ))}
-              </nav>
-              <div className="feature-stack">
-                <article className="feature-panel" id="performance">
-                  <span className="eyebrow">01 / Performance</span>
-                  <h3>Know what&apos;s slowing you down.</h3>
-                  <p>See how quickly your site loads, what slows it down, and which improvements are worth your time.</p>
-                  <div className="feature-art">
-                    <div className="art-window">
-                      <div className="art-heading">Page load performance <span>Illustrative metrics</span></div>
-                      <svg aria-label="Illustrative page performance trend" className="chart" preserveAspectRatio="none" role="img" viewBox="0 0 620 155">
-                        <defs>
-                          <linearGradient id="chartfill" x1="0" x2="0" y1="0" y2="1">
-                            <stop stopColor="#8056fb" stopOpacity=".19"/>
-                            <stop offset="1" stopColor="#8056fb" stopOpacity="0"/>
-                          </linearGradient>
-                        </defs>
-                        <path d="M0 125H620M0 85H620M0 45H620" stroke="#eef0f6" strokeDasharray="4 6"/>
-                        <path d="M0 118 C45 112 68 78 110 89S178 120 220 90 276 50 310 68 365 93 408 52 460 61 502 37 557 52 620 20 V155H0Z" fill="url(#chartfill)"/>
-                        <path d="M0 118 C45 112 68 78 110 89S178 120 220 90 276 50 310 68 365 93 408 52 460 61 502 37 557 52 620 20" fill="none" stroke="#7954f7" strokeLinecap="round" strokeWidth="3.5"/>
-                        <circle cx="620" cy="20" fill="#7954f7" r="6" stroke="white" strokeWidth="3"/>
-                      </svg>
-                      <div className="art-foot"><span><b>LCP</b> 2.4s</span><span><b>CLS</b> 0.02</span><span><b>Blocking time</b> 180ms</span></div>
-                    </div>
+              <div className="mock" role="img" aria-label="Example Cernly website report showing scores, Cernly's take, and an action plan">
+                <BrowserBar url="app.cernly.ai/report/northwindbikes.com" scan />
+                <div className="app">
+                  <div className="side hide-sm">
+                    <div className="ws"><span className="ws-icon">✦</span><div><div style={{ fontSize: 12, fontWeight: 700 }}>Personal workspace</div><div style={{ fontSize: 11, color: 'var(--muted)' }}>Free plan</div></div></div>
+                    <div className="side-label">WORKSPACE</div>
+                    <div className="side-item">Overview</div>
+                    <div className="side-item on">My websites</div>
+                    <div className="side-item">Scan history</div>
+                    <div className="side-item">Fix queue <small>7</small></div>
                   </div>
-                </article>
-
-                <article className="feature-panel" id="seo">
-                  <span className="eyebrow">02 / Search visibility</span>
-                  <h3>Get found by the right people.</h3>
-                  <p>Spot overlooked SEO fundamentals, from metadata and headings to indexability and structured content.</p>
-                  <div className="feature-art">
-                    <div className="art-window">
-                      <div className="art-heading">Search readiness <span>Example findings</span></div>
-                      <div className="audit-row"><svg className="icon"><use href="#i-check"/></svg><span>Page title is present</span><small>Passed</small></div>
-                      <div className="audit-row"><svg className="icon"><use href="#i-check"/></svg><span>Canonical URL is defined</span><small>Passed</small></div>
-                      <div className="audit-row warn"><svg className="icon"><use href="#i-alert"/></svg><span>Meta description could be improved</span><small>Review</small></div>
-                      <div className="audit-row bad"><svg className="icon"><use href="#i-alert"/></svg><span>Structured data is missing</span><small>Action needed</small></div>
-                      <div className="audit-row"><svg className="icon"><use href="#i-check"/></svg><span>Page is indexable</span><small>Passed</small></div>
-                    </div>
-                  </div>
-                </article>
-
-                <article className="feature-panel" id="accessibility">
-                  <span className="eyebrow">03 / Accessibility</span>
-                  <h3>Make your website easier for everyone.</h3>
-                  <p>Catch common barriers in images, forms, contrast, and navigation—and get practical suggestions to address them.</p>
-                  <div className="feature-art">
-                    <div className="art-window">
-                      <div className="art-heading">Accessibility review <span>Example findings</span></div>
-                      <div className="audit-row bad"><svg className="icon"><use href="#i-alert"/></svg><span>Buttons without accessible names</span><small>High impact</small></div>
-                      <div className="audit-row warn"><svg className="icon"><use href="#i-alert"/></svg><span>Low-contrast text on light backgrounds</span><small>Review</small></div>
-                      <div className="audit-row"><svg className="icon"><use href="#i-check"/></svg><span>Document language is specified</span><small>Passed</small></div>
-                      <div className="audit-row warn"><svg className="icon"><use href="#i-alert"/></svg><span>Some images need text alternatives</span><small>Review</small></div>
-                    </div>
-                  </div>
-                </article>
-
-                <article className="feature-panel" id="security">
-                  <span className="eyebrow">04 / Security</span>
-                  <h3>Spot risks before they become problems.</h3>
-                  <p>Check the public-facing security basics, including HTTPS configuration and response headers, without becoming a security expert.</p>
-                  <div className="feature-art">
-                    <div className="art-window">
-                      <div className="art-heading">Security essentials <span>Example findings</span></div>
-                      <div className="audit-row"><svg className="icon"><use href="#i-check"/></svg><span>HTTPS connection enabled</span><small>Passed</small></div>
-                      <div className="audit-row"><svg className="icon"><use href="#i-check"/></svg><span>HSTS header detected</span><small>Passed</small></div>
-                      <div className="audit-row warn"><svg className="icon"><use href="#i-alert"/></svg><span>Content Security Policy needs review</span><small>Review</small></div>
-                      <div className="audit-row"><svg className="icon"><use href="#i-check"/></svg><span>HTTPS redirect working</span><small>Passed</small></div>
-                    </div>
-                  </div>
-                </article>
-
-                <article className="feature-panel" id="action">
-                  <span className="eyebrow">05 / Your next steps</span>
-                  <h3>Know exactly what to fix next.</h3>
-                  <p>Cernly turns technical findings into a prioritized action plan, with clear explanations and practical steps to help you make improvements.</p>
-                  <div className="feature-art">
-                    <div className="art-window">
-                      <div className="art-heading">
-                        <span style={{display:'flex',alignItems:'center',gap:'7px',color:'#6f50dc',fontWeight:800}}>
-                          <svg className="icon sm"><use href="#i-spark"/></svg> Your suggested action plan
-                        </span>
-                        <span>Illustrative example</span>
+                  <div className="app-main">
+                    <div className="app-head">
+                      <div><div className="kicker">WEBSITE REPORT</div><div className="h" style={{ fontSize: 26, marginTop: 2 }}>northwindbikes.com</div></div>
+                      <div style={{ display: 'flex', gap: 8 }}>
+                        <span className="mini-btn" style={{ background: 'var(--grad)' }}>✦ Ask Cernly</span>
+                        <span className="mini-btn" style={{ background: 'var(--ink)' }}>↻ Re-scan</span>
                       </div>
-                      <div className="priority"><span className="n">1</span><div><b>Optimize the largest homepage image</b><p>Reduce download size to improve the first impression on slower connections.</p></div><em>Start here</em></div>
-                      <div className="priority"><span className="n">2</span><div><b>Label the newsletter form fields</b><p>Help assistive technology identify what each field is asking for.</p></div><em>Next</em></div>
-                      <div className="priority"><span className="n">3</span><div><b>Improve your page description</b><p>Make the page&apos;s purpose clearer in search previews.</p></div><em>Next</em></div>
+                    </div>
+                    <div className="score-grid">
+                      {HERO_SCORES.map((s, i) => (
+                        <div className="score-card" key={s.label}>
+                          <Ring score={s.score} delay={0.3 + i * 0.15} />
+                          <div><div style={{ fontSize: 13, fontWeight: 600 }}>{s.label}</div><div style={{ fontSize: 11, fontWeight: 600, color: s.bad ? '#c2410c' : 'var(--green-ink)' }}>{s.note}</div></div>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="two-col">
+                      <div className="card take">
+                        <div className="take-label"><Spark /> CERNLY&apos;S TAKE</div>
+                        <div className="h" style={{ fontSize: 19, lineHeight: 1.2 }}>Fast server, slow visual loading — LCP is 8.7s</div>
+                        <div style={{ fontSize: 13, lineHeight: 1.6, color: 'var(--body)' }}>Your server responds in 100 ms and the main thread is clear. The delay is what the browser has to download before the page looks complete.</div>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 4 }} aria-hidden="true">
+                          <span className="shimmer" style={{ width: '92%', height: 8 }} /><span className="shimmer" style={{ width: '74%', height: 8 }} />
+                        </div>
+                      </div>
+                      <div className="nextstep">
+                        <div className="glowball" aria-hidden="true" style={{ right: -60, top: -60, width: 200, height: 200, background: 'radial-gradient(circle, rgba(124,92,255,.45), transparent 70%)' }} />
+                        <div className="eyebrow light" style={{ fontSize: 11 }}>NEXT BEST STEP</div>
+                        <div className="h" style={{ fontSize: 19 }}>Optimize images</div>
+                        <div style={{ fontSize: 13, color: '#cfcde0', lineHeight: 1.55 }}>Resize and compress featured_Bike.jpg — 491 KB of its 617 KB is wasted.</div>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 6, gap: 10, flexWrap: 'wrap' }}>
+                          <span style={{ fontSize: 12, color: '#6ee7b7', fontWeight: 600 }}>↯ Est. savings 1,545 KiB</span>
+                          <span className="mini-btn" style={{ background: 'var(--grad)' }}>Guide me through this fix →</span>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="card" style={{ overflow: 'hidden' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', padding: '14px 18px', borderBottom: '1px solid var(--line)', fontSize: 13, fontWeight: 700 }}>Action plan <span style={{ fontWeight: 600, color: 'var(--muted)' }}>7 prioritized fixes</span></div>
+                      {PLAN_ROWS.slice(0, 3).map(([label, , dot, impact, cls], i) => (
+                        <div className="plan-row fadeUp" key={label} style={{ animationDelay: `${0.9 + i * 0.15}s` }}>
+                          <span className="dot" style={{ background: dot }} /><strong>{label}</strong><span className={`pill ${cls}`}>{impact}</span>
+                        </div>
+                      ))}
                     </div>
                   </div>
-                </article>
+                </div>
               </div>
             </div>
           </div>
         </section>
 
-        <section className="section pathways" id="start">
-          <div className="wrap pathway-grid">
-            <div className="pathway-intro">
-              <span className="eyebrow">Two ways to get started</span>
-              <h2>Scan any website.<br/>Go further with WordPress.</h2>
-              <p>Start with a URL—no installation required. Running WordPress? Connect your site for a more integrated experience.</p>
+        {/* LOOP */}
+        <section id="how" className="wrap section">
+          <div className="sec-head">
+            <div style={{ maxWidth: 640 }}>
+              <div className="eyebrow">More than a score</div>
+              <h2 className="h h2" style={{ marginBottom: 0 }}>Discover. Understand.<br /><span className="grad-text">Fix. Verify.</span></h2>
             </div>
-            <div className="path-card">
-              <div className="icon-tile"><svg className="icon lg"><use href="#i-search"/></svg></div>
-              <h3>Analyze any URL</h3>
-              <p>Paste any public URL and get a free snapshot—scores and top findings, no account needed. Upgrade for a full deep audit.</p>
-              <ul className="ticks">
-                <li><svg className="icon"><use href="#i-check"/></svg>Free single-URL check</li>
-                <li><svg className="icon"><use href="#i-check"/></svg>Performance, SEO, Security &amp; Accessibility</li>
-                <li><svg className="icon"><use href="#i-check"/></svg>Full audit up to 50 pages — $4.99</li>
-              </ul>
-              <a className="btn btn-gradient" href="#hero-form" onClick={e => { e.preventDefault(); document.getElementById('hero-form')?.querySelector('input')?.focus(); document.getElementById('hero-form')?.scrollIntoView({behavior:'smooth',block:'center'}); }}>Analyze a URL <svg className="icon sm"><use href="#i-arrow"/></svg></a>
+            <p className="lead" style={{ maxWidth: 400 }}>Audit tools stop at a number. Cernly keeps going — explaining what the number means, what to do about it, and whether your fix actually worked.</p>
+          </div>
+
+          <div className="bento">
+            <div className="tile soft">
+              <div><div className="tile-num">01 · DISCOVER</div><h3 className="h">Paste a URL. That&apos;s the setup.</h3><p>Nothing to install. Cernly runs every check in parallel.</p></div>
+              <div className="panel discover">
+                <div className="radar-box" aria-hidden="true">
+                  <div className="radar-ring" />
+                  <div className="radar-ring" style={{ borderColor: 'var(--blue)', animationDelay: '1.2s' }} />
+                  <div className="radar-core"><svg className="icon" style={{ width: 36, height: 36 }} viewBox="0 0 24 24"><circle cx="11" cy="11" r="7" /><path d="M21 21l-4.5-4.5" /></svg></div>
+                </div>
+                <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 10, minWidth: 0 }}>
+                  <div className="typed-url mono" aria-hidden="true"><span className="type">northwindbikes.com</span><span className="caret">|</span></div>
+                  {SCAN_ROWS.map(([label, meta], i) => (
+                    <div className="scan-row" key={label}>
+                      {scanStep > i + 1 ? <span className="done-dot" aria-hidden="true">✓</span> : <span className="spinner" aria-hidden="true" />}
+                      <span>{label}</span><small>{meta}</small>
+                    </div>
+                  ))}
+                </div>
+              </div>
             </div>
-            <div className="path-card">
-              <div className="icon-tile wp"><img src="/wordpress-logo.png" alt="WordPress" style={{width:'48px',height:'48px',objectFit:'contain'}}/></div>
-              <h3>Connect your WordPress site</h3>
-              <p>Bring website insights closer to where you manage your content, with the Cernly WordPress integration.</p>
-              <ul className="ticks">
-                <li><svg className="icon"><use href="#i-check"/></svg>Built for WordPress workflows</li>
-                <li><svg className="icon"><use href="#i-check"/></svg>Review issues alongside your site</li>
-                <li><svg className="icon"><use href="#i-check"/></svg>Room to grow into monitoring</li>
-              </ul>
-              <button className="btn btn-light" type="button" onClick={() => notice('WordPress plugin availability and setup will be linked here.')}>
-                Explore WordPress plugin <svg className="icon sm"><use href="#i-arrow"/></svg>
-              </button>
+
+            <div className="tile dark">
+              <div className="glowball glow" aria-hidden="true" style={{ right: -120, bottom: -120, width: 380, height: 380, background: 'radial-gradient(circle, rgba(124,92,255,.5), transparent 65%)' }} />
+              <div style={{ position: 'relative' }}><div className="tile-num">02 · UNDERSTAND</div><h3 className="h">Answers, not jargon.</h3><p>Cernly connects related findings into one plain-English explanation of what&apos;s really going on.</p></div>
+              <div style={{ position: 'relative', flex: 1, display: 'flex', flexDirection: 'column', gap: 12 }}>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                  {['LCP 8.7s', 'TTFB 100ms', 'TBT 0ms', 'unused-css', 'chain depth 6'].map(m => <span className="metric mono" key={m}>{m}</span>)}
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'center' }} aria-hidden="true"><svg width="24" height="34" viewBox="0 0 24 34" fill="none" stroke="#7c5cff" strokeWidth="2"><path d="M12 2v28M5 23l7 7 7-7" /></svg></div>
+                <div className="glass">
+                  <div className="take-label" style={{ color: 'var(--violet-200)' }}><Spark /> CERNLY&apos;S TAKE <span style={{ fontWeight: 500, letterSpacing: 0, color: '#a7a4c0' }}>· based on this scan</span></div>
+                  <div className="h" style={{ marginTop: 10, fontSize: 20, lineHeight: 1.25 }}>Your server is fast. Your images aren&apos;t.</div>
+                  <div style={{ marginTop: 8, fontSize: 14, lineHeight: 1.6, color: '#cfcde0' }}>Every slow metric points to the same cause: the browser downloads too much before the page looks complete. Fix delivery first; SEO and accessibility are real but secondary.</div>
+                </div>
+              </div>
+            </div>
+
+            <div className="tile soft">
+              <div><div className="tile-num">03 · FIX</div><h3 className="h">A plan, ranked by impact.</h3><p>Step-by-step guidance for each fix, in the order that moves the needle most.</p></div>
+              <div className="panel" style={{ padding: '8px 0' }}>
+                {FIX_ROWS.map(([label, sub, impact, cls], i) => {
+                  const done = fixStep > i + 1;
+                  return (
+                    <div className="fix-row" key={label}>
+                      {done ? <span className="fix-box done" aria-hidden="true">✓</span> : <span className="fix-box open" aria-hidden="true">{i + 1}</span>}
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: 14, fontWeight: 600, color: done ? 'var(--muted)' : 'var(--ink)', textDecoration: done ? 'line-through' : 'none' }}>{label}</div>
+                        <div style={{ fontSize: 12, color: 'var(--muted)' }}>{sub}</div>
+                      </div>
+                      <span className={`pill ${cls}`}>{impact}</span>
+                    </div>
+                  );
+                })}
+                <div style={{ padding: '14px 20px 8px', display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <div className="progress"><i style={{ width: `${fixedCount * 25}%` }} /></div>
+                  <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--violet-800)' }}>{fixedCount} of 4 fixed</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="tile tint">
+              <div><div className="tile-num">04 · VERIFY</div><h3 className="h">Re-scan. See it improve.</h3><p>Cernly compares scans, confirms what&apos;s resolved, and flags anything that slipped.</p></div>
+              <div className="panel" style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 14 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
+                  <div><div style={{ fontSize: 12, color: 'var(--muted)', fontWeight: 600 }}>Performance score</div><div className="h" style={{ fontSize: 34 }}>63 <span style={{ color: 'var(--muted)', fontSize: 22 }}>→</span> <span style={{ color: 'var(--green-ink)' }}>91</span></div></div>
+                  <span className="chip green">+28 over 4 scans</span>
+                </div>
+                <svg viewBox="0 0 400 130" width="100%" height="130" role="img" aria-label="Line chart: performance score rising from 63 to 91 across four scans" preserveAspectRatio="none">
+                  <defs><linearGradient id="vf" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#7c5cff" stopOpacity=".25" /><stop offset="1" stopColor="#7c5cff" stopOpacity="0" /></linearGradient></defs>
+                  <path d="M0 32H400M0 72H400M0 112H400" stroke="#f1eff7" strokeWidth="1" />
+                  <path d="M10 104 C 80 98, 100 76, 140 72 S 230 50, 270 40 S 360 18, 390 16 L390 130 L10 130 Z" fill="url(#vf)" />
+                  <path className="draw" pathLength="1" d="M10 104 C 80 98, 100 76, 140 72 S 230 50, 270 40 S 360 18, 390 16" fill="none" stroke="#6a4cff" strokeWidth="3" strokeLinecap="round" />
+                  {[[10, 104], [140, 72], [270, 40]].map(([x, y]) => <circle key={x} cx={x} cy={y} r="5" fill="#fff" stroke="#6a4cff" strokeWidth="3" />)}
+                  <circle cx="390" cy="16" r="5" fill="#6a4cff" />
+                </svg>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                  <span className="chip green">✓ 5 findings resolved</span><span className="chip amber">! 1 regression</span><span className="chip violet">2 still open</span>
+                </div>
+              </div>
             </div>
           </div>
         </section>
 
-        <section className="section" id="how">
-          <div className="wrap">
-            <div className="intro">
-              <span className="eyebrow">Simple by design</span>
-              <h2>From question to action.<br/>Without the guesswork.</h2>
+        {/* PRODUCT SHOWCASE */}
+        <section id="product" style={{ padding: '100px 16px 40px' }}>
+          <div className="band showcase">
+            <div className="glowball glow" aria-hidden="true" style={{ left: '50%', top: -260, width: 900, height: 520, marginLeft: -450, background: 'radial-gradient(ellipse, rgba(106,76,255,.55), transparent 65%)' }} />
+            <div style={{ position: 'relative', maxWidth: 760, margin: '0 auto', textAlign: 'center' }}>
+              <div className="eyebrow light">Inside Cernly</div>
+              <h2 className="h h2" style={{ color: '#fff' }}>One workspace for every site you care about.</h2>
+              <p className="lead" style={{ color: '#cfcde0' }}>Track all your sites, dig into any report, and work through fixes — with Cernly pointing to the biggest opportunity at every step.</p>
             </div>
-            <div className="how-grid">
-              <div className="how-card"><span className="number">01</span><h3>Paste your URL</h3><p>No account, no setup. Just a URL. Works on any publicly accessible site.</p></div>
-              <div className="how-card"><span className="number">02</span><h3>We run 47 checks</h3><p>Speed, SEO, security, and accessibility checks run in parallel — done in under 60 seconds.</p></div>
-              <div className="how-card"><span className="number">03</span><h3>AI writes your plan</h3><p>Claude analyzes your results and writes a prioritized fix list in plain language.</p></div>
-              <div className="how-card"><span className="number">04</span><h3>Fix it, re-check</h3><p>Make changes and run another scan. Track progress over time with a Pro account.</p></div>
+            <div className="tablist" role="tablist" aria-label="Product screens">
+              {[['overview', 'Workspace overview'], ['report', 'Website report'], ['plan', 'Action plan']].map(([id, label]) => (
+                <button key={id} type="button" role="tab" id={`tab-${id}`} aria-controls="showcase-panel" aria-selected={tab === id} onClick={() => setTab(id)}>{label}</button>
+              ))}
+            </div>
+            <div className="screen">
+              <BrowserBar />
+              <div className="screen-scroll">
+                <div className="screen-body" id="showcase-panel" role="tabpanel" aria-labelledby={`tab-${tab}`}>
+                  {tab === 'overview' && <OverviewScreen />}
+                  {tab === 'report' && <ReportScreen />}
+                  {tab === 'plan' && <PlanScreen />}
+                </div>
+              </div>
             </div>
           </div>
         </section>
 
-        <section className="section pricing" id="pricing">
-          <div className="wrap">
-            <div className="intro">
-              <span className="eyebrow">Straightforward pricing</span>
-              <h2>Start free. Go deeper when you&apos;re ready.</h2>
-              <p>Keep the barrier to getting useful answers low.</p>
-            </div>
-            <div className="price-grid">
-              <div className="plan">
-                <span className="tag">Free</span>
-                <div className="price">$0</div>
-                <p>See where your site stands.</p>
-                <ul>
-                  <li><svg className="icon"><use href="#i-check"/></svg>Core website scores</li>
-                  <li><svg className="icon"><use href="#i-check"/></svg>Top findings preview</li>
-                  <li><svg className="icon"><use href="#i-check"/></svg>No account to start</li>
-                </ul>
-                <a className="btn btn-light" href="#top">Start free <svg className="icon sm"><use href="#i-arrow"/></svg></a>
-              </div>
-              <div className="plan featured">
-                <span className="tag">Full Report</span>
-                <div className="price">$4.99</div>
-                <p>Know what to fix and why.</p>
-                <ul>
-                  <li><svg className="icon"><use href="#i-check"/></svg>Deep audit up to 50 pages</li>
-                  <li><svg className="icon"><use href="#i-check"/></svg>UX &amp; conversion analysis</li>
-                  <li><svg className="icon"><use href="#i-check"/></svg>AI-prioritized fix plan</li>
-                  <li><svg className="icon"><use href="#i-check"/></svg>Shareable report</li>
-                </ul>
-                <a className="btn btn-gradient" href="#top">Unlock full report <svg className="icon sm"><use href="#i-arrow"/></svg></a>
-              </div>
-              <div className="plan">
-                <span className="tag">Pro</span>
-                <div className="price">Pro <small>coming soon</small></div>
-                <p>Keep getting better.</p>
-                <ul>
-                  <li><svg className="icon"><use href="#i-check"/></svg>Repeat audits</li>
-                  <li><svg className="icon"><use href="#i-check"/></svg>History and trends</li>
-                  <li><svg className="icon"><use href="#i-check"/></svg>WordPress integration</li>
-                </ul>
-                <button className="btn btn-light" type="button" onClick={() => notice('Pro plan details are still being finalized.')}>
-                  Explore Pro <svg className="icon sm"><use href="#i-arrow"/></svg>
+        {/* WHAT CERNLY CHECKS */}
+        <section id="checks" className="wrap section" style={{ paddingTop: 100 }} ref={checksRef}>
+          <div style={{ maxWidth: 680, marginBottom: 64 }}>
+            <div className="eyebrow">◆ What Cernly checks</div>
+            <h2 className="h h2">Everything that matters.<br /><span style={{ color: 'var(--faint)' }}>Nothing you don&apos;t need.</span></h2>
+            <p className="lead">Explore the signals behind a healthier website. Every finding comes with context — why it matters and what to do — not just another red warning.</p>
+          </div>
+          <div className="checks-layout">
+            <nav aria-label="Check categories" className="checks-nav hide-sm">
+              {CHECK_TABS.map((c, i) => (
+                <button key={c.id} type="button" aria-current={activeCheck === c.id} onClick={() => scrollToCheck(c.id)}>
+                  <small>0{i + 1}</small>{c.label}
                 </button>
+              ))}
+              <div className="checks-progress" aria-hidden="true"><i style={{ width: `${(checkIndex + 1) * 20}%` }} /></div>
+            </nav>
+
+            <div className="checks-panels">
+              <div className="check-panel" id="chk-performance">
+                <div className="check-head"><span className="cat-icon" style={{ background: 'var(--amber-50)', color: '#c2410c' }}><svg className="icon" viewBox="0 0 24 24"><path d="M13 2L4 14h7l-1 8 9-12h-7z" /></svg></span><span className="eyebrow">01 / Performance</span></div>
+                <h3 className="h">Know what&apos;s slowing you down.</h3>
+                <p>See how quickly your pages load, what slows them down, and which improvements are worth your time.</p>
+                <div className="frame">
+                  <div className="frame-card" role="img" aria-label="Request waterfall: the hero image is the slowest download">
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14, fontWeight: 700 }}>Request waterfall <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--muted)' }}>northwindbikes.com</span></div>
+                    {[['document', 0, 14, '#10b981'], ['styles.css', 12, 30, '#7c5cff'], ['fonts.woff2', 16, 22, '#7c5cff'], ['app.js', 18, 34, '#4f6bff'], ['featured_Bike.jpg', 26, 100, '#f59e0b']].map(([f, pad, w, c], i) => (
+                      <div className={`wf-row${i === 4 ? ' hot' : ''}`} key={f}><span>{f}</span><div style={{ paddingLeft: `${pad}%` }}><i style={{ width: `${w}%`, background: c, animationDelay: `${i * 0.12}s` }} /></div></div>
+                    ))}
+                    <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 6 }}>
+                      <span className="chip amber">LCP 8.7s</span><span className="chip plain">FCP 3.6s</span><span className="chip green">TBT 0ms</span><span className="chip green">TTFB 100ms</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="check-panel" id="chk-seo">
+                <div className="check-head"><span className="cat-icon" style={{ background: '#eef2ff', color: '#4338ca' }}><svg className="icon" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7" /><path d="M21 21l-4.5-4.5" /></svg></span><span className="eyebrow">02 / Search visibility</span></div>
+                <h3 className="h">Get found by the right people.</h3>
+                <p>Spot overlooked fundamentals — metadata, headings, indexability and structured data.</p>
+                <div className="frame">
+                  <div className="frame-card">
+                    <div style={{ fontSize: 14, fontWeight: 700 }}>How you appear in search</div>
+                    <div className="serp">
+                      <div style={{ fontSize: 12, color: 'var(--green-ink)' }}>northwindbikes.com › bikes</div>
+                      <div style={{ fontSize: 18, color: '#1a0dab', fontWeight: 500, marginTop: 3 }}>Northwind Bikes | Road &amp; Gravel Bikes</div>
+                      <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 6 }} aria-hidden="true"><span className="shimmer" style={{ width: '86%' }} /><span className="shimmer" style={{ width: '60%' }} /></div>
+                      <div style={{ marginTop: 8, fontSize: 12, fontWeight: 600, color: 'var(--amber-ink)' }}>Meta description missing — Google is guessing</div>
+                    </div>
+                    <div className="audit first"><span>✓ Page title is present</span><b className="pass">Passed</b></div>
+                    <div className="audit"><span>✓ Canonical URL is defined</span><b className="pass">Passed</b></div>
+                    <div className="audit"><span>✓ Page is indexable</span><b className="pass">Passed</b></div>
+                    <div className="audit"><span>○ Structured data is missing</span><b className="warn">Action needed</b></div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="check-panel" id="chk-accessibility">
+                <div className="check-head"><span className="cat-icon" style={{ background: 'var(--green-50)', color: 'var(--green-ink)' }}><svg className="icon" viewBox="0 0 24 24"><circle cx="12" cy="4.5" r="1.8" /><path d="M5 8l7 1.5L19 8M12 9.5V15m0 0l-3.5 6M12 15l3.5 6" /></svg></span><span className="eyebrow">03 / Accessibility</span></div>
+                <h3 className="h">Make your website easier for everyone.</h3>
+                <p>Catch barriers in images, forms, contrast and navigation — with practical fixes you can make today.</p>
+                <div className="frame">
+                  <div className="frame-card" style={{ gap: 18 }}>
+                    <div style={{ display: 'flex', gap: 20, alignItems: 'center', flexWrap: 'wrap' }}>
+                      <div className="img-flag" aria-hidden="true">
+                        <svg width="180" height="130" viewBox="0 0 104 84"><circle cx="30" cy="58" r="14" fill="none" stroke="#3730a3" strokeWidth="3" /><circle cx="74" cy="58" r="14" fill="none" stroke="#3730a3" strokeWidth="3" /><path d="M30 58l14-22h22l8 22M44 36l-4-8h-6M52 58l14-22" fill="none" stroke="#3730a3" strokeWidth="3" /></svg>
+                        <b>no alt text</b>
+                      </div>
+                      <div className="code mono" aria-hidden="true">&lt;img src=&quot;bike.jpg&quot;<br />&nbsp;&nbsp;alt=&quot;<span className="type" style={{ color: 'var(--green-ink)', animationDuration: '5s' }}>Red gravel bike</span><span className="caret">|</span>&quot;&gt;</div>
+                    </div>
+                    <div className="audit first"><span>○ 4 images need text alternatives</span><b className="bad">High impact</b></div>
+                    <div className="audit"><span>○ Low-contrast text on light backgrounds</span><b className="warn">Review</b></div>
+                    <div className="audit"><span>✓ Document language is specified</span><b className="pass">Passed</b></div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="check-panel" id="chk-security">
+                <div className="check-head"><span className="cat-icon" style={{ background: 'var(--violet-50)', color: 'var(--violet-800)' }}><svg className="icon" viewBox="0 0 24 24"><path d="M12 3l8 3v6c0 4.5-3.4 8.3-8 9-4.6-.7-8-4.5-8-9V6z" /><path d="M8.5 12l2.5 2.5 4.5-5" /></svg></span><span className="eyebrow">04 / Security</span></div>
+                <h3 className="h">Spot risks before they become problems.</h3>
+                <p>Check public-facing basics — HTTPS and response headers — without becoming a security expert.</p>
+                <div className="frame">
+                  <div className="frame-card" style={{ flexDirection: 'row', gap: 28, alignItems: 'center', flexWrap: 'wrap' }}>
+                    <div className="sec-badge" aria-hidden="true">
+                      <div className="radar-ring" />
+                      <div><span className="h" style={{ fontSize: 30 }}>100</span><span style={{ fontSize: 11, fontWeight: 600 }}>Excellent</span></div>
+                    </div>
+                    <div style={{ flex: 1, minWidth: 240, display: 'flex', flexDirection: 'column', gap: 12 }}>
+                      {SEC_ROWS.map((label, i) => (
+                        <div className="sec-row" key={label}><span className="done-dot" style={{ animationDelay: `${0.1 + i * 0.2}s` }} aria-hidden="true">✓</span><span className="mono">{label}</span><b style={{ fontSize: 13, color: 'var(--green-ink)' }}>Passed</b></div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="check-panel" id="chk-action">
+                <div className="check-head"><span className="cat-icon" style={{ background: 'var(--grad)', color: '#fff' }}>✦</span><span className="eyebrow">05 / Your next steps</span></div>
+                <h3 className="h">Know exactly what to fix next.</h3>
+                <p>Cernly turns every finding above into one prioritized plan, with clear explanations and practical steps.</p>
+                <div className="frame dark">
+                  <div className="glowball glow" aria-hidden="true" style={{ right: -120, top: -120, width: 380, height: 380, background: 'radial-gradient(circle, rgba(124,92,255,.5), transparent 65%)' }} />
+                  <div className="glass" style={{ position: 'relative', display: 'flex', flexDirection: 'column', gap: 12, color: '#fff', padding: 26 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}><span className="eyebrow light">✦ Your suggested action plan</span><span style={{ fontSize: 12, color: '#a7a4c0' }}>Ranked by impact and effort</span></div>
+                    {AI_PLAN.map(([title, why, tag], i) => (
+                      <div className={`ai-row${hotPlan === i ? ' hot' : ''}`} key={title}>
+                        <span className="n">{i + 1}</span>
+                        <div style={{ flex: 1, minWidth: 0 }}><div style={{ fontSize: 15, fontWeight: 700 }}>{title}</div><div style={{ fontSize: 13, color: '#cfcde0', marginTop: 3, lineHeight: 1.5 }}>{why}</div></div>
+                        <span className={`tag${i === 0 ? ' first' : ''}`}>{tag}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
               </div>
             </div>
           </div>
         </section>
 
-        <section className="closing">
-          <div className="wrap">
-            <span className="eyebrow">Your next step starts here</span>
-            <h2>A better website starts with <span className="gradient-text">knowing what to fix.</span></h2>
-            <p>Stop guessing what&apos;s holding your website back. Get a clear picture of what&apos;s wrong, what matters most, and where to start.</p>
-            <a className="btn btn-gradient" href="#top">Analyze my website <svg className="icon sm"><use href="#i-arrow"/></svg></a>
+        {/* ASK CERNLY */}
+        <section className="wrap section">
+          <div className="ask-grid">
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+              <div className="eyebrow">Ask Cernly</div>
+              <h2 className="h h2" style={{ margin: 0 }}>Got a question about your report? <span className="grad-text">Just ask.</span></h2>
+              <p className="lead">Cernly knows every finding on your site. Ask what to fix first, how long it&apos;ll take, or how to make a specific change — and get an answer grounded in your actual scan.</p>
+              <div className="ticks-list">
+                <div><span className="tick">✓</span>Answers reference your real files, metrics and pages</div>
+                <div><span className="tick">✓</span>Step-by-step guidance for owners, CMS admins and developers</div>
+                <div><span className="tick">✓</span>Tied to the specific finding you&apos;re looking at</div>
+              </div>
+            </div>
+            <div style={{ position: 'relative' }}>
+              <div aria-hidden="true" style={{ position: 'absolute', inset: -30, borderRadius: 40, background: 'radial-gradient(circle at 30% 30%, #e9e3ff, transparent 60%), radial-gradient(circle at 80% 80%, #dfe6ff, transparent 60%)' }} />
+              <div className="chat" role="img" aria-label="Example Ask Cernly conversation about what to fix first">
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '16px 20px', borderBottom: '1px solid var(--line)' }}>
+                  <Spark size={30} /><div><div style={{ fontSize: 14, fontWeight: 700 }}>Ask Cernly</div><div style={{ fontSize: 11, color: 'var(--muted)' }}>northwindbikes.com · latest scan</div></div>
+                </div>
+                <div className="chat-body">
+                  {chatStep >= 1 && <div className="bubble me">What should I prioritize first?</div>}
+                  {(chatStep === 2 || chatStep === 3) && <div className="bubble ai typing"><i /><i /><i /></div>}
+                  {chatStep >= 4 && (
+                    <div className="bubble ai">Start with <b>image delivery</b>. Your server is fast, so the 8.7s LCP is almost entirely download weight — and <b>featured_Bike.jpg</b> is 80% wasted bytes.
+                      <div style={{ marginTop: 10, display: 'flex', gap: 8, flexWrap: 'wrap' }}><span className="chip green" style={{ padding: '4px 8px' }}>≈ 20 min</span><span className="chip violet" style={{ padding: '4px 8px', background: '#fff' }}>Biggest score gain</span></div>
+                    </div>
+                  )}
+                  {chatStep >= 5 && <div className="bubble me">How do I do that in WordPress?</div>}
+                  {chatStep >= 7 && <div className="bubble ai">Open <b>Media › featured_Bike.jpg</b>, replace it with a 1600px WebP, then re-scan. I&apos;ll confirm the fix and update your plan.</div>}
+                </div>
+                <div style={{ padding: '0 20px 20px' }}>
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}><span className="suggest">How long will these fixes take?</span><span className="suggest">Explain LCP simply</span></div>
+                  <div className="ask-input"><span style={{ flex: 1, fontSize: 14, color: 'var(--muted)' }}>Ask about this report…</span><span className="send"><svg className="icon" style={{ width: 16, height: 16 }} viewBox="0 0 24 24"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4z" /></svg></span></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* TWO WAYS */}
+        <section id="wordpress" style={{ padding: '100px 16px 40px' }}>
+          <div className="band paths">
+            <div className="paths-grid">
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 18, justifyContent: 'center' }}>
+                <div className="eyebrow">Two ways to start</div>
+                <h2 className="h" style={{ margin: 0, fontSize: 'clamp(32px, 3.8vw, 48px)', lineHeight: 1.05 }}>Scan any website. Go further with WordPress.</h2>
+                <p className="lead" style={{ fontSize: 16 }}>Start with a URL — nothing to install. Running WordPress? Bring Cernly into your dashboard and fix issues where you manage content.</p>
+              </div>
+              <div className="path-card">
+                <span className="path-icon" style={{ background: 'var(--grad)', color: '#fff' }}><svg className="icon" style={{ width: 22, height: 22 }} viewBox="0 0 24 24"><circle cx="11" cy="11" r="7" /><path d="M21 21l-4.5-4.5" /></svg></span>
+                <h3 className="h">Analyze any URL</h3>
+                <p>Paste any public URL for scores, top findings and Cernly&apos;s take.</p>
+                <ul className="feat-list"><li>✓ Free account · 3 scans a month</li><li>✓ Performance, SEO, Security &amp; Accessibility</li><li>✓ Full audit up to 50 pages — $4.99</li></ul>
+                <a className="btn btn-grad block" href="#hero-form" onClick={focusHero}>Analyze a URL <Arrow /></a>
+              </div>
+              <div className="path-card">
+                <span className="path-icon" style={{ background: '#f6f7f7' }}><img src="/wordpress-logo.png" alt="" width={34} height={34} style={{ objectFit: 'contain' }} /></span>
+                <h3 className="h">Connect your WordPress site</h3>
+                <p>See findings right next to the content they affect, with the Cernly WordPress plugin.</p>
+                <ul className="feat-list"><li>✓ Built for WordPress workflows</li><li>✓ Review issues alongside your site</li><li>✓ Room to grow into monitoring</li></ul>
+                <button className="btn btn-outline block" type="button" onClick={() => notice('WordPress plugin availability and setup will be linked here.')}>Explore the plugin <Arrow /></button>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* PRICING */}
+        <section id="pricing" className="wrap section" style={{ paddingTop: 100 }}>
+          <div style={{ textAlign: 'center', maxWidth: 680, margin: '0 auto 48px' }}>
+            <div className="eyebrow">Straightforward pricing</div>
+            <h2 className="h h2">Start free. Go deeper when you&apos;re ready.</h2>
+            <p className="lead">No subscription required to get real answers.</p>
+          </div>
+          <div className="price-grid">
+            <div className="price-card">
+              <div className="tier">FREE</div>
+              <div className="price h">$0</div>
+              <div style={{ fontSize: 15, color: 'var(--body)' }}>See where your site stands.</div>
+              <hr />
+              <ul className="feat-list"><li>✓ Core website scores</li><li>✓ Top findings preview</li><li>✓ 3 scans a month</li></ul>
+              <a className="btn btn-outline block" href="#hero-form" onClick={focusHero}>Start free <Arrow /></a>
+            </div>
+            <div className="price-card feature">
+              <div className="glowball glow" aria-hidden="true" style={{ right: -100, top: -100, width: 300, height: 300, background: 'radial-gradient(circle, rgba(124,92,255,.6), transparent 65%)' }} />
+              <div className="tier" style={{ position: 'relative' }}>FULL REPORT <span className="badge" style={{ background: 'var(--grad)', color: '#fff' }}>MOST POPULAR</span></div>
+              <div className="price h" style={{ position: 'relative' }}>$4.99 <small>one-time</small></div>
+              <div style={{ position: 'relative', fontSize: 15, color: '#cfcde0' }}>Know exactly what to fix and why.</div>
+              <hr />
+              <ul className="feat-list" style={{ position: 'relative', color: '#fff' }}><li>✓ Deep audit up to 50 pages</li><li>✓ UX &amp; conversion analysis</li><li>✓ AI-prioritized fix plan</li><li>✓ Shareable report</li></ul>
+              <a className="btn btn-grad block" style={{ position: 'relative' }} href="#hero-form" onClick={focusHero}>Unlock full report <Arrow /></a>
+            </div>
+            <div className="price-card">
+              <div className="tier">PRO <span className="badge" style={{ background: 'var(--violet-50)', color: 'var(--violet-800)' }}>COMING SOON</span></div>
+              <div className="price h">Pro</div>
+              <div style={{ fontSize: 15, color: 'var(--body)' }}>Keep getting better, scan after scan.</div>
+              <hr />
+              <ul className="feat-list"><li>✓ Repeat audits &amp; progress tracking</li><li>✓ History and trends</li><li>✓ WordPress integration</li></ul>
+              <button className="btn btn-outline block" type="button" onClick={() => notice('Pro plan details are still being finalized.')}>Explore Pro <Arrow /></button>
+            </div>
+          </div>
+        </section>
+
+        {/* FAQ */}
+        <section id="faq" className="wrap section" style={{ paddingTop: 100 }}>
+          <div className="faq-grid">
+            <div>
+              <div className="eyebrow">FAQ</div>
+              <h2 className="h" style={{ margin: '12px 0 14px', fontSize: 'clamp(32px, 3.8vw, 48px)', lineHeight: 1.05 }}>Questions, answered.</h2>
+              <p className="lead" style={{ fontSize: 16 }}>Something else on your mind? <a href="mailto:hello@cernly.ai" style={{ color: 'var(--violet-700)', fontWeight: 600 }}>Get in touch</a>.</p>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              {FAQS.map(([q, a], i) => {
+                const open = openFaq === i;
+                return (
+                  <div className={`faq-item${open ? ' open' : ''}`} key={q}>
+                    <button type="button" aria-expanded={open} aria-controls={`faq-${i}`} onClick={() => setOpenFaq(open ? -1 : i)}>{q}<span aria-hidden="true">+</span></button>
+                    {open && <p id={`faq-${i}`} className="fadeUp">{a}</p>}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </section>
+
+        {/* CLOSING */}
+        <section style={{ padding: '80px 16px 24px' }}>
+          <div className="band closing">
+            <div className="glowball glow" aria-hidden="true" style={{ left: '-10%', bottom: '-60%', width: '70%', height: '140%', background: 'radial-gradient(circle, rgba(106,76,255,.6), transparent 60%)' }} />
+            <div className="glowball glow" aria-hidden="true" style={{ right: '-10%', top: '-60%', width: '60%', height: '140%', background: 'radial-gradient(circle, rgba(79,107,255,.5), transparent 60%)', animationDelay: '2.5s' }} />
+            <div className="hide-sm" aria-hidden="true" style={{ position: 'absolute', left: '8%', top: '22%' }}>
+              <div className="glass-chip" style={{ width: 92, height: 92, borderRadius: 22, display: 'flex', alignItems: 'center', justifyContent: 'center', animation: 'floaty 6s ease-in-out infinite' }}><span className="h" style={{ color: '#6ee7b7', fontSize: 30 }}>91</span></div>
+            </div>
+            <div className="hide-sm" aria-hidden="true" style={{ position: 'absolute', right: '9%', bottom: '22%' }}>
+              <div className="glass-chip" style={{ animation: 'floaty2 7s ease-in-out infinite' }}>✓ 5 fixes confirmed</div>
+            </div>
+            <div style={{ position: 'relative', maxWidth: 760, margin: '0 auto', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 22 }}>
+              <h2 className="h">A better website starts with <span className="grad-text">knowing what to fix.</span></h2>
+              <p style={{ margin: 0, color: '#cfcde0', fontSize: 18, lineHeight: 1.6 }}>Stop guessing. Get a clear picture of what&apos;s wrong, what matters most, and where to start.</p>
+              <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', justifyContent: 'center' }}>
+                <a className="btn btn-grad" href="#hero-form" onClick={focusHero}>Analyze my site <Arrow /></a>
+                <a className="btn btn-ghost-light" href="#pricing">See pricing</a>
+              </div>
+            </div>
           </div>
         </section>
       </main>
 
-      <footer>
-        <div className="wrap footer-inner">
-          <a className="brand" href="#top">
-            <CernlyMark />
-            cernly<span>.ai</span>
-          </a>
-          <div className="footerlinks">
-            <a href="#features">Features</a>
-            <a href="#pricing">Pricing</a>
-            <a href="mailto:hello@cernly.ai">Contact</a>
-          </div>
-          <small>© 2026 Cernly</small>
-        </div>
+      <footer className="wrap footer">
+        <a className="brand" href="#top" style={{ fontSize: 17 }}><CernlyMark />cernly<span>.ai</span></a>
+        <nav aria-label="Footer">
+          <a href="#product">Product</a><a href="#checks">What we check</a><a href="#pricing">Pricing</a><a href="#faq">FAQ</a><a href="mailto:hello@cernly.ai">Contact</a>
+        </nav>
+        <small>© 2026 Cernly</small>
       </footer>
 
       <div aria-live="polite" className={`toast${toastVisible ? ' show' : ''}`} role="status">{toast}</div>
-    </>
+    </div>
+  );
+}
+
+/* ---------- showcase screens ---------- */
+
+function OverviewScreen() {
+  return (
+    <div className="fadeUp split">
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+        <div>
+          <div className="eyebrow" style={{ fontSize: 11 }}>Your workspace</div>
+          <div className="h" style={{ fontSize: 32, marginTop: 4 }}>Good morning, Alex ✳</div>
+          <div style={{ fontSize: 14, color: 'var(--muted)', marginTop: 4 }}>Here&apos;s where your websites stand — and what to improve next.</div>
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 14 }}>
+          {SITES.map(s => (
+            <div className="site-card" key={s.domain}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}><span className="site-initial">{s.i}</span><div><div style={{ fontSize: 14, fontWeight: 700 }}>{s.domain}</div><div style={{ fontSize: 11, color: 'var(--muted)' }}>Scanned {s.date}</div></div></div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+                <Ring score={s.score} size={68} r={30} fontSize={20} />
+                <div><div style={{ fontSize: 14, fontWeight: 700 }}>{s.status}</div><div style={{ fontSize: 12, color: 'var(--muted)' }}>Based on latest scan</div></div>
+              </div>
+              <div className="bars4" aria-hidden="true">
+                {s.bars.map(([w, c], i) => <div key={i}><i style={{ width: `${w}%`, background: c, animationDelay: `${0.2 + i * 0.1}s` }} /></div>)}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+        <div style={{ background: 'linear-gradient(170deg, #f4f1ff, #fff)', border: '1px solid #e7e2fb', borderRadius: 16, padding: 20, display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <div className="take-label">✦ CERNLY&apos;S TAKE</div>
+          <div className="h" style={{ fontSize: 19, lineHeight: 1.25 }}>Biggest opportunity? Fix accessibility barriers on northwindbikes.com.</div>
+          <div style={{ fontSize: 13, lineHeight: 1.55, color: 'var(--body)' }}>Screen reader users can&apos;t tell what four images show, which also creates compliance risk.</div>
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}><span className="chip" style={{ fontSize: 11, color: 'var(--red-ink)', background: '#fef2f2', padding: '4px 8px' }}>Critical priority</span><span className="chip green" style={{ fontSize: 11, padding: '4px 8px' }}>Low effort</span></div>
+        </div>
+        <div className="card" style={{ padding: 18 }}>
+          <div style={{ fontSize: 14, fontWeight: 700 }}>Priority fix queue</div>
+          <div className="mini-list">
+            {['Fix accessibility barriers', 'Reduce request chain depth', 'Reduce resource downloads'].map((l, i) => <div key={l}><span className="num-badge">0{i + 1}</span><span style={{ flex: 1, fontWeight: 600 }}>{l}</span></div>)}
+          </div>
+        </div>
+        <div className="card" style={{ padding: 18 }}>
+          <div style={{ fontSize: 14, fontWeight: 700 }}>Recent activity</div>
+          <div className="mini-list">
+            <div><span className="act-icon" style={{ background: 'var(--violet-50)', color: 'var(--violet-800)' }}>✓</span><div><div style={{ fontWeight: 600 }}>Scan completed</div><div style={{ color: 'var(--muted)' }}>northwindbikes.com</div></div></div>
+            <div><span className="act-icon" style={{ background: 'var(--green-50)', color: 'var(--green-ink)' }}>↑</span><div><div style={{ fontWeight: 600 }}>3 fixes confirmed</div><div style={{ color: 'var(--muted)' }}>fieldnotes.blog</div></div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ReportScreen() {
+  return (
+    <div className="fadeUp" style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+      <div><div className="kicker">← BACK · WEBSITE REPORT</div><div className="h" style={{ fontSize: 32, marginTop: 4 }}>northwindbikes.com</div></div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 12 }}>
+        {HERO_SCORES.map(s => (
+          <div className="card" key={s.label} style={{ padding: 20, textAlign: 'center' }}>
+            <div className="h" style={{ fontSize: 42, color: s.score >= 80 ? '#059669' : '#d97706', animation: 'popIn .35s cubic-bezier(.3,1.6,.5,1) both' }}>{s.score}</div>
+            <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--ink-2)' }}>{s.label}</div>
+            <div style={{ fontSize: 11, fontWeight: 600, marginTop: 2, color: s.bad ? '#c2410c' : 'var(--green-ink)' }}>{s.note}</div>
+          </div>
+        ))}
+      </div>
+      <div className="split" style={{ gap: 18 }}>
+        <div className="nextstep" style={{ background: 'linear-gradient(160deg, #1b1840, #14152a)', borderRadius: 18, padding: 26, gap: 12 }}>
+          <div className="eyebrow light" style={{ fontSize: 11 }}>NEXT BEST STEP</div>
+          <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--violet-200)', background: 'rgba(124,92,255,.25)', padding: '4px 8px', borderRadius: 6, width: 'fit-content' }}>Performance</span>
+          <div className="h" style={{ fontSize: 24 }}>Optimize images</div>
+          <div style={{ fontSize: 14, color: '#cfcde0', lineHeight: 1.55 }}>Oversized images make the page heavier to download, which slows the visible content and frustrates visitors on slower connections.</div>
+          <div style={{ background: 'rgba(255,255,255,.06)', borderRadius: 12, padding: 14, fontSize: 13, color: '#cfcde0', lineHeight: 1.55 }}>
+            <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '.1em', color: 'var(--violet-200)', marginBottom: 4 }}>WHAT WE FOUND</div>
+            1,545 KiB of savings from better image delivery. The largest example is featured_Bike.jpg — 491,704 of 617,304 bytes wasted.
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}><span style={{ fontSize: 13, color: '#6ee7b7', fontWeight: 600 }}>↯ Est. savings 1,545 KiB</span><span className="mini-btn" style={{ background: 'var(--grad)', fontSize: 13, padding: '10px 14px' }}>Guide me through this fix →</span></div>
+        </div>
+        <div className="card" style={{ padding: 20, borderRadius: 18 }}>
+          <div style={{ fontSize: 14, fontWeight: 700 }}>✓ What&apos;s working well</div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 14, fontSize: 13, lineHeight: 1.5, color: 'var(--ink-2)' }}>
+            {['HTTPS, HSTS and a Content Security Policy are all in place.', "Server response is fast — the delay isn't the root document.", 'No main-thread blocking or layout shift problems.', 'Single H1, canonical tag and document language present.'].map(l => (
+              <div key={l} style={{ display: 'flex', gap: 8 }}><span style={{ color: 'var(--green-ink)' }}>●</span>{l}</div>
+            ))}
+          </div>
+        </div>
+      </div>
+      <div className="card" style={{ padding: 20, borderRadius: 18, display: 'flex', gap: 16, alignItems: 'flex-start' }}>
+        <span className="chip amber" style={{ fontWeight: 700 }}>02</span>
+        <div>
+          <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.08em', color: 'var(--amber-ink)' }}>ACCESSIBILITY <span className="pill low" style={{ marginLeft: 6 }}>HIGH CONFIDENCE</span></div>
+          <div style={{ fontSize: 16, fontWeight: 700, marginTop: 6 }}>Four images lack alt attributes</div>
+          <div style={{ fontSize: 13, color: 'var(--body)', marginTop: 4, lineHeight: 1.55 }}>This affects screen reader users and image search indexing. Lighthouse reports it as critical for both accessibility and SEO.</div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function PlanScreen() {
+  return (
+    <div className="fadeUp" style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+      <div style={{ display: 'flex', gap: 6, alignItems: 'center', fontSize: 12, color: 'var(--muted)' }}>Understand <span aria-hidden="true">›</span> <span className="num-badge">Fix</span> <span aria-hidden="true">›</span> Verify</div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }}>
+        <div><div className="h" style={{ fontSize: 30 }}>Action plan</div><div style={{ fontSize: 14, color: 'var(--muted)' }}>7 prioritized fixes · mark progress as you go</div></div>
+        <span className="chip amber" style={{ fontWeight: 700 }}>7 open</span>
+      </div>
+      <div className="card" style={{ border: '2px solid var(--violet-200)', padding: '18px 20px', display: 'flex', flexDirection: 'column', gap: 14 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}><span className="dot" style={{ background: '#ef4444', width: 9, height: 9 }} /><span style={{ flex: 1, fontSize: 15, fontWeight: 700 }}>Reduce unnecessary resource downloads</span><span style={{ fontSize: 12, color: 'var(--muted)' }}>Performance</span><span className="pill high">HIGH IMPACT</span></div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 10 }}>
+          {['Export featured_Bike.jpg at 1600px wide and convert it to WebP.', 'Add width and height attributes and lazy-load images below the fold.', 'Re-scan to confirm Largest Contentful Paint improved.'].map((s, i) => (
+            <div key={s} style={{ background: 'var(--soft-2)', border: '1px solid var(--line)', borderRadius: 12, padding: 14, fontSize: 13, lineHeight: 1.5 }}><div style={{ fontWeight: 700, color: 'var(--violet-800)', fontSize: 12 }}>STEP {i + 1}</div>{s}</div>
+          ))}
+        </div>
+      </div>
+      {PLAN_ROWS.map(([label, cat, dot, impact, cls]) => (
+        <div className="card" key={label} style={{ borderRadius: 14, padding: '15px 20px', display: 'flex', alignItems: 'center', gap: 12 }}>
+          <span className="dot" style={{ background: dot, width: 9, height: 9 }} /><span style={{ flex: 1, fontSize: 14, fontWeight: 600 }}>{label}</span><span style={{ fontSize: 12, color: 'var(--muted)' }}>{cat}</span><span className={`pill ${cls}`}>{impact}</span>
+        </div>
+      ))}
+    </div>
   );
 }
