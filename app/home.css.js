@@ -81,7 +81,7 @@ button { cursor: pointer }
 
 /* Hero */
 .hero-outer { padding: 16px 16px 0 }
-.hero { position: relative; border-radius: 26px; padding: 84px 24px 0; overflow: hidden;
+.hero { position: relative; border-radius: 26px; padding: 124px 24px 0; overflow: hidden;
   background: linear-gradient(460deg, #6d31f4, #28a8d0) }
 .orb { position: absolute; border-radius: 50%; filter: blur(10px); pointer-events: none }
 .orb.a { width: 640px; height: 640px; left: -200px; top: -180px; background: radial-gradient(circle, rgba(124,92,255,.55), transparent 65%); animation: driftA 14s ease-in-out infinite }
@@ -91,7 +91,7 @@ button { cursor: pointer }
 .hero-badge { display: inline-flex; align-items: center; gap: 10px; padding: 7px 14px 7px 8px; border-radius: 999px; background: rgba(255,255,255,.14); border: 1px solid rgba(255,255,255,.25); font-size: 13px; font-weight: 600 }
 .hero-badge b { background: #fff; color: #3a2bc4; padding: 3px 9px; border-radius: 999px; font-size: 11px; letter-spacing: .06em }
 .hero h1 { margin: 0; font-size: clamp(42px, 6.4vw, 82px); line-height: 1 }
-.hero-sub { padding-top: 124px; margin: 0 0 25px; color: #f0edff; font-size: 18px; line-height: 1.55; max-width: 640px }
+.hero-sub { margin: 0 0 25px; color: #f0edff; font-size: 18px; line-height: 1.55; max-width: 640px }
 .urlform { width: 100%; max-width: 580px; display: flex; gap: 8px; padding: 8px; background: #fff; border-radius: 999px; box-shadow: 0 30px 60px -20px rgba(20,10,80,.55) }
 .urlform .field { flex: 1; display: flex; align-items: center; gap: 10px; padding: 0 16px; min-height: 48px; color: var(--muted) }
 .urlform input { border: 0; outline: none; font-size: 16px; width: 100%; color: var(--ink); background: transparent }
