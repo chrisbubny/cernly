@@ -39,7 +39,7 @@ button { cursor: pointer }
 .h { font-family: var(--font-manrope), Manrope, system-ui, sans-serif; letter-spacing: -.03em; font-weight: 800 }
 .grad-text { background: var(--grad); -webkit-background-clip: text; background-clip: text; color: transparent }
 .wrap { max-width: 1240px; margin: 0 auto; padding: 0 24px }
-.band { max-width: 1360px; margin: 0 auto }
+.band { max-width: 100%; margin: 0 auto }
 .eyebrow { font-size: 12px; font-weight: 700; letter-spacing: .14em; color: var(--violet-700); text-transform: uppercase }
 .eyebrow.light { color: var(--violet-200) }
 .h2 { margin: 12px 0 14px; font-size: clamp(34px, 4.4vw, 56px); line-height: 1.05 }
@@ -81,8 +81,8 @@ button { cursor: pointer }
 
 /* Hero */
 .hero-outer { padding: 16px 16px 0 }
-.hero { position: relative; border-radius: 36px; padding: 84px 24px 0; overflow: hidden;
-  background: linear-gradient(120deg, #4a2fd1, #3a2fb8, #2442c4, #3b28b0, #4a2fd1); background-size: 300% 300%; animation: heroShift 16s ease-in-out infinite }
+.hero { position: relative; border-radius: 26px; padding: 84px 24px 0; overflow: hidden;
+  background: linear-gradient(460deg, #6d31f4, #28a8d0) }
 .orb { position: absolute; border-radius: 50%; filter: blur(10px); pointer-events: none }
 .orb.a { width: 640px; height: 640px; left: -200px; top: -180px; background: radial-gradient(circle, rgba(124,92,255,.55), transparent 65%); animation: driftA 14s ease-in-out infinite }
 .orb.b { width: 700px; height: 700px; right: -220px; top: 60px; background: radial-gradient(circle, rgba(46,86,235,.6), transparent 65%); animation: driftB 18s ease-in-out infinite }
@@ -91,7 +91,7 @@ button { cursor: pointer }
 .hero-badge { display: inline-flex; align-items: center; gap: 10px; padding: 7px 14px 7px 8px; border-radius: 999px; background: rgba(255,255,255,.14); border: 1px solid rgba(255,255,255,.25); font-size: 13px; font-weight: 600 }
 .hero-badge b { background: #fff; color: #3a2bc4; padding: 3px 9px; border-radius: 999px; font-size: 11px; letter-spacing: .06em }
 .hero h1 { margin: 0; font-size: clamp(42px, 6.4vw, 82px); line-height: 1 }
-.hero-sub { margin: 0; color: #f0edff; font-size: clamp(17px, 1.6vw, 20px); line-height: 1.55; max-width: 640px }
+.hero-sub { padding-top: 124px; margin: 0 0 25px; color: #f0edff; font-size: 18px; line-height: 1.55; max-width: 640px }
 .urlform { width: 100%; max-width: 580px; display: flex; gap: 8px; padding: 8px; background: #fff; border-radius: 999px; box-shadow: 0 30px 60px -20px rgba(20,10,80,.55) }
 .urlform .field { flex: 1; display: flex; align-items: center; gap: 10px; padding: 0 16px; min-height: 48px; color: var(--muted) }
 .urlform input { border: 0; outline: none; font-size: 16px; width: 100%; color: var(--ink); background: transparent }
@@ -177,7 +177,7 @@ button { cursor: pointer }
 .draw { stroke-dasharray: 1; stroke-dashoffset: 1; animation: draw 5s ease-in-out infinite }
 
 /* Product showcase */
-.showcase { background: var(--night); border-radius: 36px; padding: 80px 24px; position: relative; overflow: hidden; color: #fff }
+.showcase { background: var(--night); border-radius: 26px; padding: 80px 24px; position: relative; overflow: hidden; color: #fff }
 .tablist { position: relative; display: flex; justify-content: center; gap: 6px; margin: 36px auto 32px; padding: 6px; background: rgba(255,255,255,.07); border: 1px solid rgba(255,255,255,.1); border-radius: 999px; width: fit-content; max-width: 100%; flex-wrap: wrap }
 .tablist button { border: 0; font-size: 14px; font-weight: 600; padding: 12px 20px; min-height: 44px; border-radius: 999px; background: transparent; color: #e4e2f0; transition: background .2s, color .2s }
 .tablist button[aria-selected="true"] { background: #fff; color: var(--ink) }
